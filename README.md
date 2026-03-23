@@ -59,13 +59,3 @@ ADMIN_SENHA=Senha@123
 ADMIN_NOME=Admin Sistema
 ADMIN_PERFIL=ADMIN_CLINICA
 
-# JWT
-SECRET_KEY=coloque_uma_chave_grande_e_aleatoria_aqui
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=60
-
-# Seed automático
-ADMIN_EMAIL=admin@sentinela.com
-ADMIN_SENHA=Senha@123
-ADMIN_NOME=Admin Sistema
-ADMIN_PERFIL=ADMIN_CLINICA
