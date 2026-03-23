@@ -1,6 +1,6 @@
 # Sentinela Backend (FastAPI + Postgres + JWT + Docker)
 
-Backend do projeto Sentinela (MVP técnico), executando em ambiente local com Docker Compose.
+Backend do projeto Monitra (MVP técnico), executando em ambiente local com Docker Compose.
 
 ## Stack
 - FastAPI
