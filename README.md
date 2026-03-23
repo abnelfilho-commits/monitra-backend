@@ -40,7 +40,24 @@ POSTGRES_USER=sentinela
 POSTGRES_PASSWORD=sentinela
 
 # URL correta para dentro do container
-DATABASE_URL=postgresql+psycopg2://sentinela:sentinela@db:5432/sentinela
+DATABASE_URL=# Postgres (Docker)
+POSTGRES_DB=sentinela
+POSTGRES_USER=sentinela
+POSTGRES_PASSWORD=sentinela
+
+# URL correta para dentro do container
+DATABASE_URL=postgresql://monitra_postgresql_user:lQmorizkeC8fNcb54D5RywSlK4ECGZPq@dpg-d70qodvgi27c73co5d30-a.oregon-postgres.render.com/monitra_postgresql
+
+# JWT
+SECRET_KEY=r6hj5i9cFZPNyI6gOosIkV086osTCxhK5FpYrdhVIRM
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+
+# Seed automático
+ADMIN_EMAIL=admin@sentinela.com
+ADMIN_SENHA=Senha@123
+ADMIN_NOME=Admin Sistema
+ADMIN_PERFIL=ADMIN_CLINICA
 
 # JWT
 SECRET_KEY=coloque_uma_chave_grande_e_aleatoria_aqui
