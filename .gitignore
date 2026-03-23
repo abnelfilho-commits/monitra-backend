@@ -1,0 +1,26 @@
+# ambiente
+venv/
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+
+# banco local
+*.db
+*.sqlite3
+
+# macOS
+.DS_Store
+
+# alembic cache
+alembic/__pycache__/
+alembic/versions/__pycache__/
+
+# logs e temporários
+*.log
+*.rtf
+docker.save

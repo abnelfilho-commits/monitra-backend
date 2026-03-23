@@ -1,0 +1,7 @@
+from .usuario import Usuario
+from .clinica import Clinica
+from .profissional import Profissional
+from .paciente import Paciente
+from .intervencao import Intervencao
+from .registro import RegistroDiario
+from .vinculo import ProfissionalPaciente

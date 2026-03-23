@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: sentinela_postgres
+    environment:
+      POSTGRES_USER: sentinela
+      POSTGRES_PASSWORD: sentinela123
+      POSTGRES_DB: sentinela
+    ports:
+      - "5432:5432"
+    volumes:
+      - sentinela_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: "pg_isready -h 127.0.0.1 -p 5432 -U sentinela -d sentinela"
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: sentinela_api
+    environment:
+      DATABASE_URL: postgresql+psycopg2://sentinela:sentinela123@db:5432/sentinela
+      ADMIN_EMAIL: admin@neurovida.local
+      ADMIN_NOME: Admin NeuroVida
+      ADMIN_SENHA: Senha@123
+      ADMIN_FORCE_RESET_PASSWORD: "true"
+      DEFAULT_CLINICA_NOME: Clínica NeuroVida
+      DEFAULT_CLINICA_EMAIL: contato@neurovida.local
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ..:/app
+    working_dir: /app
+    command: >
+      bash -lc "
+      python -m app.scripts.bootstrap_db &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000
+      "
+
+volumes:
+  sentinela_pgdata:
