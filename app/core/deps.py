@@ -7,13 +7,13 @@ from app.database import get_db
 from app.models.usuario import Usuario
 from app.core.security import SECRET_KEY, ALGORITHM
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login/")
 
 
 def get_usuario_atual(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
-) -> Usuario:
+):
     cred_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Não autenticado",
@@ -30,7 +30,7 @@ def get_usuario_atual(
         raise cred_exc
 
     usuario = db.query(Usuario).filter(Usuario.id == user_id).first()
-    if usuario is None:
+    if not usuario or not usuario.ativo:
         raise cred_exc
 
     if hasattr(usuario, "ativo") and not usuario.ativo:
