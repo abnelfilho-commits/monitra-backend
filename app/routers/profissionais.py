@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.acl import is_admin
 from app.database import get_db
 from app.core.deps import get_usuario_atual
 from app.models.profissional import Profissional
@@ -16,16 +17,16 @@ router = APIRouter(
 @router.get("/", response_model=list[ProfissionalOut])
 def listar_profissionais(
     db: Session = Depends(get_db),
-    usuario: Usuario = Depends(get_usuario_atual),
+    usuario_atual: Usuario = Depends(get_usuario_atual),
 ):
-    q = db.query(Profissional).filter(Profissional.ativo == True)
+    query = db.query(Profissional).filter(Profissional.ativo == True)
 
-    if usuario.perfil != "admin":
-        if usuario.clinica_id is None:
+    if not is_admin(usuario_atual):
+        if not usuario_atual.clinica_id:
             raise HTTPException(status_code=403, detail="Usuário sem clínica vinculada")
-        q = q.filter(Profissional.clinica_id == usuario.clinica_id)
+        query = query.filter(Profissional.clinica_id == usuario_atual.clinica_id)
 
-    return q.order_by(Profissional.nome.asc()).all()
+    return query.order_by(Profissional.nome.asc()).all()
 
 
 @router.get("/clinica/{clinica_id}", response_model=list[ProfissionalOut])

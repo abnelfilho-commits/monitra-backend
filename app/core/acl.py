@@ -15,3 +15,7 @@ def assert_clinica_access(usuario: Usuario, resource_clinica_id: Optional[int]):
     # Recurso precisa pertencer à mesma clínica
     if resource_clinica_id != usuario.clinica_id:
         raise HTTPException(status_code=403, detail="Acesso negado (clínica diferente)")
+
+def is_admin(usuario) -> bool:
+    perfil = (usuario.perfil or "").strip().upper()
+    return perfil in {"ADMIN", "ADMIN_CLINICA", "ADMINISTRADOR"}

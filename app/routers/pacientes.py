@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.acl import is_admin
 from app.core.acl import assert_clinica_access
 from app.core.deps import get_usuario_atual
 from app.database import get_db
@@ -58,17 +59,16 @@ def serializar_paciente(p: Paciente):
 @router.get("/")
 def listar_pacientes(
     db: Session = Depends(get_db),
-    usuario: Usuario = Depends(get_usuario_atual),
+    usuario_atual: Usuario = Depends(get_usuario_atual),
 ):
-    q = db.query(Paciente).filter(Paciente.ativo == True)
+    query = db.query(Paciente).filter(Paciente.ativo == True)
 
-    if usuario.perfil != "admin":
-        if usuario.clinica_id is None:
+    if not is_admin(usuario_atual):
+        if not usuario_atual.clinica_id:
             raise HTTPException(status_code=403, detail="Usuário sem clínica vinculada")
-        q = q.filter(Paciente.clinica_id == usuario.clinica_id)
+        query = query.filter(Paciente.clinica_id == usuario_atual.clinica_id)
 
-    pacientes = q.order_by(Paciente.id.desc()).all()
-    return [serializar_paciente(p) for p in pacientes]
+    return query.order_by(Paciente.nome.asc()).all()
 
 
 @router.get("/{paciente_id}")
