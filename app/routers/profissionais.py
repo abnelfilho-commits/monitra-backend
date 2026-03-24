@@ -35,7 +35,7 @@ def listar_profissionais_por_clinica(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    if usuario.perfil != "admin" and usuario.clinica_id != clinica_id:
+    if not is_admin(usuario) and usuario.clinica_id != clinica_id:
         raise HTTPException(status_code=403, detail="Acesso negado")
 
     return (
@@ -59,7 +59,7 @@ def obter_profissional(
     if not profissional:
         raise HTTPException(status_code=404, detail="Profissional não encontrado")
 
-    if usuario.perfil != "admin" and usuario.clinica_id != profissional.clinica_id:
+    if not is_admin(usuario) and usuario.clinica_id != profissional.clinica_id:
         raise HTTPException(status_code=403, detail="Acesso negado")
 
     return profissional
@@ -73,7 +73,7 @@ def criar_profissional(
 ):
     data = payload.dict()
 
-    if usuario.perfil != "admin":
+    if not is_admin(usuario):
         if usuario.clinica_id is None:
             raise HTTPException(status_code=403, detail="Usuário sem clínica vinculada")
         data["clinica_id"] = usuario.clinica_id
@@ -96,14 +96,16 @@ def atualizar_profissional(
     if not profissional:
         raise HTTPException(status_code=404, detail="Profissional não encontrado")
 
-    if usuario.perfil != "admin" and usuario.clinica_id != profissional.clinica_id:
+    if not is_admin(usuario) and usuario.clinica_id != profissional.clinica_id:
         raise HTTPException(status_code=403, detail="Acesso negado")
 
     profissional.nome = payload.nome
     profissional.email = payload.email
     profissional.especialidade = payload.especialidade
-    if usuario.perfil == "admin":
+
+    if is_admin(usuario) and payload.clinica_id is not None:
         profissional.clinica_id = payload.clinica_id
+
     profissional.ativo = payload.ativo if payload.ativo is not None else profissional.ativo
 
     db.commit()
@@ -121,7 +123,7 @@ def inativar_profissional(
     if not profissional:
         raise HTTPException(status_code=404, detail="Profissional não encontrado")
 
-    if usuario.perfil != "admin" and usuario.clinica_id != profissional.clinica_id:
+    if not is_admin(usuario) and usuario.clinica_id != profissional.clinica_id:
         raise HTTPException(status_code=403, detail="Acesso negado")
 
     profissional.ativo = False
