@@ -38,6 +38,17 @@ app.add_middleware(
 def health():
     return {"status": "ok", "app": "Monitra API"}
 
+@app.get("/debug-cors")
+def debug_cors():
+    return {
+        "origins": [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "https://monitra-frontend.vercel.app",
+        ],
+        "status": "ok"
+    }
+
 @app.exception_handler(IntegrityError)
 async def integrity_error_handler(request: Request, exc: IntegrityError):
     return JSONResponse(
