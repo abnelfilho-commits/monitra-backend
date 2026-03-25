@@ -1,3 +1,4 @@
+from app.core.acl import is_admin
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -28,7 +29,7 @@ def obter_risco_paciente(
     if not paciente:
         raise HTTPException(status_code=404, detail="Paciente não encontrado.")
 
-    if usuario.perfil != "admin":
+    if not is_admin(usuario):
         if usuario.clinica_id is None or usuario.clinica_id != paciente.clinica_id:
             raise HTTPException(status_code=403, detail="Acesso negado.")
 
@@ -45,11 +46,12 @@ def obter_mapa_risco_clinica(
     if not clinica:
         raise HTTPException(status_code=404, detail="Clínica não encontrada.")
 
-    if usuario.perfil != "admin":
+    if not is_admin(usuario):
         if usuario.clinica_id is None or usuario.clinica_id != clinica_id:
             raise HTTPException(status_code=403, detail="Acesso negado.")
 
     return analisar_mapa_risco_clinica(db, clinica_id)
+
 
 @router.get("/pacientes/{paciente_id}/evolucao")
 def obter_evolucao_clinica_paciente(
@@ -61,7 +63,7 @@ def obter_evolucao_clinica_paciente(
     if not paciente:
         raise HTTPException(status_code=404, detail="Paciente não encontrado.")
 
-    if usuario.perfil != "admin":
+    if not is_admin(usuario):
         if usuario.clinica_id is None or usuario.clinica_id != paciente.clinica_id:
             raise HTTPException(status_code=403, detail="Acesso negado.")
 
