@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import date, datetime
+from datetime import datetime
 from statistics import mean
 from typing import Optional
 
@@ -11,7 +11,18 @@ from app.models.paciente import Paciente
 from app.models.registro import RegistroDiario
 
 
+# 🔧 Normalizador universal
+def _to_int(valor):
+    if valor is None or valor == "":
+        return None
+    try:
+        return int(valor)
+    except (ValueError, TypeError):
+        return None
+
+
 def _score_sono(valor: Optional[int]) -> int:
+    valor = _to_int(valor)
     if valor is None:
         return 0
     if valor >= 4:
@@ -22,6 +33,7 @@ def _score_sono(valor: Optional[int]) -> int:
 
 
 def _score_irritabilidade(valor: Optional[int]) -> int:
+    valor = _to_int(valor)
     if valor is None:
         return 0
     if valor <= 1:
@@ -32,6 +44,7 @@ def _score_irritabilidade(valor: Optional[int]) -> int:
 
 
 def _score_crise_sensorial(valor: Optional[int]) -> int:
+    valor = _to_int(valor)
     if valor is None:
         return 0
     if valor == 0:
@@ -48,6 +61,7 @@ def _score_evacuacao(valor: Optional[bool]) -> int:
 
 
 def _score_bristol(valor: Optional[int]) -> int:
+    valor = _to_int(valor)
     if valor is None:
         return 0
     if valor in (3, 4, 5):
@@ -84,10 +98,6 @@ def _pontuacao_media(registros: list[RegistroDiario]) -> float:
 
 
 def calcular_tendencia(registros_ordenados_desc: list[RegistroDiario]) -> str:
-    """
-    Espera registros ordenados do mais recente para o mais antigo.
-    Compara média dos 3 mais recentes com até 3 anteriores.
-    """
     if len(registros_ordenados_desc) < 2:
         return "sem_dados"
 
@@ -114,19 +124,24 @@ def gerar_resumo_status(registro: Optional[RegistroDiario], risco_atual: str, te
 
     sinais = []
 
-    if registro.sono_qualidade is not None and registro.sono_qualidade <= 2:
+    sono = _to_int(registro.sono_qualidade)
+    irrit = _to_int(registro.irritabilidade)
+    crise = _to_int(registro.crise_sensorial)
+    fezes = _to_int(registro.consistencia_fezes)
+
+    if sono is not None and sono <= 2:
         sinais.append("sono de baixa qualidade")
 
-    if registro.irritabilidade is not None and registro.irritabilidade >= 3:
+    if irrit is not None and irrit >= 3:
         sinais.append("irritabilidade elevada")
 
-    if registro.crise_sensorial is not None and registro.crise_sensorial >= 2:
+    if crise is not None and crise >= 2:
         sinais.append("crise sensorial frequente")
 
     if registro.evacuacao is False:
         sinais.append("ausência de evacuação no registro")
 
-    if registro.consistencia_fezes in (1, 7):
+    if fezes in (1, 7):
         sinais.append("alteração intestinal importante")
 
     base = {
@@ -171,9 +186,7 @@ def analisar_risco_paciente(db: Session, paciente: Paciente) -> dict:
         "clinica_id": paciente.clinica_id,
         "profissional_id": getattr(paciente, "profissional_id", None),
         "profissional_nome": (
-            paciente.profissional.nome
-            if getattr(paciente, "profissional", None)
-            else None
+            paciente.profissional.nome if getattr(paciente, "profissional", None) else None
         ),
         "risco_atual": risco_atual,
         "tendencia": tendencia,
@@ -196,17 +209,9 @@ def analisar_mapa_risco_clinica(db: Session, clinica_id: int) -> dict:
     contagem_risco = Counter(a["risco_atual"] for a in analises)
     contagem_tendencia = Counter(a["tendencia"] for a in analises)
 
-    pacientes_em_alerta = [
-        a for a in analises if a["risco_atual"] in ("atencao", "alto_risco")
-    ]
-
-    pacientes_em_piora = [
-        a for a in analises if a["tendencia"] == "piora"
-    ]
-
-    pacientes_alto_risco = [
-        a for a in analises if a["risco_atual"] == "alto_risco"
-    ]
+    pacientes_em_alerta = [a for a in analises if a["risco_atual"] in ("atencao", "alto_risco")]
+    pacientes_em_piora = [a for a in analises if a["tendencia"] == "piora"]
+    pacientes_alto_risco = [a for a in analises if a["risco_atual"] == "alto_risco"]
 
     pacientes_ordenados = sorted(
         analises,
@@ -231,6 +236,7 @@ def analisar_mapa_risco_clinica(db: Session, clinica_id: int) -> dict:
         "gerado_em": datetime.now(),
     }
 
+
 def obter_evolucao_paciente(db: Session, paciente: Paciente) -> list[dict]:
     registros = (
         db.query(RegistroDiario)
@@ -250,11 +256,11 @@ def obter_evolucao_paciente(db: Session, paciente: Paciente) -> list[dict]:
                 "data": r.data,
                 "pontuacao_risco": pontos,
                 "risco": risco,
-                "sono_qualidade": r.sono_qualidade,
-                "irritabilidade": r.irritabilidade,
-                "crise_sensorial": r.crise_sensorial,
+                "sono_qualidade": _to_int(r.sono_qualidade),
+                "irritabilidade": _to_int(r.irritabilidade),
+                "crise_sensorial": _to_int(r.crise_sensorial),
                 "evacuacao": r.evacuacao,
-                "consistencia_fezes": r.consistencia_fezes,
+                "consistencia_fezes": _to_int(r.consistencia_fezes),
             }
         )
 
