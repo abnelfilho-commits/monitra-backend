@@ -25,7 +25,13 @@ def serializar_paciente(p: Paciente):
         "responsavel_nome": p.responsavel_nome,
         "responsavel_email": p.responsavel_email,
         "profissional_id": p.profissional_id,
+        "profissional_nome": (
+            p.profissional.nome if getattr(p, "profissional", None) else None
+        ),
         "clinica_id": p.clinica_id,
+        "clinica_nome": (
+            p.clinica.nome if getattr(p, "clinica", None) else None
+        ),
         "ativo": p.ativo,
     }
 

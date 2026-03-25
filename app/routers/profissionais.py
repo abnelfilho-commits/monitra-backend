@@ -14,6 +14,18 @@ router = APIRouter(
 )
 
 
+def serializar_profissional(p: Profissional):
+    return {
+        "id": p.id,
+        "nome": p.nome,
+        "email": p.email,
+        "especialidade": p.especialidade,
+        "clinica_id": p.clinica_id,
+        "clinica_nome": p.clinica.nome if p.clinica else None,
+        "ativo": p.ativo,
+    }
+
+
 @router.get("/", response_model=list[ProfissionalOut])
 def listar_profissionais(
     db: Session = Depends(get_db),
@@ -26,7 +38,8 @@ def listar_profissionais(
             raise HTTPException(status_code=403, detail="Usuário sem clínica vinculada")
         query = query.filter(Profissional.clinica_id == usuario_atual.clinica_id)
 
-    return query.order_by(Profissional.nome.asc()).all()
+    profissionais = query.order_by(Profissional.nome.asc()).all()
+    return [serializar_profissional(p) for p in profissionais]
 
 
 @router.get("/clinica/{clinica_id}", response_model=list[ProfissionalOut])
@@ -38,7 +51,7 @@ def listar_profissionais_por_clinica(
     if not is_admin(usuario) and usuario.clinica_id != clinica_id:
         raise HTTPException(status_code=403, detail="Acesso negado")
 
-    return (
+    profissionais = (
         db.query(Profissional)
         .filter(
             Profissional.clinica_id == clinica_id,
@@ -47,6 +60,8 @@ def listar_profissionais_por_clinica(
         .order_by(Profissional.nome.asc())
         .all()
     )
+
+    return [serializar_profissional(p) for p in profissionais]
 
 
 @router.get("/{profissional_id}", response_model=ProfissionalOut)
@@ -62,7 +77,7 @@ def obter_profissional(
     if not is_admin(usuario) and usuario.clinica_id != profissional.clinica_id:
         raise HTTPException(status_code=403, detail="Acesso negado")
 
-    return profissional
+    return serializar_profissional(profissional)
 
 
 @router.post("/", response_model=ProfissionalOut, status_code=status.HTTP_201_CREATED)
@@ -82,7 +97,7 @@ def criar_profissional(
     db.add(novo)
     db.commit()
     db.refresh(novo)
-    return novo
+    return serializar_profissional(novo)
 
 
 @router.put("/{profissional_id}", response_model=ProfissionalOut)
@@ -110,7 +125,7 @@ def atualizar_profissional(
 
     db.commit()
     db.refresh(profissional)
-    return profissional
+    return serializar_profissional(profissional)
 
 
 @router.delete("/{profissional_id}")

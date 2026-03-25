@@ -24,6 +24,7 @@ class ProfissionalUpdate(BaseModel):
 class ProfissionalOut(ProfissionalBase):
     id: int
     ativo: bool
+    clinica_nome: Optional[str] = None
 
     class Config:
         from_attributes = True
