@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Date, Boolean, ForeignKey, DateTime, Text
+from sqlalchemy import Column, Integer, Date, Boolean, Text, DateTime, ForeignKey, String
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -8,12 +8,7 @@ class RegistroDiario(Base):
     __tablename__ = "registros_diarios"
 
     id = Column(Integer, primary_key=True, index=True)
-    paciente_id = Column(
-        Integer,
-        ForeignKey("pacientes.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
+    paciente_id = Column(Integer, ForeignKey("pacientes.id"), nullable=False, index=True)
 
     data = Column(Date, nullable=False, index=True)
 
@@ -29,3 +24,18 @@ class RegistroDiario(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     paciente = relationship("Paciente")
+
+    origem = Column(String, nullable=True, index=True)
+
+    responsavel_id = Column(
+        Integer,
+        ForeignKey("responsaveis.id"),
+        nullable=True,
+        index=True
+    )
+    origem = Column(String(30), nullable=False, default="PROFISSIONAL")
+
+    criado_por_tipo = Column(String, nullable=True)
+    criado_por_id = Column(Integer, nullable=True)
+
+    responsavel = relationship("Responsavel")

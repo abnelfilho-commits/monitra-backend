@@ -5,3 +5,5 @@ from .paciente import Paciente
 from .intervencao import Intervencao
 from .registro import RegistroDiario
 from .vinculo import ProfissionalPaciente
+from .responsavel import Responsavel
+from .responsavel_paciente import ResponsavelPaciente

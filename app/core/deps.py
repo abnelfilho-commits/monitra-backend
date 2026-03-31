@@ -5,10 +5,11 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.usuario import Usuario
+from app.models.responsavel import Responsavel
 from app.core.security import SECRET_KEY, ALGORITHM
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login/")
-
+oauth2_scheme_responsavel = OAuth2PasswordBearer(tokenUrl="/auth/responsavel/login")
 
 def get_usuario_atual(
     token: str = Depends(oauth2_scheme),
@@ -38,3 +39,40 @@ def get_usuario_atual(
 
     return usuario
 
+def get_responsavel_atual(
+    token: str = Depends(oauth2_scheme_responsavel),
+    db: Session = Depends(get_db),
+) -> Responsavel:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Não foi possível validar as credenciais do responsável.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        sub = payload.get("sub")
+        tipo = payload.get("tipo")
+
+        if sub is None or tipo != "responsavel":
+            raise credentials_exception
+
+        responsavel = (
+            db.query(Responsavel)
+            .filter(Responsavel.id == int(sub))
+            .first()
+        )
+
+        if responsavel is None:
+            raise credentials_exception
+
+    except (JWTError, ValueError):
+        raise credentials_exception
+
+    if not responsavel.ativo:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Responsável inativo."
+        )
+
+    return responsavel

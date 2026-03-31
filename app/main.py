@@ -16,13 +16,21 @@ from app.routers.intervencoes import router as intervencoes_router
 from app.routers.timeline import router as timeline_router
 from app.routers.me import router as me_router
 from app.routers.profissionais import router as profissionais_router
+from app.routers.responsavel_auth import router as responsavel_auth_router
+from app.routers.responsaveis import router as responsaveis_router
+from app.routers.responsavel_pacientes import router as responsavel_pacientes_router
+from app.routers.responsavel_registros import router as responsavel_registros_router
 
 app = FastAPI(title="Monitra API")
 
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+    "http://192.168.1.30:5173",
     "https://monitra-frontend.vercel.app",
+    "https://monitra-responsavel-frontend.vercel.app",
 ]
 
 app.add_middleware(
@@ -55,3 +63,7 @@ app.include_router(intervencoes_router)
 app.include_router(timeline_router)
 app.include_router(me_router)
 app.include_router(profissionais_router)
+app.include_router(responsavel_auth_router)
+app.include_router(responsaveis_router)
+app.include_router(responsavel_pacientes_router)
+app.include_router(responsavel_registros_router)

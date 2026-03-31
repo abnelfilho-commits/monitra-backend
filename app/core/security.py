@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any
 from jose import jwt
 from passlib.context import CryptContext
 
+
 # PADRÃO DO PROJETO: bcrypt (compatível com bcrypt==3.2.2)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

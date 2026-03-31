@@ -3,13 +3,12 @@ from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.core.deps import get_usuario_atual
 from app.models import Paciente, Intervencao, RegistroDiario  # ajuste imports conforme seu projeto
-
 
 router = APIRouter(tags=["Timeline"])
 
@@ -19,72 +18,67 @@ TipoEvento = Literal["INTERVENCAO", "REGISTRO_DIARIO"]
 
 class TimelineItemOut(BaseModel):
     id: int
+    paciente_id: int
     tipo_evento: TipoEvento
     data: datetime
     descricao: str
     usuario_id: Optional[int] = None
+    origem: Optional[str] = None
 
 
-@router.get("/pacientes/{paciente_id}/timeline", response_model=List[TimelineItemOut])
-def listar_timeline_por_paciente(
+@router.get(
+    "/pacientes/{paciente_id}/timeline",
+    response_model=List[TimelineItemOut],
+)
+def listar_timeline_paciente(
     paciente_id: int,
     db: Session = Depends(get_db),
-    user=Depends(get_usuario_atual),
+    usuario_atual=Depends(get_usuario_atual),
 ):
-    # 1) valida paciente
-    paciente = db.get(Paciente, paciente_id)
+    paciente = db.query(Paciente).filter(Paciente.id == paciente_id).first()
     if not paciente:
         raise HTTPException(status_code=404, detail="Paciente não encontrado.")
 
-    # 2) (futuro) isolamento por clinica
-    # if paciente.clinica_id != user.clinica_id:
-    #     raise HTTPException(status_code=403, detail="Acesso negado.")
+    # ==========================================
+    # ACL / regra de acesso
+    # ==========================================
+    # Se o seu projeto já tem validação por clínica, mantenha aqui.
+    # Exemplo:
+    #
+    # if not getattr(usuario_atual, "is_admin", False):
+    #     if getattr(usuario_atual, "clinica_id", None) != paciente.clinica_id:
+    #         raise HTTPException(
+    #             status_code=403,
+    #             detail="Usuário sem permissão para acessar este paciente."
+    #         )
 
-    items: list[TimelineItemOut] = []
+    sql = text("""
+        SELECT
+            id,
+            paciente_id,
+            tipo_evento,
+            data,
+            descricao,
+            usuario_id,
+            origem
+        FROM vw_timeline_paciente
+        WHERE paciente_id = :paciente_id
+        ORDER BY data DESC, id DESC
+    """)
 
-    # --- Intervenções
-    intervencoes = db.execute(
-        select(Intervencao).where(Intervencao.paciente_id == paciente_id)
-    ).scalars().all()
+    rows = db.execute(sql, {"paciente_id": paciente_id}).mappings().all()
 
-    for itv in intervencoes:
-        dt = getattr(itv, "data_intervencao", None) or getattr(itv, "data", None) or datetime.min
-        desc = (
-            getattr(itv, "descricao", None)
-            or getattr(itv, "observacao", None)
-            or getattr(itv, "texto", None)
-            or "Intervenção registrada"
+    items = [
+        TimelineItemOut(
+            id=row["id"],
+            paciente_id=row["paciente_id"],
+            tipo_evento=row["tipo_evento"],
+            data=row["data"],
+            descricao=row["descricao"],
+            usuario_id=row.get("usuario_id"),
+            origem=row.get("origem"),
         )
-        items.append(
-            TimelineItemOut(
-                id=itv.id,
-                tipo_evento="INTERVENCAO",
-                data=itv.data_intervencao,
-                descricao=itv.descricao or f"Intervenção: {itv.tipo}",
-                usuario_id=getattr(itv, "profissional_id", None),
-            )       
-        )
-    # --- Registros diários (opcional)
-    registros = db.execute(
-        select(RegistroDiario).where(RegistroDiario.paciente_id == paciente_id)
-    ).scalars().all()
+        for row in rows
+    ]
 
-    for rg in registros:
-        dt = getattr(rg, "data_registro", None) or getattr(rg, "data", None) or datetime.min
-        desc = (
-            getattr(rg, "descricao", None)
-            or getattr(rg, "texto", None)
-            or "Registro diário"
-        )
-        items.append(
-            TimelineItemOut(
-                id=rg.id,
-                tipo_evento="REGISTRO_DIARIO",
-                data=dt,
-                descricao=desc,
-                usuario_id=getattr(rg, "usuario_id", None),
-            )
-        )
-
-    items.sort(key=lambda x: x.data or datetime.min, reverse=True)
     return items
