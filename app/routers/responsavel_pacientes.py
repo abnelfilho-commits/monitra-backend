@@ -22,7 +22,7 @@ def calcular_idade(data_nascimento):
         (hoje.month, hoje.day) < (data_nascimento.month, data_nascimento.day)
     )
 
-
+@router.get("")
 @router.get("/")
 def listar_meus_pacientes(
     db: Session = Depends(get_db),
