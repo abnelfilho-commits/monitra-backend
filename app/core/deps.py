@@ -11,6 +11,7 @@ from app.core.security import SECRET_KEY, ALGORITHM
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login/")
 oauth2_scheme_responsavel = OAuth2PasswordBearer(tokenUrl="/auth/responsavel/login")
 
+
 def get_usuario_atual(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
@@ -34,10 +35,8 @@ def get_usuario_atual(
     if not usuario or not usuario.ativo:
         raise cred_exc
 
-    if hasattr(usuario, "ativo") and not usuario.ativo:
-        raise HTTPException(status_code=403, detail="Usuário inativo")
-
     return usuario
+
 
 def get_responsavel_atual(
     token: str = Depends(oauth2_scheme_responsavel),
@@ -51,28 +50,28 @@ def get_responsavel_atual(
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
         sub = payload.get("sub")
         tipo = payload.get("tipo")
 
-        if sub is None or tipo != "responsavel":
+        if not sub or tipo != "responsavel":
             raise credentials_exception
 
-        responsavel = (
-            db.query(Responsavel)
-            .filter(Responsavel.id == int(sub))
-            .first()
-        )
+        responsavel_id = int(sub)
 
-        if responsavel is None:
-            raise credentials_exception
-
-    except (JWTError, ValueError):
+    except (JWTError, ValueError, TypeError):
         raise credentials_exception
 
-    if not responsavel.ativo:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Responsável inativo."
+    responsavel = (
+        db.query(Responsavel)
+        .filter(
+            Responsavel.id == responsavel_id,
+            Responsavel.ativo == True,
         )
+        .first()
+    )
+
+    if not responsavel:
+        raise credentials_exception
 
     return responsavel

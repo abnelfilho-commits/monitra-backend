@@ -1,7 +1,7 @@
 """add responsaveis and responsavel_paciente
 
 Revision ID: add_responsaveis_responsavel_paciente
-Revises: <COLOQUE_A_REVISAO_ANTERIOR_AQUI>
+Revises: de86dbaaa645
 Create Date: 2026-03-27
 
 """
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = "de86dbaaa645"
-down_revision = "cef1d38ebe55"
+revision = "26a411d2e5b6"
+down_revision = "0847577a7792"
 branch_labels = None
 depends_on = None
 
