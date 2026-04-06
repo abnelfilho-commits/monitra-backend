@@ -1,4 +1,7 @@
+from io import BytesIO
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.acl import is_admin
@@ -8,13 +11,13 @@ from app.models.paciente import Paciente
 from app.models.profissional import Profissional
 from app.models.usuario import Usuario
 from app.schemas.paciente import PacienteCreate, PacienteUpdate
-# from app.services.relatorio_paciente import gerar_relatorio_pdf
+from app.routers.timeline import listar_timeline_paciente
+from app.services.relatorio_paciente import gerar_pdf_paciente   
 
 router = APIRouter(
     prefix="/pacientes",
     tags=["Pacientes"],
 )
-
 
 def serializar_paciente(p: Paciente):
     return {
@@ -178,18 +181,59 @@ def inativar_paciente(
     db.commit()
     return {"ok": True}
 
+@router.get("/{paciente_id}/relatorio-pdf")
+def baixar_relatorio_paciente_pdf(
+    paciente_id: int,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual),
+):
+    paciente = db.query(Paciente).filter(Paciente.id == paciente_id).first()
 
-# @router.get("/{paciente_id}/relatorio-pdf")
-# def baixar_relatorio_paciente_pdf(
-#     paciente_id: int,
-#     db: Session = Depends(get_db),
-#     usuario: Usuario = Depends(get_usuario_atual),
-# ):
-#    p = db.query(Paciente).filter(Paciente.id == paciente_id, Paciente.ativo == True).first()
-#    if not p:
-#        raise HTTPException(status_code=404, detail="Paciente não encontrado")
-#
-#    if not is_admin(usuario) and p.clinica_id != usuario.clinica_id:
-#        raise HTTPException(status_code=403, detail="Acesso negado")
-#
-#    return gerar_relatorio_pdf(db=db, paciente=p)
+    if not paciente:
+        raise HTTPException(status_code=404, detail="Paciente não encontrado.")
+
+    if usuario.clinica_id is not None and paciente.clinica_id != usuario.clinica_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Usuário sem permissão para este paciente."
+        )
+
+    try:
+        eventos = listar_timeline_paciente(
+            paciente_id=paciente_id,
+            db=db,
+            usuario_atual=usuario,
+        )
+    except Exception:
+        eventos = []
+
+    eventos_dict = [
+        e.dict() if hasattr(e, "dict") else dict(e)
+        for e in eventos
+    ]
+
+    paciente_dict = {
+        "nome": paciente.nome,
+        "data_nascimento": paciente.data_nascimento,
+        "genero": paciente.genero,
+        "responsavel_nome": getattr(paciente, "responsavel_nome", None),
+        "responsavel_email": getattr(paciente, "responsavel_email", None),
+        "clinica_nome": getattr(paciente, "clinica_nome", None),
+        "profissional_nome": getattr(paciente, "profissional_nome", None),
+    }
+
+    try:
+        pdf_bytes = gerar_pdf_paciente(paciente_dict, eventos_dict)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao gerar PDF: {str(e)}"
+        )
+
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="relatorio_paciente_{paciente_id}.pdf"'
+        },
+    )

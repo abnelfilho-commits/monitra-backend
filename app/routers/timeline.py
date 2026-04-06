@@ -74,7 +74,10 @@ def listar_timeline_paciente(
             paciente_id=row["paciente_id"],
             tipo_evento=row["tipo_evento"],
             data=row["data"],
-            descricao=row["descricao"],
+            descricao=(
+                row.get("descricao")
+                or "Evento registrado sem descrição"
+            ),
             usuario_id=row.get("usuario_id"),
             origem=row.get("origem"),
         )
