@@ -11,7 +11,7 @@ from app.models.paciente import Paciente
 from app.models.clinica import Clinica
 from app.models.profissional import Profissional
 from app.models.usuario import Usuario
-from app.schemas.paciente import PacienteCreate, PacienteResponse
+from app.schemas.paciente import PacienteCreate,PacienteUpdate, PacienteResponse
 from app.routers.timeline import listar_timeline_paciente
 from app.services.relatorio_paciente import gerar_pdf_paciente   
 
