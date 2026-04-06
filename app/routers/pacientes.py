@@ -8,9 +8,10 @@ from app.core.acl import is_admin
 from app.core.deps import get_usuario_atual
 from app.database import get_db
 from app.models.paciente import Paciente
+from app.models.clinica import Clinica
 from app.models.profissional import Profissional
 from app.models.usuario import Usuario
-from app.schemas.paciente import PacienteCreate, PacienteUpdate
+from app.schemas.paciente import PacienteCreate, PacienteResponse
 from app.routers.timeline import listar_timeline_paciente
 from app.services.relatorio_paciente import gerar_pdf_paciente   
 
@@ -212,14 +213,27 @@ def baixar_relatorio_paciente_pdf(
         for e in eventos
     ]
 
+    clinica = None
+    profissional = None
+
+    if getattr(paciente, "clinica_id", None):
+        clinica = db.query(Clinica).filter(Clinica.id == paciente.clinica_id).first()
+
+    if getattr(paciente, "profissional_id", None):
+        profissional = (
+            db.query(Profissional)
+            .filter(Profissional.id == paciente.profissional_id)
+            .first()
+        )
+
     paciente_dict = {
         "nome": paciente.nome,
         "data_nascimento": paciente.data_nascimento,
         "genero": paciente.genero,
         "responsavel_nome": getattr(paciente, "responsavel_nome", None),
         "responsavel_email": getattr(paciente, "responsavel_email", None),
-        "clinica_nome": getattr(paciente, "clinica_nome", None),
-        "profissional_nome": getattr(paciente, "profissional_nome", None),
+        "clinica_nome": clinica.nome if clinica else None,
+        "profissional_nome": profissional.nome if profissional else None,
     }
 
     try:
