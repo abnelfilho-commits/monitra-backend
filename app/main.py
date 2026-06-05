@@ -6,6 +6,10 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import IntegrityError
 
+from app.routers import timeline
+from app.routers import cardiometabolico
+from app.routers import registros_longitudinais
+from app.routers import responsavel_cardio
 from app.routers.analytics import router as analytics_router
 from app.routers.usuarios import router as usuarios_router
 from app.routers.pacientes import router as pacientes_router
@@ -67,3 +71,7 @@ app.include_router(responsavel_auth_router)
 app.include_router(responsaveis_router)
 app.include_router(responsavel_pacientes_router)
 app.include_router(responsavel_registros_router)
+app.include_router(registros_longitudinais.router)
+app.include_router(cardiometabolico.router)
+app.include_router(timeline.router)
+app.include_router(responsavel_cardio.router)

@@ -7,3 +7,13 @@ from .registro import RegistroDiario
 from .vinculo import ProfissionalPaciente
 from .responsavel import Responsavel
 from .responsavel_paciente import ResponsavelPaciente
+from app.models.modular import (
+    ModuloClinico,
+    PacienteModulo,
+    PacienteCondicaoClinica,
+    FormularioModulo,
+    CampoFormulario,
+    RegistroLongitudinal,
+    RespostaRegistro,
+    AvaliacaoModulo,
+)

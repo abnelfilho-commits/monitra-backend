@@ -111,9 +111,9 @@ def calcular_tendencia(registros_ordenados_desc: list[RegistroDiario]) -> str:
     media_anteriores = _pontuacao_media(anteriores)
     delta = media_recentes - media_anteriores
 
-    if delta >= 1:
+    if delta >= 2:
         return "piora"
-    if delta <= -1:
+    if delta <= -2:
         return "melhora"
     return "estavel"
 

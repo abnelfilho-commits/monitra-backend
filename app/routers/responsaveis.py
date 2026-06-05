@@ -107,3 +107,39 @@ def vincular_responsavel_paciente(
         "message": "Vínculo criado com sucesso.",
         "id": vinculo.id,
     }
+
+@router.get("/vinculos")
+def listar_vinculos(
+    db: Session = Depends(get_db),
+    usuario = Depends(get_usuario_atual),
+):
+    vinculos = (
+        db.query(
+            ResponsavelPaciente,
+            Responsavel,
+            Paciente
+        )
+        .join(
+            Responsavel,
+            Responsavel.id == ResponsavelPaciente.responsavel_id
+        )
+        .join(
+            Paciente,
+            Paciente.id == ResponsavelPaciente.paciente_id
+        )
+        .all()
+    )
+
+    return [
+        {
+            "id": v.id,
+            "paciente_id": p.id,
+            "paciente_nome": p.nome,
+            "responsavel_id": r.id,
+            "responsavel_nome": r.nome,
+            "parentesco": v.parentesco,
+            "principal": v.principal,
+            "ativo": v.ativo,
+        }
+        for v, r, p in vinculos
+    ]

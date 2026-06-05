@@ -1,3 +1,4 @@
+from sqlalchemy import text
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -21,6 +22,33 @@ def calcular_idade(data_nascimento):
     return hoje.year - data_nascimento.year - (
         (hoje.month, hoje.day) < (data_nascimento.month, data_nascimento.day)
     )
+
+def obter_modulos_paciente(db: Session, paciente_id: int):
+    rows = db.execute(
+        text("""
+            SELECT
+                m.id,
+                m.nome,
+                m.slug
+            FROM paciente_modulos pm
+            JOIN modulos_clinicos m
+                ON m.id = pm.modulo_id
+            WHERE pm.paciente_id = :paciente_id
+              AND pm.ativo = true
+              AND m.ativo = true
+            ORDER BY m.id
+        """),
+        {"paciente_id": paciente_id}
+    ).fetchall()
+
+    return [
+        {
+            "id": row.id,
+            "nome": row.nome,
+            "slug": row.slug,
+        }
+        for row in rows
+    ]
 
 @router.get("")
 @router.get("/")
@@ -48,6 +76,7 @@ def listar_meus_pacientes(
             "idade": calcular_idade(paciente.data_nascimento),
             "profissional_nome": getattr(paciente, "profissional_nome", None),
             "clinica_nome": getattr(paciente, "clinica_nome", None),
+            "modulos": obter_modulos_paciente(db, paciente.id),
         })
 
     return resultado
@@ -87,4 +116,5 @@ def obter_meu_paciente(
         "idade": calcular_idade(paciente.data_nascimento),
         "profissional_nome": getattr(paciente, "profissional_nome", None),
         "clinica_nome": getattr(paciente, "clinica_nome", None),
+        "modulos": obter_modulos_paciente(db, paciente.id),
     }

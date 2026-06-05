@@ -4,6 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.models.registro import RegistroDiario
+from app.utils.eixos import calcular_eixo_dominante
+
 from app.core.acl import is_admin
 from app.core.deps import get_usuario_atual
 from app.database import get_db
@@ -69,8 +72,29 @@ def obter_paciente(
     if not is_admin(usuario) and paciente.clinica_id != usuario.clinica_id:
         raise HTTPException(status_code=403, detail="Acesso negado")
 
-    return serializar_paciente(paciente)
+    # Buscar últimos registros
+    registros_recentes = (
+        db.query(RegistroDiario)
+        .filter(RegistroDiario.paciente_id == paciente.id)
+        .order_by(RegistroDiario.data.desc(), RegistroDiario.created_at.desc())
+        .limit(7)
+        .all()
+    )
 
+    # Calcular eixo
+    leitura_eixo = calcular_eixo_dominante(registros_recentes)
+
+    # Montar resposta
+    paciente_dict = serializar_paciente(paciente)
+
+    paciente_dict["status_clinico"] = {
+        "eixo_dominante": leitura_eixo["eixo_dominante"],
+        "eixo_dominante_label": leitura_eixo["eixo_dominante_label"],
+        "confianca_eixo": leitura_eixo["confianca_eixo"],
+        "base_sustentacao": leitura_eixo["base_sustentacao"],
+    }
+   
+    return paciente_dict
 
 @router.post("/")
 def criar_paciente(
