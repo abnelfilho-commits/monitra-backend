@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.acl import is_admin
+from app.core.acl import is_admin, is_admin_global
 from app.database import get_db
 from app.core.deps import get_usuario_atual
 from app.models.profissional import Profissional
@@ -33,7 +33,7 @@ def listar_profissionais(
 ):
     query = db.query(Profissional).filter(Profissional.ativo == True)
 
-    if not is_admin(usuario_atual):
+    if not is_admin_global(usuario_atual):
         if not usuario_atual.clinica_id:
             raise HTTPException(status_code=403, detail="Usuário sem clínica vinculada")
         query = query.filter(Profissional.clinica_id == usuario_atual.clinica_id)
@@ -48,7 +48,7 @@ def listar_profissionais_por_clinica(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    if not is_admin(usuario) and usuario.clinica_id != clinica_id:
+    if not is_admin_global(usuario) and usuario.clinica_id != clinica_id:
         raise HTTPException(status_code=403, detail="Acesso negado")
 
     profissionais = (
@@ -74,7 +74,7 @@ def obter_profissional(
     if not profissional:
         raise HTTPException(status_code=404, detail="Profissional não encontrado")
 
-    if not is_admin(usuario) and usuario.clinica_id != profissional.clinica_id:
+    if not is_admin_global(usuario) and usuario.clinica_id != profissional.clinica_id:
         raise HTTPException(status_code=403, detail="Acesso negado")
 
     return serializar_profissional(profissional)
@@ -88,7 +88,7 @@ def criar_profissional(
 ):
     data = payload.dict()
 
-    if not is_admin(usuario):
+    if not is_admin_global(usuario):
         if usuario.clinica_id is None:
             raise HTTPException(status_code=403, detail="Usuário sem clínica vinculada")
         data["clinica_id"] = usuario.clinica_id
@@ -111,14 +111,14 @@ def atualizar_profissional(
     if not profissional:
         raise HTTPException(status_code=404, detail="Profissional não encontrado")
 
-    if not is_admin(usuario) and usuario.clinica_id != profissional.clinica_id:
+    if not is_admin_global(usuario) and usuario.clinica_id != profissional.clinica_id:
         raise HTTPException(status_code=403, detail="Acesso negado")
 
     profissional.nome = payload.nome
     profissional.email = payload.email
     profissional.especialidade = payload.especialidade
 
-    if is_admin(usuario) and payload.clinica_id is not None:
+    if is_admin_global(usuario) and payload.clinica_id is not None:
         profissional.clinica_id = payload.clinica_id
 
     profissional.ativo = payload.ativo if payload.ativo is not None else profissional.ativo
@@ -138,7 +138,7 @@ def inativar_profissional(
     if not profissional:
         raise HTTPException(status_code=404, detail="Profissional não encontrado")
 
-    if not is_admin(usuario) and usuario.clinica_id != profissional.clinica_id:
+    if not is_admin_global(usuario) and usuario.clinica_id != profissional.clinica_id:
         raise HTTPException(status_code=403, detail="Acesso negado")
 
     profissional.ativo = False
