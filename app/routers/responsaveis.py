@@ -12,6 +12,7 @@ from app.schemas.responsavel import (
 )
 from app.core.security import hash_senha
 from app.core.deps import get_usuario_atual
+from app.core.acl import is_admin_global
 
 router = APIRouter(
     prefix="/responsaveis",
@@ -55,8 +56,39 @@ def listar_responsaveis(
     db: Session = Depends(get_db),
     usuario = Depends(get_usuario_atual),
 ):
-    return db.query(Responsavel).order_by(Responsavel.nome.asc()).all()
 
+    if is_admin_global(usuario):
+        return (
+            db.query(Responsavel)
+            .order_by(Responsavel.nome.asc())
+            .all()
+        )
+
+    if not usuario.clinica_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Usuário sem clínica vinculada"
+        )
+
+    responsaveis = (
+        db.query(Responsavel)
+        .join(
+            ResponsavelPaciente,
+            Responsavel.id == ResponsavelPaciente.responsavel_id
+        )
+        .join(
+            Paciente,
+            Paciente.id == ResponsavelPaciente.paciente_id
+        )
+        .filter(
+            Paciente.clinica_id == usuario.clinica_id
+        )
+        .distinct()
+        .order_by(Responsavel.nome.asc())
+        .all()
+    )
+
+    return responsaveis
 
 @router.post("/vinculos")
 def vincular_responsavel_paciente(
@@ -127,6 +159,10 @@ def listar_vinculos(
             Paciente,
             Paciente.id == ResponsavelPaciente.paciente_id
         )
+        if not is_admin_global(usuario):
+            vinculos = vinculos.filter(
+                Paciente.clinica_id == usuario.clinica_id
+            )
         .all()
     )
 
