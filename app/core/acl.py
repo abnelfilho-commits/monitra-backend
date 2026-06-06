@@ -19,3 +19,7 @@ def assert_clinica_access(usuario: Usuario, resource_clinica_id: Optional[int]):
 def is_admin(usuario) -> bool:
     perfil = (usuario.perfil or "").strip().upper()
     return perfil in {"ADMIN", "ADMIN_CLINICA", "ADMINISTRADOR"}
+
+def is_admin_global(usuario) -> bool:
+    perfil = (usuario.perfil or "").strip().upper()
+    return perfil in {"ADMIN", "ADMINISTRADOR"}

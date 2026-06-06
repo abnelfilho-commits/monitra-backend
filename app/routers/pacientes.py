@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.models.registro import RegistroDiario
 from app.utils.eixos import calcular_eixo_dominante
 
-from app.core.acl import is_admin
+from app.core.acl import is_admin, is_admin_global
 from app.core.deps import get_usuario_atual
 from app.database import get_db
 from app.models.paciente import Paciente
@@ -50,7 +50,7 @@ def listar_pacientes(
 ):
     query = db.query(Paciente).filter(Paciente.ativo == True)
 
-    if not is_admin(usuario_atual):
+    if not is_admin_global(usuario_atual):
         if not usuario_atual.clinica_id:
             raise HTTPException(status_code=403, detail="Usuário sem clínica vinculada")
         query = query.filter(Paciente.clinica_id == usuario_atual.clinica_id)
@@ -69,7 +69,7 @@ def obter_paciente(
     if not paciente:
         raise HTTPException(status_code=404, detail="Paciente não encontrado")
 
-    if not is_admin(usuario) and paciente.clinica_id != usuario.clinica_id:
+    if not is_admin_global(usuario) and paciente.clinica_id != usuario.clinica_id:
         raise HTTPException(status_code=403, detail="Acesso negado")
 
     # Buscar últimos registros
@@ -153,7 +153,7 @@ def atualizar_paciente(
     if not p:
         raise HTTPException(status_code=404, detail="Paciente não encontrado")
 
-    if not is_admin(usuario) and p.clinica_id != usuario.clinica_id:
+    if not is_admin_global(usuario) and p.clinica_id != usuario.clinica_id:
         raise HTTPException(status_code=403, detail="Acesso negado")
 
     profissional = None
@@ -166,7 +166,7 @@ def atualizar_paciente(
         if not profissional:
             raise HTTPException(status_code=404, detail="Profissional não encontrado")
 
-        if not is_admin(usuario) and profissional.clinica_id != usuario.clinica_id:
+        if not is_admin_global(usuario) and profissional.clinica_id != usuario.clinica_id:
             raise HTTPException(
                 status_code=403,
                 detail="Profissional não pertence à clínica do usuário",
@@ -199,7 +199,7 @@ def inativar_paciente(
     if not p:
         raise HTTPException(status_code=404, detail="Paciente não encontrado")
 
-    if not is_admin(usuario) and p.clinica_id != usuario.clinica_id:
+    if not is_admin_global(usuario) and p.clinica_id != usuario.clinica_id:
         raise HTTPException(status_code=403, detail="Acesso negado")
 
     p.ativo = False
