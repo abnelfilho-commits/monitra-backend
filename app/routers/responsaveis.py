@@ -145,7 +145,7 @@ def listar_vinculos(
     db: Session = Depends(get_db),
     usuario = Depends(get_usuario_atual),
 ):
-    vinculos = (
+    query = (
         db.query(
             ResponsavelPaciente,
             Responsavel,
@@ -159,12 +159,20 @@ def listar_vinculos(
             Paciente,
             Paciente.id == ResponsavelPaciente.paciente_id
         )
-        if not is_admin_global(usuario):
-            vinculos = vinculos.filter(
-                Paciente.clinica_id == usuario.clinica_id
-            )
-        .all()
     )
+
+    if not is_admin_global(usuario):
+        if not usuario.clinica_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Usuário sem clínica vinculada"
+            )
+
+        query = query.filter(
+            Paciente.clinica_id == usuario.clinica_id
+        )
+
+    vinculos = query.all()
 
     return [
         {
