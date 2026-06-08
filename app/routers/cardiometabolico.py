@@ -1,7 +1,13 @@
+
+
 from datetime import datetime
 from fastapi import HTTPException, APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+from app.core.deps import get_usuario_atual
+from app.core.acl import is_admin_global
+
 from app.database import get_db
 from app.services.cardiometabolico import obter_dashboard_cardiometabolico
 from app.schemas.cardiometabolico import (
@@ -74,7 +80,9 @@ def obter_paciente_cardiometabolico(
             ORDER BY data_registro ASC
         """),
         {
-            "paciente_id": paciente_id
+            "paciente_id": paciente_id,
+            "is_admin": is_admin_global(usuario),
+            "clinica_id": usuario.clinica_id,
         }
     ).fetchall()
 
@@ -449,14 +457,15 @@ def calcular_evolucao_assistencial(
 
 @router.get("/pacientes/{paciente_id}/dashboard")
 def dashboard_cardiometabolico(
-    paciente_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario = Depends(get_usuario_atual),
 ):
     return obter_dashboard_cardiometabolico(db, paciente_id)
 
 @router.get("/pacientes")
 def listar_pacientes_cardiometabolico(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario = Depends(get_usuario_atual),
 ):
     rows = db.execute(
         text("""
@@ -467,8 +476,14 @@ def listar_pacientes_cardiometabolico(
                     rl.score_clinico,
                     rl.risco,
                     rl.data_registro
+                    
                 FROM registros_longitudinais rl
+                JOIN pacientes p ON p.id = rl.paciente_id
                 WHERE rl.modulo_id = 2
+                AND (
+                    :is_admin = true
+                    OR p.clinica_id = :clinica_id
+                )
                 ORDER BY rl.paciente_id, rl.data_registro DESC
             ),
 
@@ -562,6 +577,10 @@ def listar_pacientes_cardiometabolico(
             JOIN registros_longitudinais rl ON rl.id = u.registro_id
             JOIN pacientes p ON p.id = u.paciente_id
             LEFT JOIN valores v ON v.paciente_id = p.id
+            WHERE (
+                :is_admin = true
+                OR p.clinica_id = :clinica_id
+            )
             ORDER BY p.nome ASC
         """)
     ).fetchall()
@@ -924,7 +943,11 @@ def dashboard_cardiometabolico(
             ORDER BY
                 rl.paciente_id,
                 rl.data_registro DESC
-        """)
+        """),
+        {
+            "is_admin": is_admin_global(usuario),
+            "clinica_id": usuario.clinica_id,
+        }
     ).fetchall()
 
     total = len(rows)
@@ -956,7 +979,8 @@ def dashboard_cardiometabolico(
 
 @router.get("/dashboard-analytics")
 def dashboard_analytics(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario = Depends(get_usuario_atual),
 ):
     rows = db.execute(
         text("""
@@ -968,7 +992,12 @@ def dashboard_analytics(
                     rl.risco,
                     rl.data_registro
                 FROM registros_longitudinais rl
+                JOIN pacientes p ON p.id = rl.paciente_id
                 WHERE rl.modulo_id = 2
+                AND (
+                    :is_admin = true
+                    OR p.clinica_id = :clinica_id
+                )
                 ORDER BY rl.paciente_id, rl.data_registro DESC
             ),
 
@@ -997,11 +1026,16 @@ def dashboard_analytics(
                     ) AS altura
 
                 FROM registros_longitudinais rl
+                JOIN pacientes p ON p.id = rl.paciente_id
                 JOIN respostas_registro r
                 ON r.registro_id = rl.id
                 JOIN campos_formulario c
                 ON c.id = r.campo_id
                 WHERE rl.modulo_id = 2
+                AND (
+                    :is_admin = true
+                    OR p.clinica_id = :clinica_id
+                )
                 GROUP BY rl.paciente_id
             )
 
@@ -1029,7 +1063,11 @@ def dashboard_analytics(
             LEFT JOIN valores v
             ON v.paciente_id = p.id
             ORDER BY p.nome ASC;
-        """)
+        """),
+        {
+            "is_admin": is_admin_global(usuario),
+            "clinica_id": usuario.clinica_id,
+        }
     ).fetchall()
 
     pacientes_criticos = []
