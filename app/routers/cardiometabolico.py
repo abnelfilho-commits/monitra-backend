@@ -582,7 +582,11 @@ def listar_pacientes_cardiometabolico(
                 OR p.clinica_id = :clinica_id
             )
             ORDER BY p.nome ASC
-        """)
+        """),
+        {
+            "is_admin": is_admin_global(usuario),
+            "clinica_id": usuario.clinica_id,
+        }
     ).fetchall()
 
     pacientes = []
