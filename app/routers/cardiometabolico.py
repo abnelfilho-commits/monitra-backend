@@ -1366,10 +1366,18 @@ def criar_registro_diario(
                 formulario_id,
                 data_registro,
                 origem,
+                glicemia_jejum,
+                glicemia_pos_prandial,
+                pressao_sistolica,
+                pressao_diastolica,
+                peso,
+                sono,
+                humor,
                 score_clinico,
                 risco,
                 protocolo,
                 leitura_clinica
+
             )
             VALUES (
                 :paciente_id,
@@ -1377,6 +1385,13 @@ def criar_registro_diario(
                 :formulario_id,
                 NOW(),
                 'PROFISSIONAL',
+                :glicemia_jejum,
+                :glicemia_pos_prandial,
+                :pressao_sistolica,
+                :pressao_diastolica,
+                :peso,
+                :sono,
+                :humor,
                 :score_clinico,
                 :risco,
                 :protocolo,
@@ -1387,8 +1402,15 @@ def criar_registro_diario(
         {
             "paciente_id": 
                 payload.paciente_id,
-
             "formulario_id": formulario.id,
+            
+            "glicemia_jejum": payload.glicemia_jejum,
+            "glicemia_pos_prandial": payload.glicemia_pos_prandial,
+            "pressao_sistolica": payload.pressao_sistolica,
+            "pressao_diastolica": payload.pressao_diastolica,
+            "peso": payload.peso,
+            "sono": payload.sono,
+            "humor": payload.humor,
 
             "score_clinico":
                 score,
