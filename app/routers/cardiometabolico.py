@@ -1444,24 +1444,7 @@ def criar_registro_diario(
         if not campo:
             continue
 
-        if isinstance(valor, (int, float)):
-            db.execute(text("""
-                INSERT INTO respostas_registro (
-                    registro_id,
-                    campo_id,
-                    valor_numero
-                ) 
-                VALUES (
-                    :registro_id,
-                    :campo_id,
-                    :valor
-                )
-            """), {
-                "registro_id": registro.id,
-                "campo_id": campo.id,
-                "valor": valor
-            })
-        else:
+        if isinstance(valor, bool):
             db.execute(text("""
                 INSERT INTO respostas_registro (
                     registro_id,
@@ -1476,8 +1459,10 @@ def criar_registro_diario(
             """), {
                 "registro_id": registro.id,
                 "campo_id": campo.id,
-                "valor": str(valor)
+                "valor": str(valor).lower()
             })
+
+        elif isinstance(valor, (int, float)):
 
     db.commit()
     return {
