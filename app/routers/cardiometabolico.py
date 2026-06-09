@@ -60,7 +60,7 @@ def obter_paciente_cardiometabolico(
             WHERE paciente_id = :paciente_id
               AND modulo_id = 2
 
-            ORDER BY data_registro DESC
+            ORDER BY data_registro DESC, id DESC
 
             LIMIT 1
         """),
