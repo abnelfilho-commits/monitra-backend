@@ -1304,11 +1304,21 @@ def criar_registro_diario(
     payload: RegistroDiarioCardio,
     db: Session = Depends(get_db)
     ):
-    modulo = db.execute(text("""
-        SELECT id
-        FROM modulos_clinicos
-        WHERE slug = 'cardiometabolico'
+    formulario = db.execute(text("""
+        SELECT fm.id
+        FROM formularios_modulo fm
+        JOIN modulos_clinicos mc ON mc.id = fm.modulo_id
+        WHERE mc.slug = 'cardiometabolico'
+        AND fm.tipo = 'REGISTRO_DIARIO'
+        AND fm.ativo = true
+        LIMIT 1
     """)).fetchone()
+
+    if not formulario:
+        raise HTTPException(
+            status_code=400,
+            detail="Formulário cardiometabólico não configurado."
+        )
 
     dados_motor = {
         "glicemia_jejum":
@@ -1364,7 +1374,7 @@ def criar_registro_diario(
             VALUES (
                 :paciente_id,
                 2,
-                1,
+                :formulario_id,
                 NOW(),
                 'PROFISSIONAL',
                 :score_clinico,
@@ -1377,6 +1387,8 @@ def criar_registro_diario(
         {
             "paciente_id": 
                 payload.paciente_id,
+
+            "formulario_id": formulario.id,
 
             "score_clinico":
                 score,
