@@ -683,7 +683,7 @@ def timeline_cardiometabolica(
             SELECT
                 rl.id,
                 rl.data_registro,
-
+                rl.criado_em,
                 rl.score_clinico,
                 rl.risco,
                 rl.protocolo,
@@ -760,7 +760,7 @@ def timeline_cardiometabolica(
             WHERE rl.paciente_id = :paciente_id
             AND rl.modulo_id = 2
 
-            ORDER BY rl.data_registro DESC
+            ORDER BY rl.criado_em DESC, rl.id DESC
         """),
         {"paciente_id": paciente_id}
     ).fetchall()
@@ -774,7 +774,7 @@ def timeline_cardiometabolica(
             agrupado[registro_id] = {
                 "id": registro_id,
 
-                "data": r.data_registro.isoformat(),
+                "data": r.criado_em.isoformat() if r.criado_em else r.data_registro.isoformat(),
 
                 "tipo": "Registro diário",
                 
