@@ -14,6 +14,8 @@ class RegistroDiarioCardio(BaseModel):
 
     peso: Optional[float] = None
 
+    altura: Optional[float] = None
+
     ingestao_hidrica: Optional[float] = None
 
     atividade_fisica: Optional[str] = None

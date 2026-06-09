@@ -1439,6 +1439,8 @@ def criar_registro_diario(
         "peso":
             payload.peso,
 
+        "altura": payload.altura,
+
         "uso_medicacao":
             payload.uso_medicacao,
 
