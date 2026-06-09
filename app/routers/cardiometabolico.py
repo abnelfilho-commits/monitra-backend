@@ -36,7 +36,8 @@ def obter_paciente_cardiometabolico(
             SELECT
                 p.id,
                 p.nome,
-                p.data_nascimento
+                p.data_nascimento,
+                p.altura
             FROM pacientes p
             WHERE p.id = :paciente_id
             LIMIT 1
@@ -51,7 +52,8 @@ def obter_paciente_cardiometabolico(
                 risco,
                 protocolo,
                 leitura_clinica,
-                data_registro
+                data_registro,
+                peso
 
             FROM registros_longitudinais
 
@@ -96,7 +98,15 @@ def obter_paciente_cardiometabolico(
             status_code=404,
             detail="Paciente não encontrado"
         )
+    imc = None
 
+    if ultimo_registro and ultimo_registro.peso and paciente.altura:
+        imc = round(
+            float(ultimo_registro.peso) / (
+                float(paciente.altura) * float(paciente.altura)
+            ),
+            1
+        )
     return {
         "id": paciente.id,
 
@@ -106,6 +116,10 @@ def obter_paciente_cardiometabolico(
             str(paciente.data_nascimento)
             if paciente.data_nascimento
             else None,
+
+        "peso": ultimo_registro.peso if ultimo_registro else None,
+        "altura": paciente.altura,
+        "imc": imc,
 
         "score_clinico":
             ultimo_registro.score_clinico
