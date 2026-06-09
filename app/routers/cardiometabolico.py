@@ -496,7 +496,7 @@ def listar_pacientes_cardiometabolico(
                     :is_admin = true
                     OR p.clinica_id = :clinica_id
                 )
-                ORDER BY rl.paciente_id, rl.data_registro DESC
+                ORDER BY rl.paciente_id, rl.data_registro DESC, rl.id DESC
             ),
 
             valores AS (
@@ -512,7 +512,7 @@ def listar_pacientes_cardiometabolico(
                         AND rl2.modulo_id = 2
                         AND c.nome_campo = 'glicemia_jejum'
                         AND r.valor_numero IS NOT NULL
-                        ORDER BY rl2.data_registro DESC
+                        ORDER BY rl2.data_registro DESC, rl2.id DESC
                         LIMIT 1
                     ) AS glicemia,
 
@@ -525,7 +525,7 @@ def listar_pacientes_cardiometabolico(
                         AND rl2.modulo_id = 2
                         AND c.nome_campo = 'pressao_sistolica'
                         AND r.valor_numero IS NOT NULL
-                        ORDER BY rl2.data_registro DESC
+                        ORDER BY rl2.data_registro DESC, rl2.id DESC
                         LIMIT 1
                     ) AS sistolica,
 
@@ -538,7 +538,7 @@ def listar_pacientes_cardiometabolico(
                         AND rl2.modulo_id = 2
                         AND c.nome_campo = 'pressao_diastolica'
                         AND r.valor_numero IS NOT NULL
-                        ORDER BY rl2.data_registro DESC
+                        ORDER BY rl2.data_registro DESC, rl2.id DESC
                         LIMIT 1
                     ) AS diastolica,
 
@@ -551,7 +551,7 @@ def listar_pacientes_cardiometabolico(
                         AND rl2.modulo_id = 2
                         AND c.nome_campo = 'peso'
                         AND r.valor_numero IS NOT NULL
-                        ORDER BY rl2.data_registro DESC
+                        ORDER BY rl2.data_registro DESC, rl2.id DESC
                         LIMIT 1
                     ) AS peso,
 
@@ -564,7 +564,7 @@ def listar_pacientes_cardiometabolico(
                         AND rl2.modulo_id = 2
                         AND c.nome_campo = 'altura'
                         AND r.valor_numero IS NOT NULL
-                        ORDER BY rl2.data_registro DESC
+                        ORDER BY rl2.data_registro DESC, rl2.id DESC
                         LIMIT 1
                     ) AS altura
 
@@ -1069,7 +1069,7 @@ def dashboard_analytics(
                 COALESCE(rl.pressao_sistolica, v.sistolica) AS sistolica,
                 COALESCE(rl.pressao_diastolica, v.diastolica) AS diastolica,
                 COALESCE(rl.peso, v.peso) AS peso,
-                p.altura AS altura
+                v.altura AS altura
 
             FROM ultimos u
             JOIN registros_longitudinais rl
