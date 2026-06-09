@@ -569,7 +569,7 @@ def listar_pacientes_cardiometabolico(
                 COALESCE(rl.pressao_sistolica, v.sistolica) AS sistolica,
                 COALESCE(rl.pressao_diastolica, v.diastolica) AS diastolica,
                 COALESCE(rl.peso, v.peso) AS peso,
-                v.altura AS altura
+                p.altura AS altura
 
             FROM ultimos u
             JOIN registros_longitudinais rl ON rl.id = u.registro_id
@@ -1055,7 +1055,7 @@ def dashboard_analytics(
                 COALESCE(rl.pressao_sistolica, v.sistolica) AS sistolica,
                 COALESCE(rl.pressao_diastolica, v.diastolica) AS diastolica,
                 COALESCE(rl.peso, v.peso) AS peso,
-                v.altura AS altura
+                p.altura AS altura
 
             FROM ultimos u
             JOIN registros_longitudinais rl
