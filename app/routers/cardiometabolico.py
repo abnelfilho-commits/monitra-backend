@@ -81,8 +81,6 @@ def obter_paciente_cardiometabolico(
         """),
         {
             "paciente_id": paciente_id,
-            "is_admin": is_admin_global(usuario),
-            "clinica_id": usuario.clinica_id,
         }
     ).fetchall()
 
