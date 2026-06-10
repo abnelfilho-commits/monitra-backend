@@ -762,7 +762,7 @@ def timeline_cardiometabolica(
                 rl.origem
 
             FROM registros_longitudinais rl
-
+            JOIN pacientes p ON p.id = rl.paciente_id
             WHERE rl.paciente_id = :paciente_id
             AND rl.modulo_id = 2
 
