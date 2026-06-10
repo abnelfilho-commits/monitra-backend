@@ -755,15 +755,7 @@ def timeline_cardiometabolica(
                     )
                 ) AS peso,
                 
-                (
-                    SELECT r.valor_numero
-                    FROM respostas_registro r
-                    JOIN campos_formulario c
-                    ON c.id = r.campo_id
-                    WHERE r.registro_id = rl.id
-                    AND c.nome_campo = 'altura'
-                    LIMIT 1
-                ) AS altura,
+                p.altura AS altura,
                 
                 rl.sono,
                 rl.humor,
