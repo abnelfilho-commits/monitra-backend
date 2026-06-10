@@ -15,13 +15,14 @@ down_revision: Union[str, Sequence[str], None] = "fb433ae2eb57"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-
 def upgrade() -> None:
-    op.add_column(
-        "pacientes",
-        sa.Column("altura", sa.Numeric(4, 2), nullable=True),
-    )
-
+    op.execute("""
+        ALTER TABLE pacientes
+        ADD COLUMN IF NOT EXISTS altura NUMERIC(4, 2);
+    """)
 
 def downgrade() -> None:
-    op.drop_column("pacientes", "altura")
+    op.execute("""
+        ALTER TABLE pacientes
+        DROP COLUMN IF EXISTS altura;
+    """)
