@@ -7,6 +7,7 @@ class PacienteBase(BaseModel):
     nome: str
     data_nascimento: date
     genero: Optional[str] = None
+    altura: Optional[float] = None
     responsavel_nome: Optional[str] = None
     responsavel_email: Optional[str] = None
 

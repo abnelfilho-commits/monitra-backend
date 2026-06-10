@@ -29,6 +29,7 @@ def serializar_paciente(p: Paciente):
         "nome": p.nome,
         "data_nascimento": p.data_nascimento.isoformat() if p.data_nascimento else None,
         "genero": p.genero,
+        "altura": float(p.altura) if p.altura is not None else None,
         "responsavel_nome": p.responsavel_nome,
         "responsavel_email": p.responsavel_email,
         "profissional_id": p.profissional_id,
@@ -175,6 +176,7 @@ def atualizar_paciente(
     p.nome = payload.nome
     p.data_nascimento = payload.data_nascimento
     p.genero = payload.genero
+    p.altura = payload.altura
     p.responsavel_nome = payload.responsavel_nome
     p.responsavel_email = payload.responsavel_email
     p.profissional_id = payload.profissional_id

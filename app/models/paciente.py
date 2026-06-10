@@ -1,4 +1,13 @@
-from sqlalchemy import Column, Integer, String, Date, Boolean, ForeignKey, DateTime
+from sqlalchemy import (
+    Column, 
+    Integer, 
+    String, 
+    Date, 
+    Boolean, 
+    Numeric, 
+    ForeignKey, 
+    DateTime,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -11,6 +20,8 @@ class Paciente(Base):
     nome = Column(String, nullable=False)
     data_nascimento = Column(Date, nullable=True)
     genero = Column(String, nullable=True)
+
+    altura = Column(Numeric(4, 2), nullable=True)
 
     responsavel_nome = Column(String, nullable=True)
     responsavel_email = Column(String, nullable=True)
