@@ -12,7 +12,12 @@ class Usuario(Base):
     perfil = Column(String, default="PROFISSIONAL")
 
     clinica_id = Column(Integer, ForeignKey("clinicas.id"))
+    profissional_id = Column(Integer, ForeignKey("profissionais.id"), nullable=True)
+
     clinica = relationship("Clinica")
+    profissional = relationship("Profissional")
 
     ativo = Column(Boolean, default=True)
+
+    
 
