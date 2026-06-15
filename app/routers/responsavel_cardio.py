@@ -102,8 +102,23 @@ def criar_registro_cardio_responsavel(
     protocolo = definir_protocolo(score)
     leitura_clinica = gerar_leitura_clinica(dados_motor, score)
 
-    registro = db.execute(
+    formulario = db.execute(
         text("""
+            SELECT id
+            FROM formularios_modulo
+            WHERE modulo_id = 2
+            AND tipo = 'REGISTRO_DIARIO'
+            AND ativo = true
+            ORDER BY id
+            LIMIT 1
+        """)
+    ).fetchone()
+
+    if not formulario:
+        raise HTTPException(
+            status_code=400,
+            detail="Formulário cardiometabólico não configurado."
+        )
             INSERT INTO registros_longitudinais (
                 paciente_id,
                 modulo_id,
@@ -127,7 +142,7 @@ def criar_registro_cardio_responsavel(
             VALUES (
                 :paciente_id,
                 2,
-                1,
+                :formulario_id,
                 'RESPONSAVEL',
                 :data_registro,
                 'cardiometabolico',
