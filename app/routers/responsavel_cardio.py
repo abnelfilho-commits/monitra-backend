@@ -119,7 +119,8 @@ def criar_registro_cardio_responsavel(
             status_code=400,
             detail="Formulário cardiometabólico não configurado."
         )
-        registro = db.execute(
+
+    registro = db.execute(
         text("""
             INSERT INTO registros_longitudinais (
                 paciente_id,
@@ -165,6 +166,7 @@ def criar_registro_cardio_responsavel(
         """),
         {
             "paciente_id": paciente_id,
+            "formulario_id": formulario.id,
             "data_registro": payload.data,
             "glicemia_jejum": payload.glicemia_jejum,
             "pressao_sistolica": payload.pressao_sistolica,
