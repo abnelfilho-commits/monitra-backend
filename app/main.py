@@ -24,6 +24,13 @@ from app.routers.responsavel_auth import router as responsavel_auth_router
 from app.routers.responsaveis import router as responsaveis_router
 from app.routers.responsavel_pacientes import router as responsavel_pacientes_router
 from app.routers.responsavel_registros import router as responsavel_registros_router
+from app.routers import pts
+from app.routers import atividades_terapeuticas
+from app.routers import agenda_cuidados
+from app.routers import dimensionamento
+from app.routers import capacidade_instalada
+from app.routers import formularios
+from app.routers import assessments
 
 app = FastAPI(title="Monitra API")
 
@@ -75,3 +82,10 @@ app.include_router(registros_longitudinais.router)
 app.include_router(cardiometabolico.router)
 app.include_router(timeline.router)
 app.include_router(responsavel_cardio.router)
+app.include_router(pts.router)
+app.include_router(atividades_terapeuticas.router)
+app.include_router(agenda_cuidados.router)
+app.include_router(dimensionamento.router)
+app.include_router(capacidade_instalada.router)
+app.include_router(formularios.router)
+app.include_router(assessments.router)

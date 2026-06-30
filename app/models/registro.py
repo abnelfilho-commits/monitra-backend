@@ -17,9 +17,10 @@ class RegistroDiario(Base):
     consistencia_fezes = Column(Integer, nullable=True)
     irritabilidade = Column(Integer, nullable=True)
     crise_sensorial = Column(Integer, nullable=True)
-
+    tempo_tela = Column(String(50), nullable=True)
+    seletividade_alimentar = Column(String(50), nullable=True)
+    aceitou_alimento_novo = Column(Boolean, nullable=True)
     observacao = Column(Text, nullable=True)
-    alimentacao = Column(Text, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

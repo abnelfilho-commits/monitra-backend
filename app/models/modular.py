@@ -47,7 +47,7 @@ class FormularioModulo(Base):
     tipo = Column(String(50), nullable=False)
     ativo = Column(Boolean, default=True)
     criado_em = Column(DateTime, server_default=func.now())
-
+    codigo = Column(String(100), nullable=True)
 
 class CampoFormulario(Base):
     __tablename__ = "campos_formulario"

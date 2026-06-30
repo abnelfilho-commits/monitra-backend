@@ -5,8 +5,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.models.registro import RegistroDiario
-from app.utils.eixos import calcular_eixo_dominante
-
+from app.services.eixos import calcular_eixo_dominante
 from app.core.acl import is_admin, is_admin_global
 from app.core.deps import get_usuario_atual
 from app.database import get_db

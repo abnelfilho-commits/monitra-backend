@@ -1,0 +1,60 @@
+CREATE OR REPLACE VIEW vw_timeline_paciente AS
+SELECT
+    rd.id AS id,
+    rd.paciente_id AS paciente_id,
+    'REGISTRO_DIARIO'::varchar AS tipo_evento,
+    rd.data::timestamp without time zone AS data,
+    rd.observacao AS descricao,
+    NULL::integer AS usuario_id,
+    COALESCE(rd.origem, 'PROFISSIONAL'::varchar) AS origem,
+    rd.sono_qualidade::varchar AS sono_qualidade,
+    rd.irritabilidade::varchar AS irritabilidade,
+    CASE
+        WHEN rd.crise_sensorial IS NULL THEN NULL
+        WHEN rd.crise_sensorial = 0 THEN false
+        ELSE true
+    END AS crise_sensorial
+FROM registros_diarios rd
+
+UNION ALL
+
+SELECT
+    rl.id AS id,
+    rl.paciente_id AS paciente_id,
+    'REGISTRO_DIARIO'::varchar AS tipo_evento,
+    rl.data_registro::timestamp without time zone AS data,
+    MAX(CASE WHEN cf.nome_campo = 'observacao' THEN rr.valor_texto END) AS descricao,
+    rl.criado_por_usuario_id AS usuario_id,
+    rl.origem::varchar AS origem,
+    MAX(CASE WHEN cf.nome_campo = 'sono_qualidade' THEN rr.valor_numero::varchar END) AS sono_qualidade,
+    MAX(CASE WHEN cf.nome_campo = 'irritabilidade' THEN rr.valor_numero::varchar END) AS irritabilidade,
+    CASE
+        WHEN MAX(CASE WHEN cf.nome_campo = 'crise_sensorial' THEN rr.valor_numero END) IS NULL THEN NULL
+        WHEN MAX(CASE WHEN cf.nome_campo = 'crise_sensorial' THEN rr.valor_numero END) = 0 THEN false
+        ELSE true
+    END AS crise_sensorial
+FROM registros_longitudinais rl
+JOIN respostas_registro rr ON rr.registro_id = rl.id
+JOIN campos_formulario cf ON cf.id = rr.campo_id
+WHERE rl.modulo_id = 1
+GROUP BY
+    rl.id,
+    rl.paciente_id,
+    rl.data_registro,
+    rl.criado_por_usuario_id,
+    rl.origem
+
+UNION ALL
+
+SELECT
+    i.id AS id,
+    i.paciente_id AS paciente_id,
+    'INTERVENCAO'::varchar AS tipo_evento,
+    i.data_intervencao AS data,
+    i.descricao AS descricao,
+    i.profissional_id AS usuario_id,
+    'PROFISSIONAL'::varchar AS origem,
+    NULL::varchar AS sono_qualidade,
+    NULL::varchar AS irritabilidade,
+    NULL::boolean AS crise_sensorial
+FROM intervencoes i;

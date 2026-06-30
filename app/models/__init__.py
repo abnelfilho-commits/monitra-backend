@@ -18,3 +18,12 @@ from app.models.modular import (
     RespostaRegistro,
     AvaliacaoModulo,
 )
+from app.models.pts import PTS, PTSObjetivo
+from app.models.atividade_terapeutica import (
+    AtividadeTerapeutica,
+    OcupacaoProfissional,
+    AtividadeOcupacao,
+)
+from app.models.agenda_cuidado import AgendaCuidado
+
+from app.models.avaliacao_clinica import AvaliacaoClinica
