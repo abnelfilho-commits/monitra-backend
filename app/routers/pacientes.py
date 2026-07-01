@@ -73,13 +73,7 @@ def obter_paciente(
         raise HTTPException(status_code=403, detail="Acesso negado")
 
     # Buscar últimos registros
-    registros_recentes = (
-        db.query(RegistroDiario)
-        .filter(RegistroDiario.paciente_id == paciente.id)
-        .order_by(RegistroDiario.data.desc(), RegistroDiario.created_at.desc())
-        .limit(7)
-        .all()
-    )
+    registros_recentes = []
 
     # Calcular eixo
     leitura_eixo = calcular_eixo_dominante(registros_recentes)
