@@ -1,25 +1,31 @@
-# Architecture Changelog
+# Changelog
 
-## v1.0 — Junho/2026
-
-- Registro Longitudinal definido como fonte única da verdade.
-- Criado Framework Universal de Avaliações Clínicas.
-- AssessmentBuilder introduzido.
-- AssessmentRepository criado.
-- Registry implementado.
-- Primeiro protocolo: M-CHAT.
-- Clinical Evidence Repository criado.
+Todas as mudanças relevantes do Integra Care serão registradas aqui.
 
 ---
 
-## v1.1
+## v1.0.0
 
-- Denver II incorporado.
-- Histórico de Avaliações Clínicas.
-- Timeline de Avaliações.
+Julho/2026
 
----
+### Inteligência Clínica
 
-## v1.2
+- Framework Universal
+- M-CHAT
+- Denver II
+- Histórico de Avaliações
+- Timeline Clínica
+- Registro Diário
 
-- Clinical Engine integrado.
+### Gestão Assistencial
+
+- PTS
+- Objetivos
+- Agenda
+
+### Gestão Operacional
+
+- Dimensionamento
+- Indicadores
+
+Primeira versão consolidada da plataforma.

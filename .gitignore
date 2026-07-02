@@ -24,3 +24,7 @@ alembic/versions/__pycache__/
 *.log
 *.rtf
 docker.save
+
+# Backups PostgreSQL
+*.sql
+backups/
