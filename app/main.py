@@ -35,6 +35,8 @@ from app.routers import assessments
 app = FastAPI(title="Monitra API")
 
 origins = [
+    "https://care.meyio.com.br",
+    "https://app.care.meyio.com.br",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:5174",
@@ -42,8 +44,6 @@ origins = [
     "http://192.168.1.30:5173",
     "https://monitra-frontend.vercel.app",
     "https://monitra-responsavel-frontend.vercel.app",
-    "https://care.meyio.com.br",
-    "https://app.care.meyio.com.br",
 ]
 
 app.add_middleware(
