@@ -1,21 +1,22 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, EmailStr
+from typing import Optional, List
 
 
 class ProfissionalBase(BaseModel):
     nome: str
-    email: Optional[str] = None
+    email: Optional[EmailStr] = None
     especialidade: Optional[str] = None
     clinica_id: int
 
 
 class ProfissionalCreate(ProfissionalBase):
-    pass
+    senha: str
+    modulo_ids: List[int]
 
 
 class ProfissionalUpdate(BaseModel):
     nome: str
-    email: Optional[str] = None
+    email: Optional[EmailStr] = None
     especialidade: Optional[str] = None
     clinica_id: int
     ativo: Optional[bool] = True

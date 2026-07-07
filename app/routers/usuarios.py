@@ -37,7 +37,7 @@ class UsuarioUpdate(BaseModel):
 class UsuarioOut(BaseModel):
     id: int
     nome: str
-    email: EmailStr
+    email: str
     perfil: str
     clinica_id: Optional[int] = None
     ativo: bool
