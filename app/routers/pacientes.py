@@ -17,6 +17,8 @@ from app.schemas.paciente import PacienteCreate,PacienteUpdate, PacienteResponse
 from app.routers.timeline import listar_timeline_paciente
 from app.services.relatorio_paciente import gerar_pdf_paciente   
 
+from app.models.modular import PacienteModulo, ModuloClinico
+
 router = APIRouter(
     prefix="/pacientes",
     tags=["Pacientes"],
@@ -98,19 +100,53 @@ def criar_paciente(
 ):
     data = payload.dict()
 
+    modulo_id = data.pop("modulo_id", None)
+
+    if not modulo_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Módulo é obrigatório para criar paciente",
+        )
+
+    modulo = (
+        db.query(ModuloClinico)
+        .filter(
+            ModuloClinico.id == modulo_id,
+            ModuloClinico.ativo == True,
+        )
+        .first()
+    )
+
+    if not modulo:
+        raise HTTPException(
+            status_code=404,
+            detail="Módulo clínico não encontrado",
+        )
+
     profissional = None
+
     if data.get("profissional_id"):
         profissional = (
             db.query(Profissional)
-            .filter(Profissional.id == data["profissional_id"], Profissional.ativo == True)
+            .filter(
+                Profissional.id == data["profissional_id"],
+                Profissional.ativo == True,
+            )
             .first()
         )
+
         if not profissional:
-            raise HTTPException(status_code=404, detail="Profissional não encontrado")
+            raise HTTPException(
+                status_code=404,
+                detail="Profissional não encontrado",
+            )
 
     if not is_admin(usuario):
         if usuario.clinica_id is None:
-            raise HTTPException(status_code=403, detail="Usuário sem clínica vinculada")
+            raise HTTPException(
+                status_code=403,
+                detail="Usuário sem clínica vinculada",
+            )
 
         data["clinica_id"] = usuario.clinica_id
 
@@ -119,6 +155,7 @@ def criar_paciente(
                 status_code=403,
                 detail="Profissional não pertence à clínica do usuário",
             )
+
     else:
         if profissional:
             data["clinica_id"] = profissional.clinica_id
@@ -129,12 +166,30 @@ def criar_paciente(
                 detail="Clínica é obrigatória para criar paciente",
             )
 
-    novo = Paciente(**data)
-    db.add(novo)
-    db.commit()
-    db.refresh(novo)
-    return serializar_paciente(novo)
+    try:
+        novo = Paciente(**data)
+        db.add(novo)
 
+        # Precisamos do ID do paciente sem concluir a transação.
+        db.flush()
+
+        paciente_modulo = PacienteModulo(
+            paciente_id=novo.id,
+            modulo_id=modulo_id,
+            ativo=True,
+        )
+
+        db.add(paciente_modulo)
+
+        # Paciente + módulo são confirmados juntos.
+        db.commit()
+        db.refresh(novo)
+
+        return serializar_paciente(novo)
+
+    except Exception:
+        db.rollback()
+        raise
 
 @router.put("/{paciente_id}")
 def atualizar_paciente(

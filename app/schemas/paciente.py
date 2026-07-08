@@ -15,7 +15,7 @@ class PacienteBase(BaseModel):
 class PacienteCreate(PacienteBase):
     clinica_id: Optional[int] = None
     profissional_id: Optional[int] = None
-
+    modulo_id: int
 
 class PacienteUpdate(PacienteBase):
     clinica_id: Optional[int] = None
