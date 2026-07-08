@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
@@ -16,6 +16,13 @@ class Responsavel(Base):
 
     ativo = Column(Boolean, default=True, nullable=False)
 
+    clinica_id = Column(
+        Integer,
+        ForeignKey("clinicas.id"),
+        nullable=True,
+        index=True,
+    )
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -30,3 +37,5 @@ class Responsavel(Base):
         "RegistroDiario",
         back_populates="responsavel"
     )
+
+    clinica = relationship("Clinica")
