@@ -73,7 +73,12 @@ def criar_registro_longitudinal(db: Session, payload):
     try:
         print(payload.model_dump())
     except Exception:
-        print(payload.dict())
+        if hasattr(payload, "model_dump"):
+            print(payload.model_dump())
+        elif hasattr(payload, "dict"):
+            print(payload.dict())
+        else:
+            print(vars(payload))
 
     print("===================================================")
 
