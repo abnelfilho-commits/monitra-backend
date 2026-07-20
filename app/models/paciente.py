@@ -32,5 +32,11 @@ class Paciente(Base):
     clinica = relationship("Clinica", back_populates="pacientes")
     profissional = relationship("Profissional", back_populates="pacientes")
 
+    diagnosticos = relationship(
+        "Diagnostico",
+        back_populates="paciente",
+        cascade="all, delete-orphan",
+    )
+
     ativo = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -6,6 +6,10 @@ from app.database import get_db
 
 from app.services.longitudinal.service import longitudinal_service
 
+from app.services.timeline_event_service import (
+    TimelineEventService,
+)
+
 router = APIRouter(
     prefix="/timeline",
     tags=["Timeline"]
@@ -160,6 +164,15 @@ def obter_timeline_paciente(
             "score": a.score,
             "classificacao": a.classificacao,
         })
+
+    eventos_sessoes = (
+        TimelineEventService.obter_eventos_paciente(
+            db=db,
+            paciente_id=paciente_id,
+        )
+    )
+
+    timeline.extend(eventos_sessoes)
 
     timeline = sorted(
         timeline,

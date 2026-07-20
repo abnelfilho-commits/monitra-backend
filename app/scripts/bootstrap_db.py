@@ -6,7 +6,7 @@ from app.core.security import hash_senha
 from app.database import SessionLocal
 from app.models.usuario import Usuario
 from app.models.clinica import Clinica
-
+from app.models.sessao_assistencial import SessaoAssistencial
 
 def ensure_default_clinica(db: Session) -> Clinica:
     nome = os.getenv("DEFAULT_CLINICA_NOME", "Clínica NeuroVida")

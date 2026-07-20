@@ -32,6 +32,12 @@ from app.routers import capacidade_instalada
 from app.routers import formularios
 from app.routers import assessments
 
+from app.routers import scheduling
+from app.routers import sessoes_assistenciais
+from app.routers import diagnosticos
+
+from app.routers import whatsapp
+
 app = FastAPI(title="Monitra API")
 
 origins = [
@@ -55,7 +61,7 @@ app.add_middleware(
 
 @app.get("/")
 def health():
-    return {"status": "ok", "app": "Monitra API"}
+    return {"status": "ok", "app": "Integra Care API"}
 
 @app.exception_handler(IntegrityError)
 async def integrity_error_handler(request: Request, exc: IntegrityError):
@@ -89,3 +95,8 @@ app.include_router(dimensionamento.router)
 app.include_router(capacidade_instalada.router)
 app.include_router(formularios.router)
 app.include_router(assessments.router)
+app.include_router(scheduling.router)
+app.include_router(sessoes_assistenciais.router)
+app.include_router(diagnosticos.router)
+
+app.include_router(whatsapp.router)

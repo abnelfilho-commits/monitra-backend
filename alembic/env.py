@@ -5,6 +5,10 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from app.models.sessao_assistencial import SessaoAssistencial
+
+from app.models.whatsapp_conversa import WhatsAppConversa
+
 # ✅ garante que o diretório do projeto esteja no sys.path
 # no container normalmente é /app
 BASE_DIR = os.path.abspath(os.getcwd())

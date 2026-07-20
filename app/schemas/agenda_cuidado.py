@@ -19,6 +19,8 @@ class AgendaCuidadoCreate(BaseModel):
 
     observacoes: Optional[str] = None
 
+    profissional_id: Optional[int] = None
+    quantidade_sessoes: Optional[int] = None
 
 class AgendaCuidadoUpdate(BaseModel):
     frequencia_semanal: Optional[int] = None
@@ -35,6 +37,8 @@ class AgendaCuidadoUpdate(BaseModel):
     data_realizacao: Optional[date] = None
     observacao_execucao: Optional[str] = None
 
+    profissional_id: Optional[int] = None
+    quantidade_sessoes: Optional[int] = None
 
 class AgendaCuidadoResponse(BaseModel):
     id: int
@@ -63,6 +67,11 @@ class AgendaCuidadoResponse(BaseModel):
     observacao_execucao: Optional[str] = None
 
     observacoes: Optional[str]
+
+    profissional_id: Optional[int] = None
+    profissional_nome: Optional[str] = None
+
+    quantidade_sessoes: Optional[int] = None
 
     created_at: datetime
 
