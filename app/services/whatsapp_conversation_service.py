@@ -1,7 +1,8 @@
 import re
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from app.models.responsavel import Responsavel
 from app.models.responsavel_paciente import ResponsavelPaciente
@@ -10,6 +11,62 @@ from app.models.whatsapp_conversa import WhatsAppConversa
 from app.services.responsavel_registro_service import (
     ResponsavelRegistroService,
 )
+
+MODULO_NEURO_ID = 1
+FORMULARIO_REGISTRO_NEURO_ID = 2
+
+
+def registro_responsavel_existe_na_data(
+    db: Session,
+    paciente_id: int,
+    data_referencia: date,
+) -> bool:
+    existente = db.execute(text("""
+        SELECT id
+        FROM registros_longitudinais
+        WHERE paciente_id = :paciente_id
+          AND modulo_id = :modulo_id
+          AND formulario_id = :formulario_id
+          AND data_registro = :data_registro
+          AND origem = 'RESPONSAVEL'
+        LIMIT 1
+    """), {
+        "paciente_id": paciente_id,
+        "modulo_id": MODULO_NEURO_ID,
+        "formulario_id": FORMULARIO_REGISTRO_NEURO_ID,
+        "data_registro": data_referencia,
+    }).fetchone()
+
+    return existente is not None
+
+
+def referencia_dia(conversa: WhatsAppConversa) -> str:
+    ontem = date.today() - timedelta(days=1)
+    return "ontem" if conversa.data_referencia == ontem else "hoje"
+
+
+def iniciar_questionario(
+    db: Session,
+    conversa: WhatsAppConversa,
+    data_referencia: date,
+):
+    conversa.data_referencia = data_referencia
+    conversa.etapa_atual = "SONO"
+    conversa.respostas_json = {}
+    db.commit()
+
+    dia = referencia_dia(conversa)
+
+    return (
+        "Ótimo! Vamos começar. 😊\n\n"
+        f"Como foi a qualidade do sono {dia}?\n\n"
+        "1 - Muito ruim\n"
+        "2 - Ruim\n"
+        "3 - Regular\n"
+        "4 - Bom\n"
+        "5 - Muito bom"
+    )
+
 
 def normalizar_telefone(telefone: str) -> str:
     """
@@ -134,10 +191,17 @@ def iniciar_fluxo_um_paciente(
     vinculo,
 ):
     conversa.paciente_id = vinculo.paciente_id
-    conversa.etapa_atual = "CONFIRMAR_INICIO"
+    conversa.respostas_json = {}
 
-    db.commit()
-    db.refresh(conversa)
+    hoje = date.today()
+    ontem = hoje - timedelta(days=1)
+
+    existe_hoje = registro_responsavel_existe_na_data(
+        db, vinculo.paciente_id, hoje
+    )
+    existe_ontem = registro_responsavel_existe_na_data(
+        db, vinculo.paciente_id, ontem
+    )
 
     nome_responsavel = (
         responsavel.nome.split()[0]
@@ -147,20 +211,64 @@ def iniciar_fluxo_um_paciente(
 
     nome_paciente = (
         vinculo.paciente.nome.split()[0]
-        if vinculo.paciente
-        and vinculo.paciente.nome
+        if vinculo.paciente and vinculo.paciente.nome
         else "o paciente"
     )
 
+    if existe_hoje and existe_ontem:
+        conversa.etapa_atual = "INICIO"
+        conversa.data_referencia = None
+        conversa.paciente_id = None
+        db.commit()
+
+        return (
+            f"Olá, {nome_responsavel}! 👋\n\n"
+            f"Os acompanhamentos de hoje e ontem de "
+            f"{nome_paciente} já foram registrados. ✅\n\n"
+            "Quando houver uma nova data disponível, "
+            "é só mandar uma mensagem por aqui."
+        )
+
+    if existe_hoje and not existe_ontem:
+        conversa.etapa_atual = "CONFIRMAR_ONTEM"
+        conversa.data_referencia = ontem
+        db.commit()
+        db.refresh(conversa)
+
+        return (
+            f"Olá, {nome_responsavel}! 👋\n\n"
+            f"O acompanhamento de hoje de {nome_paciente} "
+            f"já foi registrado.\n\n"
+            f"Você gostaria de registrar como foi o dia de ontem?\n\n"
+            f"1 - Sim\n"
+            f"2 - Agora não"
+        )
+
+    if not existe_hoje and not existe_ontem:
+        conversa.etapa_atual = "SELECIONAR_DATA"
+        conversa.data_referencia = None
+        db.commit()
+        db.refresh(conversa)
+
+        return (
+            f"Olá, {nome_responsavel}! 👋\n\n"
+            f"Qual dia você deseja registrar para {nome_paciente}?\n\n"
+            f"1 - Hoje\n"
+            f"2 - Ontem"
+        )
+
+    conversa.etapa_atual = "CONFIRMAR_INICIO"
+    conversa.data_referencia = hoje
+    db.commit()
+    db.refresh(conversa)
+
     return (
         f"Olá, {nome_responsavel}! 👋\n\n"
-        f"Vamos registrar como foi o dia de "
-        f"{nome_paciente}?\n\n"
+        f"Vamos registrar como foi o dia de {nome_paciente}?\n\n"
         f"Responda:\n"
         f"1 - Sim\n"
         f"2 - Agora não"
     )
-
 
 def processar_mensagem(
     db: Session,
@@ -320,6 +428,103 @@ def processar_mensagem(
         )
 
     # -------------------------------------------------
+    # 6. SELECIONAR DATA (HOJE / ONTEM)
+    # -------------------------------------------------
+
+    if conversa.etapa_atual == "SELECIONAR_DATA":
+        if mensagem_normalizada not in {"1", "2"}:
+            return (
+                "Por favor, escolha uma opção:\n\n"
+                "1 - Hoje\n"
+                "2 - Ontem"
+            )
+
+        data_escolhida = (
+            date.today()
+            if mensagem_normalizada == "1"
+            else date.today() - timedelta(days=1)
+        )
+
+        if registro_responsavel_existe_na_data(
+            db,
+            conversa.paciente_id,
+            data_escolhida,
+        ):
+            conversa.etapa_atual = "INICIO"
+            conversa.respostas_json = {}
+            conversa.data_referencia = None
+            conversa.paciente_id = None
+            db.commit()
+
+            return (
+                "Esse acompanhamento já foi registrado. ✅\n\n"
+                "Envie uma nova mensagem para verificar "
+                "as datas disponíveis."
+            )
+
+        return iniciar_questionario(
+            db,
+            conversa,
+            data_escolhida,
+        )
+
+    # -------------------------------------------------
+    # 7. CONFIRMAR REGISTRO DE ONTEM
+    # -------------------------------------------------
+
+    if conversa.etapa_atual == "CONFIRMAR_ONTEM":
+        resposta = mensagem_normalizada.lower()
+
+        respostas_sim = {"1", "sim", "s", "yes"}
+        respostas_nao = {"2", "não", "nao", "n"}
+
+        if resposta in respostas_nao:
+            conversa.etapa_atual = "INICIO"
+            conversa.respostas_json = {}
+            conversa.data_referencia = None
+            conversa.paciente_id = None
+            db.commit()
+
+            return (
+                "Tudo bem! 😊\n\n"
+                "Quando quiser fazer o acompanhamento, "
+                "é só mandar uma mensagem por aqui."
+            )
+
+        if resposta not in respostas_sim:
+            return (
+                "Não entendi sua resposta. 😊\n\n"
+                "Responda:\n"
+                "1 - Sim\n"
+                "2 - Agora não"
+            )
+
+        ontem = date.today() - timedelta(days=1)
+
+        if registro_responsavel_existe_na_data(
+            db,
+            conversa.paciente_id,
+            ontem,
+        ):
+            conversa.etapa_atual = "INICIO"
+            conversa.respostas_json = {}
+            conversa.data_referencia = None
+            conversa.paciente_id = None
+            db.commit()
+
+            return (
+                "O acompanhamento de ontem já foi registrado. ✅\n\n"
+                "Envie uma nova mensagem para verificar "
+                "as datas disponíveis."
+            )
+
+        return iniciar_questionario(
+            db,
+            conversa,
+            ontem,
+        )
+
+    # -------------------------------------------------
     # 6. CONFIRMAR INÍCIO
     # -------------------------------------------------
 
@@ -363,20 +568,29 @@ def processar_mensagem(
                 "2 - Agora não"
             )
 
-        conversa.data_referencia = date.today()
-        conversa.etapa_atual = "SONO"
-        conversa.respostas_json = {}
+        hoje = date.today()
 
-        db.commit()
+        if registro_responsavel_existe_na_data(
+            db,
+            conversa.paciente_id,
+            hoje,
+        ):
+            conversa.etapa_atual = "INICIO"
+            conversa.respostas_json = {}
+            conversa.data_referencia = None
+            conversa.paciente_id = None
+            db.commit()
 
-        return (
-            "Ótimo! Vamos começar. 😊\n\n"
-            "Como foi a qualidade do sono hoje?\n\n"
-            "1 - Muito ruim\n"
-            "2 - Ruim\n"
-            "3 - Regular\n"
-            "4 - Bom\n"
-            "5 - Muito bom"
+            return (
+                "O acompanhamento de hoje já foi registrado. ✅\n\n"
+                "Envie uma nova mensagem para verificar "
+                "as datas disponíveis."
+            )
+
+        return iniciar_questionario(
+            db,
+            conversa,
+            hoje,
         )
 
     # -------------------------------------------------
@@ -402,8 +616,10 @@ def processar_mensagem(
 
         db.commit()
 
+        dia = referencia_dia(conversa)
+
         return (
-            "Houve evacuação hoje?\n\n"
+            f"Houve evacuação {dia}?\n\n"
             "1 - Sim\n"
             "2 - Não"
         )
@@ -429,8 +645,10 @@ def processar_mensagem(
             conversa.etapa_atual = "BRISTOL"
             db.commit()
 
+            dia = referencia_dia(conversa)
+
             return (
-                "Como estavam as fezes hoje?\n\n"
+                f"Como estavam as fezes {dia}?\n\n"
                 "1 - Muito ressecadas\n"
                 "2 - Ressecadas\n"
                 "3 - Tendendo a ressecadas\n"
@@ -447,8 +665,10 @@ def processar_mensagem(
 
         db.commit()
 
+        dia = referencia_dia(conversa)
+
         return (
-            "Como estava a irritabilidade hoje?\n\n"
+            f"Como estava a irritabilidade {dia}?\n\n"
             "0 - Nenhuma\n"
             "1 - Leve\n"
             "2 - Moderada\n"
@@ -477,8 +697,10 @@ def processar_mensagem(
 
         db.commit()
 
+        dia = referencia_dia(conversa)
+
         return (
-            "Como estava a irritabilidade hoje?\n\n"
+            f"Como estava a irritabilidade {dia}?\n\n"
             "0 - Nenhuma\n"
             "1 - Leve\n"
             "2 - Moderada\n"
@@ -509,8 +731,10 @@ def processar_mensagem(
 
         db.commit()
 
+        dia = referencia_dia(conversa)
+
         return (
-            "Houve crise sensorial hoje?\n\n"
+            f"Houve crise sensorial {dia}?\n\n"
             "0 - Não\n"
             "1 - Leve\n"
             "2 - Moderada\n"
@@ -539,8 +763,10 @@ def processar_mensagem(
 
         db.commit()
 
+        dia = referencia_dia(conversa)
+
         return (
-            "Quanto tempo de tela teve hoje?\n\n"
+            f"Quanto tempo de tela teve {dia}?\n\n"
             "1 - Menos de 1 hora\n"
             "2 - 1 a 2 horas\n"
             "3 - 2 a 4 horas\n"
@@ -576,8 +802,10 @@ def processar_mensagem(
 
         db.commit()
 
+        dia = referencia_dia(conversa)
+
         return (
-            "Como estava a seletividade alimentar hoje?\n\n"
+            f"Como estava a seletividade alimentar {dia}?\n\n"
             "0 - Nenhuma\n"
             "1 - Leve\n"
             "2 - Moderada\n"
@@ -615,8 +843,10 @@ def processar_mensagem(
 
         db.commit()
 
+        dia = referencia_dia(conversa)
+
         return (
-            "Aceitou algum alimento novo hoje?\n\n"
+            f"Aceitou algum alimento novo {dia}?\n\n"
             "1 - Sim\n"
             "2 - Não"
         )
