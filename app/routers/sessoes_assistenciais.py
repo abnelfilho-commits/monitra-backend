@@ -206,6 +206,61 @@ def registrar_atendimento(
 
     except ValueError as erro:
         tratar_erro_transicao(erro)
+
+@router.get("/paciente/{paciente_id}")
+def listar_sessoes_por_paciente(
+    paciente_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Lista as Sessões Assistenciais de um paciente,
+    ordenadas cronologicamente.
+    """
+
+    sessoes = (
+        db.query(SessaoAssistencial)
+        .filter(
+            SessaoAssistencial.paciente_id == paciente_id
+        )
+        .order_by(
+            SessaoAssistencial.data_agendada.asc(),
+            SessaoAssistencial.hora_inicio.asc(),
+            SessaoAssistencial.numero_sessao.asc(),
+        )
+        .all()
+    )
+
+    return [
+        {
+            "id": sessao.id,
+            "paciente_id": sessao.paciente_id,
+            "agenda_cuidado_id": sessao.agenda_cuidado_id,
+            "profissional_id": sessao.profissional_id,
+
+            "numero_sessao": sessao.numero_sessao,
+
+            "data_agendada": sessao.data_agendada,
+            "hora_inicio": sessao.hora_inicio,
+            "hora_fim": sessao.hora_fim,
+            "duracao_minutos": sessao.duracao_minutos,
+
+            "status": sessao.status,
+
+            "data_realizacao": sessao.data_realizacao,
+            "hora_inicio_real": sessao.hora_inicio_real,
+            "hora_fim_real": sessao.hora_fim_real,
+
+            "profissional": (
+                {
+                    "id": sessao.profissional.id,
+                    "nome": sessao.profissional.nome,
+                }
+                if sessao.profissional
+                else None
+            ),
+        }
+        for sessao in sessoes
+    ]
         
 @router.get(
     "/{sessao_id}",
