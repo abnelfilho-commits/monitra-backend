@@ -30,6 +30,9 @@ from app.services.registro_longitudinal_service import (
     RegistroLongitudinalService,
 )
 
+from app.core.deps import get_usuario_atual
+from app.models.sessao_assistencial import SessaoAssistencial
+
 router = APIRouter(
     prefix="/sessoes-assistenciais",
     tags=["Sessões Assistenciais"],
@@ -65,6 +68,73 @@ def tratar_erro_transicao(erro: ValueError) -> None:
         detail=str(erro),
     )
 
+@router.get("/minhas")
+def listar_minhas_sessoes(
+    usuario=Depends(get_usuario_atual),
+    db: Session = Depends(get_db),
+):
+    if usuario.perfil != "PROFISSIONAL":
+        raise HTTPException(
+            status_code=403,
+            detail="A Agenda Assistencial é exclusiva do profissional.",
+        )
+
+    if not usuario.profissional_id:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "O usuário autenticado não está vinculado "
+                "a um profissional."
+            ),
+        )
+
+    sessoes = (
+        db.query(SessaoAssistencial)
+        .filter(
+            SessaoAssistencial.profissional_id
+            == usuario.profissional_id
+        )
+        .order_by(
+            SessaoAssistencial.data_agendada.asc(),
+            SessaoAssistencial.hora_inicio.asc(),
+        )
+        .all()
+    )
+
+    return [
+        {
+            "id": sessao.id,
+            "paciente_id": sessao.paciente_id,
+            "paciente": (
+                sessao.paciente.nome
+                if sessao.paciente
+                else None
+            ),
+            "agenda_cuidado_id":
+                sessao.agenda_cuidado_id,
+            "profissional_id":
+                sessao.profissional_id,
+            "numero_sessao":
+                sessao.numero_sessao,
+            "data_agendada":
+                sessao.data_agendada,
+            "hora_inicio":
+                sessao.hora_inicio,
+            "hora_fim":
+                sessao.hora_fim,
+            "duracao_minutos":
+                sessao.duracao_minutos,
+            "status":
+                sessao.status,
+            "atividade": (
+                sessao.agenda_cuidado.atividade.nome
+                if sessao.agenda_cuidado
+                and sessao.agenda_cuidado.atividade
+                else None
+            ),
+        }
+        for sessao in sessoes
+    ]
 
 @router.post(
     "/{sessao_id}/confirmar",
