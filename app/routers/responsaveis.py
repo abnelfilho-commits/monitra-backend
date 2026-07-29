@@ -1,4 +1,8 @@
+import re
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status
+
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -19,6 +23,22 @@ router = APIRouter(
     prefix="/responsaveis",
     tags=["Responsáveis"],
 )
+
+def normalizar_telefone_whatsapp(
+    telefone: Optional[str],
+) -> Optional[str]:
+    if not telefone:
+        return None
+
+    numero = re.sub(r"\D", "", telefone)
+
+    if not numero:
+        return None
+
+    if numero.startswith("55"):
+        return numero
+
+    return f"55{numero}"
 
 
 @router.post("/", response_model=ResponsavelOut)
@@ -62,9 +82,7 @@ def criar_responsavel(
     responsavel = Responsavel(
         nome=payload.nome.strip(),
         email=email_normalizado,
-        telefone=payload.telefone.strip()
-        if payload.telefone
-        else None,
+        telefone=normalizar_telefone_whatsapp(payload.telefone),
         senha_hash=hash_senha(payload.senha),
         clinica_id=clinica_id,
         ativo=True,

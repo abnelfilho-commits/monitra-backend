@@ -7,6 +7,7 @@ class ProfissionalBase(BaseModel):
     email: Optional[EmailStr] = None
     especialidade: Optional[str] = None
     clinica_id: int
+    ocupacao_id: Optional[int] = None
 
 
 class ProfissionalCreate(ProfissionalBase):
@@ -19,6 +20,7 @@ class ProfissionalUpdate(BaseModel):
     email: Optional[EmailStr] = None
     especialidade: Optional[str] = None
     clinica_id: int
+    ocupacao_id: Optional[int] = None
     ativo: Optional[bool] = True
     modulo_ids: List[int]
 
@@ -26,7 +28,9 @@ class ProfissionalUpdate(BaseModel):
 class ProfissionalOut(ProfissionalBase):
     id: int
     ativo: bool
+
     clinica_nome: Optional[str] = None
+    ocupacao_nome: Optional[str] = None
 
     modulo_ids: List[int] = []
 

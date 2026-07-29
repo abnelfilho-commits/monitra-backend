@@ -4,12 +4,15 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 
 from app.models.agenda_cuidado import AgendaCuidado
-from app.models.pts import PTSObjetivo
+from app.models.pts import PTS, PTSObjetivo
 
 from app.models.atividade_terapeutica import (
     AtividadeTerapeutica,
     OcupacaoProfissional,
 )
+
+from app.models.paciente import Paciente
+from app.models.profissional import Profissional
 
 from app.schemas.agenda_cuidado import (
     AgendaCuidadoCreate,
@@ -67,6 +70,16 @@ def montar_response_agenda(item: AgendaCuidado):
         "observacoes":
             item.observacoes,
 
+        "profissional_id":
+            item.profissional_id,
+
+        "profissional_nome":
+            item.profissional.nome
+            if item.profissional else None,
+
+        "quantidade_sessoes":
+            item.quantidade_sessoes,
+
         "created_at":
             item.created_at,
     }
@@ -110,6 +123,74 @@ def criar_agenda_cuidado(
             detail="Objetivo não encontrado."
         )
 
+    # 1. VALIDAR SE O OBJETIVO PERTENCE AO PTS
+    if objetivo.pts_id != payload.pts_id:
+        raise HTTPException(
+            status_code=400,
+            detail="O objetivo informado não pertence ao PTS."
+        )
+
+    # 2. BUSCAR O PTS
+    pts = (
+        db.query(PTS)
+        .filter(PTS.id == payload.pts_id)
+        .first()
+    )
+
+    if not pts:
+        raise HTTPException(
+            status_code=404,
+            detail="PTS não encontrado."
+        )
+
+    # 3. BUSCAR O PACIENTE DO PTS
+    paciente = (
+        db.query(Paciente)
+        .filter(Paciente.id == pts.paciente_id)
+        .first()
+    )
+
+    if not paciente:
+        raise HTTPException(
+            status_code=404,
+            detail="Paciente do PTS não encontrado."
+        )
+
+    # 4. VALIDAR O PROFISSIONAL RESPONSÁVEL
+    if payload.profissional_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Selecione o profissional responsável pelo planejamento."
+        )
+
+    profissional = (
+        db.query(Profissional)
+        .filter(
+            Profissional.id == payload.profissional_id,
+            Profissional.ativo == True,
+        )
+        .first()
+    )
+
+    if not profissional:
+        raise HTTPException(
+            status_code=400,
+            detail="Profissional responsável inválido ou inativo."
+        )
+
+    if profissional.clinica_id != paciente.clinica_id:
+        raise HTTPException(
+            status_code=400,
+            detail="O profissional responsável não pertence à mesma clínica do paciente."
+        )
+
+    if profissional.ocupacao_id != payload.ocupacao_id:
+        raise HTTPException(
+            status_code=400,
+            detail="O profissional responsável não possui a ocupação selecionada."
+        )
+
+    # 5. SOMENTE DEPOIS DAS VALIDAÇÕES, CRIA A AGENDA
     agenda = AgendaCuidado(
         pts_id=payload.pts_id,
         objetivo_id=payload.objetivo_id,
@@ -117,7 +198,10 @@ def criar_agenda_cuidado(
         atividade_id=payload.atividade_id,
         ocupacao_id=payload.ocupacao_id,
 
+        profissional_id=payload.profissional_id,
+
         frequencia_semanal=payload.frequencia_semanal,
+        quantidade_sessoes=payload.quantidade_sessoes,
         duracao_minutos=payload.duracao_minutos,
 
         data_inicio=payload.data_inicio,

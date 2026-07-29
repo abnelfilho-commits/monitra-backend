@@ -11,13 +11,13 @@ from app.models.profissional import Profissional
 from app.models.profissional_modulo import ProfissionalModulo
 from app.models.modular import ModuloClinico
 from app.models.usuario import Usuario
+from app.models.atividade_terapeutica import OcupacaoProfissional
 
 from app.schemas.profissional import (
     ProfissionalCreate,
     ProfissionalOut,
     ProfissionalUpdate,
 )
-
 
 router = APIRouter(
     prefix="/profissionais",
@@ -54,6 +54,10 @@ def serializar_profissional(p: Profissional, db: Session):
         "especialidade": p.especialidade,
         "clinica_id": p.clinica_id,
         "clinica_nome": p.clinica.nome if p.clinica else None,
+
+        "ocupacao_id": p.ocupacao_id,
+        "ocupacao_nome": p.ocupacao.nome if p.ocupacao else None,
+        
         "ativo": p.ativo,
         "modulo_ids": modulo_ids,
         "usuario_id": usuario_vinculado.id if usuario_vinculado else None,
@@ -106,6 +110,60 @@ def listar_profissionais_por_clinica(
 
     return [serializar_profissional(p, db) for p in profissionais]
 
+@router.get("/elegiveis/")
+def listar_profissionais_elegiveis(
+    ocupacao_id: int,
+    clinica_id: int,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_atual),
+):
+    if not is_admin_global(usuario):
+        if usuario.clinica_id != clinica_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Acesso negado",
+            )
+
+    ocupacao = (
+        db.query(OcupacaoProfissional)
+        .filter(
+            OcupacaoProfissional.id == ocupacao_id,
+            OcupacaoProfissional.ativo == True,
+        )
+        .first()
+    )
+
+    if not ocupacao:
+        raise HTTPException(
+            status_code=404,
+            detail="Ocupação profissional não encontrada ou inativa.",
+        )
+
+    profissionais = (
+        db.query(Profissional)
+        .filter(
+            Profissional.clinica_id == clinica_id,
+            Profissional.ocupacao_id == ocupacao_id,
+            Profissional.ativo == True,
+        )
+        .order_by(Profissional.nome.asc())
+        .all()
+    )
+
+    return [
+        {
+            "id": profissional.id,
+            "nome": profissional.nome,
+            "ocupacao_id": profissional.ocupacao_id,
+            "ocupacao_nome": (
+                profissional.ocupacao.nome
+                if profissional.ocupacao
+                else None
+            ),
+            "especialidade": profissional.especialidade,
+        }
+        for profissional in profissionais
+    ]
 
 @router.get("/{profissional_id}", response_model=ProfissionalOut)
 def obter_profissional(
@@ -218,6 +276,22 @@ def criar_profissional(
             detail="Um ou mais módulos informados são inválidos ou estão inativos.",
         )
 
+    if payload.ocupacao_id is not None:
+        ocupacao = (
+            db.query(OcupacaoProfissional)
+            .filter(
+                OcupacaoProfissional.id == payload.ocupacao_id,
+                OcupacaoProfissional.ativo == True,
+            )
+            .first()
+        )
+
+        if not ocupacao:
+            raise HTTPException(
+                status_code=400,
+                detail="Ocupação profissional inválida ou inativa.",
+            )
+
     try:
         novo_profissional = Profissional(
             nome=payload.nome.strip(),
@@ -226,6 +300,7 @@ def criar_profissional(
             if payload.especialidade
             else None,
             clinica_id=clinica_id,
+            ocupacao_id=payload.ocupacao_id,
             ativo=True,
         )
 
@@ -372,6 +447,22 @@ def atualizar_profissional(
         .first()
     )
 
+    if payload.ocupacao_id is not None:
+        ocupacao = (
+            db.query(OcupacaoProfissional)
+            .filter(
+                OcupacaoProfissional.id == payload.ocupacao_id,
+                OcupacaoProfissional.ativo == True,
+            )
+            .first()
+        )
+
+        if not ocupacao:
+            raise HTTPException(
+                status_code=400,
+                detail="Ocupação profissional inválida ou inativa.",
+            )
+
     try:
         profissional.nome = payload.nome.strip()
         profissional.email = email_normalizado
@@ -381,6 +472,8 @@ def atualizar_profissional(
             else None
         )
         profissional.clinica_id = clinica_id
+        profissional.ocupacao_id = payload.ocupacao_id
+
         profissional.ativo = (
             payload.ativo
             if payload.ativo is not None

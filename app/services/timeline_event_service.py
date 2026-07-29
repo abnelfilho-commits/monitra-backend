@@ -128,7 +128,7 @@ class TimelineEventService:
 
             data_evento = datetime.combine(
                 diagnostico.data_diagnostico,
-                time.max,
+                time.min,
             )
 
             eventos.append(

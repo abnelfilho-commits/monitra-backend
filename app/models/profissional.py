@@ -15,8 +15,20 @@ class Profissional(Base):
 
     clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False)
 
+    ocupacao_id = Column(
+        Integer,
+        ForeignKey("ocupacoes_profissionais.id"),
+        nullable=True,
+    )
+
     ativo = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     clinica = relationship("Clinica", back_populates="profissionais")
+
+    ocupacao = relationship(
+        "OcupacaoProfissional",
+        foreign_keys=[ocupacao_id],
+    )
+
     pacientes = relationship("Paciente", back_populates="profissional")
