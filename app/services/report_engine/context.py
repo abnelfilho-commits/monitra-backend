@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
-
+from .models import ReportSection
 
 @dataclass
 class ReportContext:
@@ -43,7 +43,7 @@ class ReportContext:
     evidences: List[Any] = field(default_factory=list)
     narratives: List[Any] = field(default_factory=list)
     recommendations: List[Any] = field(default_factory=list)
-    sections: List[Any] = field(default_factory=list)
+    sections: List[ReportSection] = field(default_factory=list)
     canonical_report: Optional[Any] = None
     db: Optional[Session] = None
     
@@ -68,3 +68,23 @@ class ReportContext:
             raise ValueError("engine_code é obrigatório.")
 
         self.official_readings[engine_code] = reading
+        
+    def add_section(
+        self,
+        section: "ReportSection",
+    ) -> None:
+        """
+        Adiciona uma seção produzida pelos
+        Knowledge Engines.
+        """
+
+        self.sections.append(section)
+
+
+    def get_sections(self) -> List["ReportSection"]:
+        """
+        Retorna as seções produzidas durante
+        a execução do relatório.
+        """
+
+        return list(self.sections)

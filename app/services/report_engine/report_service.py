@@ -13,6 +13,9 @@ from .registry import (
     report_registry,
 )
 
+from .knowledge import ExecutiveSummaryEngine
+from .knowledge import knowledge_registry
+from .knowledge.composer import KnowledgeComposer
 
 class ReportService:
     """
@@ -148,7 +151,30 @@ class ReportService:
             )
 
         context.canonical_report = self.composer.compose(context)
-        
+
+        for engine_class in knowledge_registry.all():
+
+            engine = engine_class()
+
+            result = engine.execute(context)
+
+            for model in result.knowledge:
+                section = KnowledgeComposer.compose(model)
+
+                context.add_section(section)
+
+            context.audit.setdefault(
+                "knowledge_engines",
+                [],
+            ).append(
+                {
+                    "code": result.engine_code,
+                    "version": result.engine_version,
+                    "status": result.status,
+                    "executed_at": result.executed_at.isoformat(),
+                }
+            )
+                
         return context
 
     def generate(
