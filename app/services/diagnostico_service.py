@@ -1,4 +1,4 @@
-from typing import List
+from typing import Any, Dict, List
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -199,3 +199,86 @@ class DiagnosticoService:
         db.refresh(diagnostico)
 
         return diagnostico
+    
+    @staticmethod
+    def serializar_para_relatorio(
+        diagnostico: Diagnostico,
+    ) -> Dict[str, Any]:
+        """
+        Serializa o diagnóstico para consumo pelo
+        Framework Institucional de Conhecimento.
+        """
+
+        return {
+            "id": diagnostico.id,
+            "paciente_id": diagnostico.paciente_id,
+            "tipo": diagnostico.tipo,
+            "status": diagnostico.status,
+            "cid": diagnostico.cid,
+            "descricao_clinica": diagnostico.descricao_clinica,
+            "data_diagnostico": (
+                diagnostico.data_diagnostico.isoformat()
+                if diagnostico.data_diagnostico
+                else None
+            ),
+            "medico_nome": diagnostico.medico_nome,
+            "medico_especialidade": diagnostico.medico_especialidade,
+            "medico_crm": diagnostico.medico_crm,
+            "observacoes": diagnostico.observacoes,
+            "created_at": (
+                diagnostico.created_at.isoformat()
+                if diagnostico.created_at
+                else None
+            ),
+            "updated_at": (
+                diagnostico.updated_at.isoformat()
+                if diagnostico.updated_at
+                else None
+            ),
+        }
+
+    @classmethod
+    def build_report_context(
+        cls,
+        db: Session,
+        patient_id: int,
+    ) -> Dict[str, Any]:
+        """
+        Monta o contexto diagnóstico completo do paciente.
+        """
+
+        diagnosticos = cls.listar_por_paciente(
+            db=db,
+            paciente_id=patient_id,
+        )
+
+        historico = [
+            cls.serializar_para_relatorio(diagnostico)
+            for diagnostico in diagnosticos
+        ]
+
+        ativos = [
+            diagnostico
+            for diagnostico in historico
+            if diagnostico["status"] == "ATIVO"
+        ]
+
+        revisados = [
+            diagnostico
+            for diagnostico in historico
+            if diagnostico["status"] == "REVISADO"
+        ]
+
+        cancelados = [
+            diagnostico
+            for diagnostico in historico
+            if diagnostico["status"] == "CANCELADO"
+        ]
+
+        return {
+            "ativos": ativos,
+            "revisados": revisados,
+            "cancelados": cancelados,
+            "historico": historico,
+            "total_diagnosticos": len(historico),
+        }

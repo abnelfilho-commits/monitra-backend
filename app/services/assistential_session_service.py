@@ -551,3 +551,137 @@ class AssistentialSessionService:
 
             "resumo": resumo,
         }
+        
+    @staticmethod
+    def _serialize_session(
+        session: SessaoAssistencial,
+    ) -> Dict[str, Any]:
+        """
+        Serializa uma Sessão Assistencial para consumo
+        pelo Framework Institucional de Conhecimento.
+        """
+
+        return {
+            "id": session.id,
+            "agenda_cuidado_id": session.agenda_cuidado_id,
+            "paciente_id": session.paciente_id,
+            "profissional_id": session.profissional_id,
+            "numero_sessao": session.numero_sessao,
+            "data_agendada": (
+                session.data_agendada.isoformat()
+                if session.data_agendada
+                else None
+            ),
+            "hora_inicio": (
+                session.hora_inicio.isoformat()
+                if session.hora_inicio
+                else None
+            ),
+            "hora_fim": (
+                session.hora_fim.isoformat()
+                if session.hora_fim
+                else None
+            ),
+            "duracao_minutos": session.duracao_minutos,
+            "status": session.status,
+            "data_realizacao": (
+                session.data_realizacao.isoformat()
+                if session.data_realizacao
+                else None
+            ),
+            "hora_inicio_real": (
+                session.hora_inicio_real.isoformat()
+                if session.hora_inicio_real
+                else None
+            ),
+            "hora_fim_real": (
+                session.hora_fim_real.isoformat()
+                if session.hora_fim_real
+                else None
+            ),
+            "observacoes": session.observacoes,
+            "motivo_falta": session.motivo_falta,
+            "motivo_cancelamento": session.motivo_cancelamento,
+            "motivo_reagendamento": session.motivo_reagendamento,
+            "registro_longitudinal_id": (
+                session.registro_longitudinal_id
+            ),
+            "created_at": (
+                session.created_at.isoformat()
+                if session.created_at
+                else None
+            ),
+        }
+
+    @classmethod
+    def build_report_context(
+        cls,
+        db: Session,
+        patient_id: int,
+    ) -> Dict[str, Any]:
+        """
+        Monta o contexto assistencial das sessões do paciente.
+        """
+
+        sessions = (
+            db.query(SessaoAssistencial)
+            .filter(
+                SessaoAssistencial.paciente_id == patient_id,
+            )
+            .order_by(
+                SessaoAssistencial.data_agendada.desc(),
+                SessaoAssistencial.numero_sessao.desc(),
+            )
+            .all()
+        )
+
+        history = [
+            cls._serialize_session(session)
+            for session in sessions
+        ]
+
+        completed = [
+            session
+            for session in history
+            if session["status"] == "REALIZADA"
+        ]
+
+        scheduled = [
+            session
+            for session in history
+            if session["status"] == "AGENDADA"
+        ]
+
+        cancelled = [
+            session
+            for session in history
+            if session["status"] == "CANCELADA"
+        ]
+
+        missed = [
+            session
+            for session in history
+            if session["status"] == "FALTA"
+        ]
+
+        last_session = completed[0] if completed else None
+
+        next_session = next(
+            (
+                session
+                for session in reversed(history)
+                if session["status"] == "AGENDADA"
+            ),
+            None,
+        )
+
+        return {
+            "total_sessoes": len(history),
+            "realizadas": len(completed),
+            "agendadas": len(scheduled),
+            "canceladas": len(cancelled),
+            "faltas": len(missed),
+            "ultima_sessao": last_session,
+            "proxima_sessao": next_session,
+            "historico": history,
+        }
