@@ -65,3 +65,25 @@ class RecommendationModel:
     """
 
     recommendation: str
+    
+@dataclass
+class CurrentStatusModel:
+
+    clinical_status: str
+
+    current_status: str
+    
+@dataclass
+class LongitudinalNarrativeModel:
+
+    narrative: str
+    
+@dataclass
+class ClinicalInterpretationModel:
+
+    interpretation: str 
+    
+@dataclass
+class RecommendationModel:
+
+    recommendation: str

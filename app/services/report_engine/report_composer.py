@@ -67,6 +67,9 @@ class ReportComposer:
                 continue
 
             report.add_section(section)
+            
+        for section in context.sections:
+            report.add_section(section)
 
         return report
 

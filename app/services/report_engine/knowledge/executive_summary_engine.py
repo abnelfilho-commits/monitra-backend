@@ -7,6 +7,7 @@ from ..models import ReportSection
 from .base_knowledge_engine import BaseKnowledgeEngine
 from .knowledge_result import KnowledgeResult
 from .models import ExecutiveSummaryModel
+from .narrative_builder import NarrativeBuilder
 
 class ExecutiveSummaryEngine(BaseKnowledgeEngine):
     """
@@ -26,20 +27,88 @@ class ExecutiveSummaryEngine(BaseKnowledgeEngine):
             .get("PATIENT_PROVIDER", {})
         )
 
+        diagnosis = context.collected_data.get(
+            "DIAGNOSIS_PROVIDER",
+            {},
+        )
+
+        pts = context.collected_data.get(
+            "PTS_PROVIDER",
+            {},
+        )
+
+        sessions = context.collected_data.get(
+            "SESSION_PROVIDER",
+            {},
+        )
+
+        timeline = context.collected_data.get(
+            "TIMELINE_PROVIDER",
+            {},
+        )
+
+        reading = context.official_readings.get(
+            context.module.upper(),
+            {},
+        )
+
         patient_name = (
-            patient.get("name")
+            patient.get("nome")
             or "Paciente"
         )
 
-        text = (
-            f"O paciente {patient_name} possui informações "
-            "clínicas suficientes para geração do relatório "
-            "longitudinal institucional."
+        builder = NarrativeBuilder()
+
+        builder.add(
+            f"Durante o período analisado, {patient_name} "
+            "manteve acompanhamento longitudinal contínuo."
+        )
+
+        builder.add_if(
+            pts.get("pts_ativo") is not None,
+            "O Plano Terapêutico Singular permaneceu ativo."
+        )
+
+        builder.add_if(
+            len(diagnosis.get("ativos", [])) > 0,
+            "Há diagnóstico clínico registrado."
+        )
+
+        builder.paragraph()
+
+        builder.add_if_value(
+            len(timeline) if timeline else None,
+            lambda total: (
+                f"Foram analisados {total} eventos longitudinais."
+            ),
+        )
+
+        builder.add_if_value(
+            sessions.get("total_sessoes"),
+            lambda total: (
+                f"A jornada contempla {total} sessões assistenciais."
+            ),
+        )
+
+        builder.paragraph()
+
+        builder.add_if_value(
+            reading.get("risco_atual"),
+            lambda risk: (
+                f"A leitura clínica oficial indica risco {risk.replace('_', ' ').lower()}."
+            ),
+        )
+
+        builder.add_if_value(
+            reading.get("tendencia"),
+            lambda trend: (
+                f"A tendência clínica observada é {trend.lower()}."
+            ),
         )
 
         model = ExecutiveSummaryModel(
             clinical_status="AVAILABLE",
-            summary=text,
+            summary=builder.build(),
         )
 
         return KnowledgeResult(

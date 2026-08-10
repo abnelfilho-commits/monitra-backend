@@ -13,7 +13,6 @@ from .registry import (
     report_registry,
 )
 
-from .knowledge import ExecutiveSummaryEngine
 from .knowledge import knowledge_registry
 from .knowledge.composer import KnowledgeComposer
 
@@ -150,8 +149,6 @@ class ReportService:
                 }
             )
 
-        context.canonical_report = self.composer.compose(context)
-
         for engine_class in knowledge_registry.all():
 
             engine = engine_class()
@@ -174,7 +171,9 @@ class ReportService:
                     "executed_at": result.executed_at.isoformat(),
                 }
             )
-                
+        
+        context.canonical_report = self.composer.compose(context)
+        
         return context
 
     def generate(
