@@ -1,6 +1,7 @@
 """
 Serviço principal de execução do Report Engine.
 """
+from .renderers import renderer_registry
 from sqlalchemy.orm import Session
 from .report_composer import ReportComposer
 from datetime import date
@@ -175,6 +176,35 @@ class ReportService:
         context.canonical_report = self.composer.compose(context)
         
         return context
+
+    def render(
+        self,
+        context: ReportContext,
+        output_path: str,
+    ) -> str:
+        """
+        Renderiza o CanonicalReport no formato solicitado.
+        """
+
+        if context.canonical_report is None:
+            raise ValueError(
+                "CanonicalReport não disponível para renderização."
+            )
+
+        renderer_class = renderer_registry.get(
+            context.output_format
+        )
+
+        renderer = renderer_class()
+
+        artifact_path = renderer.render(
+            report=context.canonical_report,
+            output_path=output_path,
+        )
+
+        context.rendered_artifact = artifact_path
+
+        return artifact_path
 
     def generate(
         self,

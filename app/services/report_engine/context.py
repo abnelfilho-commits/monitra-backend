@@ -45,6 +45,7 @@ class ReportContext:
     recommendations: List[Any] = field(default_factory=list)
     sections: List[ReportSection] = field(default_factory=list)
     canonical_report: Optional[Any] = None
+    rendered_artifact: Optional[str] = None
     db: Optional[Session] = None
     
     warnings: List[str] = field(default_factory=list)
