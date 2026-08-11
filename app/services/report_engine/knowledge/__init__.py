@@ -6,6 +6,7 @@ from .registry import KnowledgeRegistry, knowledge_registry
 from .narrative_builder import NarrativeBuilder
 from .clinical_interpretation_engine import ClinicalInterpretationEngine
 from .recommendation_engine import RecommendationEngine
+from .journey_indicators_engine import JourneyIndicatorsEngine
 
 __all__ = [
     "BaseKnowledgeEngine",
@@ -16,5 +17,6 @@ __all__ = [
     "NarrativeBuilder",
     "CurrentStatusEngine",
     "ClinicalInterpretationEngine",
-    "RecommendationEngine",   
+    "RecommendationEngine",
+    "JourneyIndicatorsEngine",   
 ]

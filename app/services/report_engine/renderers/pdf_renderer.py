@@ -1,6 +1,10 @@
 """
 Renderer PDF do Report Engine.
 """
+from reportlab.lib.enums import TA_LEFT, TA_CENTER
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib import colors
+from pathlib import Path
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
@@ -9,10 +13,20 @@ from reportlab.platypus import (
     Paragraph,
     SimpleDocTemplate,
     Spacer,
+    KeepTogether,
 )
 
 from ..models import CanonicalReport
 from .base_renderer import BaseRenderer
+
+from reportlab.platypus import (
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    KeepTogether,
+    Table,
+    TableStyle,
+)
 
 
 class PDFRenderer(BaseRenderer):
@@ -22,20 +36,200 @@ class PDFRenderer(BaseRenderer):
 
     code = "PDF"
 
+    @staticmethod
+    def _build_styles():
+
+        base_styles = getSampleStyleSheet()
+
+        return {
+            "title": ParagraphStyle(
+                name="IntegraCareTitle",
+                parent=base_styles["Title"],
+                fontName="Helvetica-Bold",
+                fontSize=20,
+                leading=24,
+                alignment=TA_LEFT,
+                spaceAfter=12,
+                textColor=colors.HexColor("#0F172A"),
+            ),
+
+            "metadata": ParagraphStyle(
+                name="IntegraCareMetadata",
+                parent=base_styles["BodyText"],
+                fontName="Helvetica",
+                fontSize=9,
+                leading=13,
+                textColor=colors.HexColor("#64748B"),
+            ),
+
+            "section": ParagraphStyle(
+                name="IntegraCareSection",
+                parent=base_styles["Heading2"],
+                fontName="Helvetica-Bold",
+                fontSize=12,
+                leading=15,
+                spaceBefore=10,
+                spaceAfter=7,
+                textColor=colors.HexColor("#1D4ED8"),
+            ),
+
+            "body": ParagraphStyle(
+                name="IntegraCareBody",
+                parent=base_styles["BodyText"],
+                fontName="Helvetica",
+                fontSize=10,
+                leading=15,
+                spaceAfter=6,
+                textColor=colors.HexColor("#0F172A"),
+            ),
+            
+            "status_value": ParagraphStyle(
+                name="IntegraCareStatusValue",
+                parent=base_styles["BodyText"],
+                fontName="Helvetica-Bold",
+                fontSize=11,
+                leading=14,
+                textColor=colors.HexColor("#0F172A"),
+            ),
+            
+            "indicator_value": ParagraphStyle(
+                name="IntegraCareIndicatorValue",
+                parent=base_styles["BodyText"],
+                fontName="Helvetica-Bold",
+                fontSize=11,
+                leading=14,
+                textColor=colors.HexColor("#0F172A"),
+                alignment=TA_CENTER,
+            ),
+
+            "indicator_label": ParagraphStyle(
+                name="IntegraCareIndicatorLabel",
+                parent=base_styles["BodyText"],
+                fontName="Helvetica",
+                fontSize=8,
+                leading=10,
+                textColor=colors.HexColor("#64748B"),
+                alignment=TA_CENTER,
+            ),
+        }
+
+    ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+
+    LOGO_PATH = ASSETS_DIR / "logo-integracare.png"
+
+    @staticmethod
+    def _draw_page(canvas, document):
+        """
+        Desenha cabeçalho e rodapé em todas as páginas.
+        """
+
+        canvas.saveState()
+
+        width, height = A4
+
+        # ======================================================
+        # CABEÇALHO
+        # ======================================================
+
+        # Integra Care
+        if PDFRenderer.LOGO_PATH.exists():
+            canvas.drawImage(
+                str(PDFRenderer.LOGO_PATH),
+                2 * cm,
+                height - 2.15 * cm,
+                width=4.5 * cm,
+                height=2.25 * cm,
+                preserveAspectRatio=True,
+                mask="auto",
+                anchor="w",
+            )
+
+        # Nome do relatório
+        canvas.setFillColor(
+            colors.HexColor("#64748B")
+        )
+
+        canvas.setFont(
+            "Helvetica",
+            8,
+        )
+
+        canvas.drawRightString(
+            width - 2 * cm,
+            height - 1.55 * cm,
+            "Relatório Longitudinal Inteligente",
+        )
+
+        # Linha do cabeçalho
+        canvas.setStrokeColor(
+            colors.HexColor("#2563EB")
+        )
+
+        canvas.setLineWidth(0.8)
+
+        canvas.line(
+            2 * cm,
+            height - 2.05 * cm,
+            width - 2 * cm,
+            height - 2.05 * cm,
+        )
+
+        # ======================================================
+        # RODAPÉ
+        # ======================================================
+
+        # Linha do rodapé
+        canvas.setStrokeColor(
+            colors.HexColor("#E2E8F0")
+        )
+
+        canvas.setLineWidth(0.5)
+
+        canvas.line(
+            2 * cm,
+            1.35 * cm,
+            width - 2 * cm,
+            1.35 * cm,
+        )
+
+        # Textos do rodapé
+        canvas.setFillColor(
+            colors.HexColor("#64748B")
+        )
+
+        canvas.setFont(
+            "Helvetica",
+            7,
+        )
+
+        canvas.drawString(
+            2 * cm,
+            0.9 * cm,
+            "Integra Care Health Platform",
+        )
+
+        canvas.drawRightString(
+            width - 2 * cm,
+            0.9 * cm,
+            f"Página {document.page}",
+        )
+
+        canvas.restoreState()
+
     def render(
         self,
         report: CanonicalReport,
         output_path: str,
     ) -> str:
 
-        styles = getSampleStyleSheet()
+        styles = self._build_styles()
 
         document = SimpleDocTemplate(
             output_path,
             pagesize=A4,
             rightMargin=2 * cm,
             leftMargin=2 * cm,
-            topMargin=2 * cm,
+            topMargin=2.8 * cm,
             bottomMargin=2 * cm,
         )
 
@@ -44,7 +238,7 @@ class PDFRenderer(BaseRenderer):
         story.append(
             Paragraph(
                 report.report_name,
-                styles["Title"],
+                styles["title"],
             )
         )
 
@@ -61,7 +255,7 @@ class PDFRenderer(BaseRenderer):
         story.append(
             Paragraph(
                 f"<b>Paciente:</b> {subject_name}",
-                styles["BodyText"],
+                styles["metadata"],
             )
         )
 
@@ -71,7 +265,7 @@ class PDFRenderer(BaseRenderer):
                     f"<b>Período:</b> "
                     f"{report.period_start} a {report.period_end}"
                 ),
-                styles["BodyText"],
+                styles["metadata"],
             )
         )
 
@@ -81,10 +275,12 @@ class PDFRenderer(BaseRenderer):
 
         for section in report.sections:
 
-            story.append(
+            section_story = []
+
+            section_story.append(
                 Paragraph(
                     section.title,
-                    styles["Heading2"],
+                    styles["section"],
                 )
             )
 
@@ -93,6 +289,313 @@ class PDFRenderer(BaseRenderer):
             )
 
             for component in section.components:
+
+                if component.type == "STATUS_CARD":
+
+                    data = component.data or {}
+
+                    risk = (
+                        str(data.get("risk") or "sem_dados")
+                        .replace("_", " ")
+                        .title()
+                    )
+
+                    trend_raw = str(
+                        data.get("trend") or "sem_dados"
+                    ).lower()
+
+                    trend = {
+                        "estavel": "Estável",
+                        "melhora": "Melhora",
+                        "piora": "Piora",
+                    }.get(
+                        trend_raw,
+                        trend_raw.replace("_", " ").title(),
+                    )
+
+                    clinical_moment_raw = str(
+                        data.get("clinical_moment") or "sem_dados"
+                    ).lower()
+
+                    clinical_moment = {
+                        "estavel": "Estável",
+                        "melhora": "Melhora",
+                        "piora": "Piora",
+                    }.get(
+                        clinical_moment_raw,
+                        clinical_moment_raw.replace("_", " ").title(),
+                    )
+
+                    protocol = (
+                        data.get("protocol")
+                        or "Não informado"
+                    )
+
+                    card_data = [
+                        [
+                            Paragraph(
+                                "<b>Risco atual</b>",
+                                styles["metadata"],
+                            ),
+                            Paragraph(
+                                "<b>Tendência</b>",
+                                styles["metadata"],
+                            ),
+                            Paragraph(
+                                "<b>Momento clínico</b>",
+                                styles["metadata"],
+                            ),
+                        ],
+                        [
+                            Paragraph(
+                                risk,
+                                styles["status_value"],
+                            ),
+                            Paragraph(
+                                trend,
+                                styles["status_value"],
+                            ),
+                            Paragraph(
+                                clinical_moment,
+                                styles["status_value"],
+                            ),
+                        ],
+                        [
+                            Paragraph(
+                                "<b>Protocolo assistencial</b>",
+                                styles["metadata"],
+                            ),
+                            "",
+                            "",
+                        ],
+                        [
+                            Paragraph(
+                                str(protocol),
+                                styles["body"],
+                            ),
+                            "",
+                            "",
+                        ],
+                    ]
+
+                    card = Table(
+                        card_data,
+                        colWidths=[
+                            5.2 * cm,
+                            5.2 * cm,
+                            5.2 * cm,
+                        ],
+                    )
+
+                    card.setStyle(
+                        TableStyle(
+                            [
+                                (
+                                    "BACKGROUND",
+                                    (0, 0),
+                                    (-1, -1),
+                                    colors.HexColor("#F8FAFC"),
+                                ),
+                                (
+                                    "BOX",
+                                    (0, 0),
+                                    (-1, -1),
+                                    0.7,
+                                    colors.HexColor("#E2E8F0"),
+                                ),
+                                (
+                                    "LINEABOVE",
+                                    (0, 2),
+                                    (-1, 2),
+                                    0.4,
+                                    colors.HexColor("#E2E8F0"),
+                                ),
+                                (
+                                    "SPAN",
+                                    (0, 2),
+                                    (2, 2),
+                                ),
+                                (
+                                    "SPAN",
+                                    (0, 3),
+                                    (2, 3),
+                                ),
+                                (
+                                    "TOPPADDING",
+                                    (0, 0),
+                                    (-1, -1),
+                                    8,
+                                ),
+                                (
+                                    "BOTTOMPADDING",
+                                    (0, 0),
+                                    (-1, -1),
+                                    8,
+                                ),
+                                (
+                                    "LEFTPADDING",
+                                    (0, 0),
+                                    (-1, -1),
+                                    10,
+                                ),
+                                (
+                                    "RIGHTPADDING",
+                                    (0, 0),
+                                    (-1, -1),
+                                    10,
+                                ),
+                                (
+                                    "VALIGN",
+                                    (0, 0),
+                                    (-1, -1),
+                                    "MIDDLE",
+                                ),
+                            ]
+                        )
+                    )
+
+                    section_story.append(card)
+
+                    section_story.append(
+                        Spacer(1, 0.35 * cm)
+                    )
+                    
+                if component.type == "JOURNEY_INDICATORS":
+
+                    data = component.data or {}
+
+                    indicators = [
+                        ("Eventos", data.get("total_events", 0)),
+                        ("Objetivos PTS", data.get("pts_objectives", 0)),
+                        ("Sessões", data.get("planned_sessions", 0)),
+                        ("Realizadas", data.get("completed_sessions", 0)),
+                        ("Agendadas", data.get("scheduled_sessions", 0)),
+                    ]
+
+                    cards = []
+
+                    for label, value in indicators:
+
+                        card = Table(
+                            [
+                                [
+                                    Paragraph(
+                                        str(value),
+                                        styles["indicator_value"],
+                                    )
+                                ],
+                                [
+                                    Paragraph(
+                                        label,
+                                        styles["indicator_label"],
+                                    )
+                                ],
+                            ],
+                            colWidths=[2.75 * cm],
+                        )
+
+                        card.setStyle(
+                            TableStyle(
+                                [
+                                    (
+                                        "BACKGROUND",
+                                        (0, 0),
+                                        (-1, -1),
+                                        colors.HexColor("#F8FAFC"),
+                                    ),
+                                    (
+                                        "BOX",
+                                        (0, 0),
+                                        (-1, -1),
+                                        0.7,
+                                        colors.HexColor("#E2E8F0"),
+                                    ),
+                                    (
+                                        "TOPPADDING",
+                                        (0, 0),
+                                        (-1, -1),
+                                        8,
+                                    ),
+                                    (
+                                        "BOTTOMPADDING",
+                                        (0, 0),
+                                        (-1, -1),
+                                        8,
+                                    ),
+                                    (
+                                        "LEFTPADDING",
+                                        (0, 0),
+                                        (-1, -1),
+                                        0,
+                                    ),
+                                    (
+                                        "RIGHTPADDING",
+                                        (0, 0),
+                                        (-1, -1),
+                                        0,
+                                    ),
+                                    (
+                                        "ALIGN",
+                                        (0, 0),
+                                        (-1, -1),
+                                        "CENTER",
+                                    ),
+                                    (
+                                        "VALIGN",
+                                        (0, 0),
+                                        (-1, -1),
+                                        "MIDDLE",
+                                    ),
+                                ]
+                            )
+                        )
+
+                        cards.append(card)
+
+                    indicators_table = Table(
+                        [cards],
+                        colWidths=[
+                            3.05 * cm,
+                            3.05 * cm,
+                            3.05 * cm,
+                            3.05 * cm,
+                            3.05 * cm,
+                        ],
+                        hAlign="LEFT",
+                    )
+
+                    indicators_table.setStyle(
+                        TableStyle(
+                            [
+                                (
+                                    "VALIGN",
+                                    (0, 0),
+                                    (-1, -1),
+                                    "TOP",
+                                ),
+                                (
+                                    "LEFTPADDING",
+                                    (0, 0),
+                                    (-1, -1),
+                                    0,
+                                ),
+                                (
+                                    "RIGHTPADDING",
+                                    (0, 0),
+                                    (-1, -1),
+                                    6,
+                                ),
+                            ]
+                        )
+                    )
+
+                    section_story.append(
+                        indicators_table
+                    )
+
+                    section_story.append(
+                        Spacer(1, 0.35 * cm)
+                    )
 
                 if component.type == "TEXT":
                     content = str(
@@ -106,21 +609,28 @@ class PDFRenderer(BaseRenderer):
                         if not paragraph.strip():
                             continue
 
-                        story.append(
+                        section_story.append(
                             Paragraph(
                                 paragraph,
-                                styles["BodyText"],
+                                styles["body"],
                             )
                         )
 
-                        story.append(
+                        section_story.append(
                             Spacer(1, 0.25 * cm)
                         )
-
+                        
+            story.append(
+                KeepTogether(section_story)
+            )
             story.append(
                 Spacer(1, 0.5 * cm)
             )
 
-        document.build(story)
+        document.build(
+            story,
+            onFirstPage=self._draw_page,
+            onLaterPages=self._draw_page,
+        )
 
         return output_path

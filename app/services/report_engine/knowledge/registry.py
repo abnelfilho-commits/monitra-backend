@@ -7,6 +7,7 @@ from .current_status_engine import CurrentStatusEngine
 from .clinical_interpretation_engine import ClinicalInterpretationEngine
 from .recommendation_engine import RecommendationEngine
 from .longitudinal_narrative_engine import LongitudinalNarrativeEngine
+from .journey_indicators_engine import JourneyIndicatorsEngine
 
 class KnowledgeRegistry:
     """
@@ -35,6 +36,10 @@ knowledge_registry.register(
 
 knowledge_registry.register(
     LongitudinalNarrativeEngine
+)
+
+knowledge_registry.register(
+    JourneyIndicatorsEngine
 )
 
 knowledge_registry.register(

@@ -46,12 +46,33 @@ class CurrentStatusEngine(BaseKnowledgeEngine):
             ),
         )
 
+        clinical_moment = reading.get(
+            "momento_clinico",
+            {},
+        )
+
         model = CurrentStatusModel(
-            clinical_status=(
-                reading.get("momento_clinico", {})
-                .get("status", "SEM_DADOS")
+            clinical_status=clinical_moment.get(
+                "status",
+                "SEM_DADOS",
             ),
             current_status=builder.build(),
+
+            risk=reading.get(
+                "risco_atual",
+            ),
+
+            trend=reading.get(
+                "tendencia",
+            ),
+
+            clinical_moment=clinical_moment.get(
+                "status",
+            ),
+
+            protocol=reading.get(
+                "protocolo",
+            ),
         )
 
         return KnowledgeResult(

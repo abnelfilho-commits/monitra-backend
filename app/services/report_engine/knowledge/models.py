@@ -13,46 +13,43 @@ class ExecutiveSummaryModel:
     """
 
     clinical_status: str
-
     risk_level: Optional[str] = None
-
     trend: Optional[str] = None
-
     adherence: Optional[str] = None
-
     summary: str = ""
 
 
 @dataclass
 class CurrentStatusModel:
     """
-    Estado clínico atual do paciente.
+    Representa a situação clínica atual do paciente.
+
+    Mantém tanto os dados estruturados da leitura oficial
+    quanto sua representação narrativa.
     """
 
-    risk: str
+    clinical_status: str
+    current_status: str
 
+    risk: Optional[str] = None
     trend: Optional[str] = None
-
     clinical_moment: Optional[str] = None
-
-    official_reading: str = ""
+    protocol: Optional[str] = None
 
 
 @dataclass
 class LongitudinalNarrativeModel:
     """
-    Narrativa longitudinal institucional.
+    Representa a narrativa longitudinal institucional.
     """
 
     narrative: str
-
-    total_events: int
 
 
 @dataclass
 class ClinicalInterpretationModel:
     """
-    Interpretação clínica institucional.
+    Representa a interpretação clínica institucional.
     """
 
     interpretation: str
@@ -61,29 +58,20 @@ class ClinicalInterpretationModel:
 @dataclass
 class RecommendationModel:
     """
-    Recomendações clínicas produzidas pelo Framework.
+    Representa as recomendações clínicas produzidas
+    pelo Framework.
     """
 
     recommendation: str
     
 @dataclass
-class CurrentStatusModel:
+class JourneyIndicatorsModel:
+    """
+    Indicadores quantitativos da jornada assistencial.
+    """
 
-    clinical_status: str
-
-    current_status: str
-    
-@dataclass
-class LongitudinalNarrativeModel:
-
-    narrative: str
-    
-@dataclass
-class ClinicalInterpretationModel:
-
-    interpretation: str 
-    
-@dataclass
-class RecommendationModel:
-
-    recommendation: str
+    total_events: int = 0
+    pts_objectives: int = 0
+    planned_sessions: int = 0
+    completed_sessions: int = 0
+    scheduled_sessions: int = 0

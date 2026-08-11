@@ -95,14 +95,15 @@ class ExecutiveSummaryEngine(BaseKnowledgeEngine):
         builder.add_if_value(
             reading.get("risco_atual"),
             lambda risk: (
-                f"A leitura clínica oficial indica risco {risk.replace('_', ' ').lower()}."
+                f"A leitura clínica oficial indica {risk.replace('_', ' ').lower()}."
             ),
         )
 
         builder.add_if_value(
             reading.get("tendencia"),
             lambda trend: (
-                f"A tendência clínica observada é {trend.lower()}."
+                "A tendência clínica observada é "
+                f"{'estável' if trend.lower() == 'estavel' else trend.lower()}."
             ),
         )
 

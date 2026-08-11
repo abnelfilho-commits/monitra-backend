@@ -11,6 +11,7 @@ from .models import (
     LongitudinalNarrativeModel,
     ClinicalInterpretationModel,
     RecommendationModel,
+    JourneyIndicatorsModel,
 )
 
 from ..models import (
@@ -62,12 +63,35 @@ class KnowledgeComposer:
             )
 
         if isinstance(model, CurrentStatusModel):
-            return cls._text_section(
+
+            section = ReportSection(
                 code="CURRENT_STATUS",
                 title="Situação Atual",
                 order=3,
-                content=model.current_status,
             )
+
+            section.add_component(
+                ReportComponent(
+                    type="STATUS_CARD",
+                    data={
+                        "risk": model.risk,
+                        "trend": model.trend,
+                        "clinical_moment": model.clinical_moment,
+                        "protocol": model.protocol,
+                    },
+                    order=1,
+                )
+            )
+
+            section.add_component(
+                ReportComponent(
+                    type="TEXT",
+                    data=model.current_status,
+                    order=2,
+                )
+            )
+
+            return section
 
         if isinstance(model, LongitudinalNarrativeModel):
             return cls._text_section(
@@ -76,12 +100,36 @@ class KnowledgeComposer:
                 order=4,
                 content=model.narrative,
             )
+            
+        if isinstance(model, JourneyIndicatorsModel):
+
+            section = ReportSection(
+                code="JOURNEY_INDICATORS",
+                title="Indicadores da Jornada",
+                order=5,
+            )
+
+            section.add_component(
+                ReportComponent(
+                    type="JOURNEY_INDICATORS",
+                    data={
+                        "total_events": model.total_events,
+                        "pts_objectives": model.pts_objectives,
+                        "planned_sessions": model.planned_sessions,
+                        "completed_sessions": model.completed_sessions,
+                        "scheduled_sessions": model.scheduled_sessions,
+                    },
+                    order=1,
+                )
+            )
+
+            return section
 
         if isinstance(model, ClinicalInterpretationModel):
             return cls._text_section(
                 code="CLINICAL_INTERPRETATION",
                 title="Interpretação Clínica",
-                order=5,
+                order=6,
                 content=model.interpretation,
             )
 
@@ -89,7 +137,7 @@ class KnowledgeComposer:
             return cls._text_section(
                 code="RECOMMENDATIONS",
                 title="Recomendações",
-                order=6,
+                order=7,
                 content=model.recommendation,
             )
 
