@@ -7,6 +7,7 @@ from .narrative_builder import NarrativeBuilder
 from .clinical_interpretation_engine import ClinicalInterpretationEngine
 from .recommendation_engine import RecommendationEngine
 from .journey_indicators_engine import JourneyIndicatorsEngine
+from .pts_execution_engine import PTSExecutionEngine
 
 __all__ = [
     "BaseKnowledgeEngine",
@@ -18,5 +19,6 @@ __all__ = [
     "CurrentStatusEngine",
     "ClinicalInterpretationEngine",
     "RecommendationEngine",
-    "JourneyIndicatorsEngine",   
+    "JourneyIndicatorsEngine",
+    "PTSExecutionEngine",   
 ]

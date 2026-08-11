@@ -596,6 +596,280 @@ class PDFRenderer(BaseRenderer):
                     section_story.append(
                         Spacer(1, 0.35 * cm)
                     )
+                    
+                if component.type == "PTS_EXECUTION":
+
+                    data = component.data or {}
+
+                    status = str(
+                        data.get("status") or "SEM_DADOS"
+                    ).replace("_", " ").title()
+
+                    total_objectives = data.get(
+                        "total_objectives",
+                        0,
+                    )
+
+                    total_plannings = data.get(
+                        "total_plannings",
+                        0,
+                    )
+
+                    total_sessions = data.get(
+                        "total_sessions",
+                        0,
+                    )
+
+                    completed_sessions = data.get(
+                        "completed_sessions",
+                        0,
+                    )
+
+                    scheduled_sessions = data.get(
+                        "scheduled_sessions",
+                        0,
+                    )
+
+                    missed_sessions = data.get(
+                        "missed_sessions",
+                        0,
+                    )
+
+                    cancelled_sessions = data.get(
+                        "cancelled_sessions",
+                        0,
+                    )
+
+                    execution_rate = float(
+                        data.get("execution_rate")
+                        or 0
+                    )
+
+                    summary_table = Table(
+                        [
+                            [
+                                Paragraph(
+                                    "<b>Status do PTS</b>",
+                                    styles["metadata"],
+                                ),
+                                Paragraph(
+                                    "<b>Objetivos</b>",
+                                    styles["indicator_label"],
+                                ),
+                                Paragraph(
+                                    "<b>Planejamentos</b>",
+                                    styles["indicator_label"],
+                                ),
+                            ],
+                            [
+                                Paragraph(
+                                    status,
+                                    styles["status_value"],
+                                ),
+                                Paragraph(
+                                    str(total_objectives),
+                                    styles["indicator_value"],
+                                ),
+                                Paragraph(
+                                    str(total_plannings),
+                                    styles["indicator_value"],
+                                ),
+                            ],
+                        ],
+                        colWidths=[
+                            5.2 * cm,
+                            5.2 * cm,
+                            5.2 * cm,
+                        ],
+                    )
+
+                    summary_table.setStyle(
+                        TableStyle(
+                            [
+                                (
+                                    "BACKGROUND",
+                                    (0, 0),
+                                    (-1, -1),
+                                    colors.HexColor("#F8FAFC"),
+                                ),
+                                (
+                                    "BOX",
+                                    (0, 0),
+                                    (-1, -1),
+                                    0.7,
+                                    colors.HexColor("#E2E8F0"),
+                                ),
+                                (
+                                    "TOPPADDING",
+                                    (0, 0),
+                                    (-1, -1),
+                                    8,
+                                ),
+                                (
+                                    "BOTTOMPADDING",
+                                    (0, 0),
+                                    (-1, -1),
+                                    8,
+                                ),
+                                (
+                                    "LEFTPADDING",
+                                    (0, 0),
+                                    (-1, -1),
+                                    10,
+                                ),
+                                (
+                                    "RIGHTPADDING",
+                                    (0, 0),
+                                    (-1, -1),
+                                    10,
+                                ),
+                                (
+                                    "VALIGN",
+                                    (0, 0),
+                                    (-1, -1),
+                                    "MIDDLE",
+                                ),
+                                (
+                                    "ALIGN",
+                                    (1, 0),
+                                    (2, -1),
+                                    "CENTER",
+                                ),
+                            ]
+                        )
+                    )
+
+                    section_story.append(
+                        summary_table
+                    )
+
+                    section_story.append(
+                        Spacer(1, 0.35 * cm)
+                    )
+
+                    section_story.append(
+                        Paragraph(
+                            "<b>Execução assistencial</b>",
+                            styles["metadata"],
+                        )
+                    )
+
+                    section_story.append(
+                        Spacer(1, 0.10 * cm)
+                    )
+
+                    section_story.append(
+                        Paragraph(
+                            (
+                                f"{completed_sessions} de "
+                                f"{total_sessions} sessões realizadas "
+                                f"({execution_rate:.0f}%)"
+                            ),
+                            styles["body"],
+                        )
+                    )
+
+                    section_story.append(
+                        Spacer(1, 0.15 * cm)
+                    )
+
+                    progress_width = 15.6 * cm
+
+                    completed_width = (
+                        progress_width
+                        * min(
+                            max(execution_rate, 0),
+                            100,
+                        )
+                        / 100
+                    )
+
+                    remaining_width = (
+                        progress_width
+                        - completed_width
+                    )
+
+                    progress_table = Table(
+                        [[
+                            "",
+                            "",
+                        ]],
+                        colWidths=[
+                            completed_width,
+                            remaining_width,
+                        ],
+                        rowHeights=[
+                            0.22 * cm,
+                        ],
+                    )
+
+                    progress_table.setStyle(
+                        TableStyle(
+                            [
+                                (
+                                    "BACKGROUND",
+                                    (0, 0),
+                                    (0, 0),
+                                    colors.HexColor("#2563EB"),
+                                ),
+                                (
+                                    "BACKGROUND",
+                                    (1, 0),
+                                    (1, 0),
+                                    colors.HexColor("#E2E8F0"),
+                                ),
+                                (
+                                    "LEFTPADDING",
+                                    (0, 0),
+                                    (-1, -1),
+                                    0,
+                                ),
+                                (
+                                    "RIGHTPADDING",
+                                    (0, 0),
+                                    (-1, -1),
+                                    0,
+                                ),
+                                (
+                                    "TOPPADDING",
+                                    (0, 0),
+                                    (-1, -1),
+                                    0,
+                                ),
+                                (
+                                    "BOTTOMPADDING",
+                                    (0, 0),
+                                    (-1, -1),
+                                    0,
+                                ),
+                            ]
+                        )
+                    )
+
+                    section_story.append(
+                        progress_table
+                    )
+
+                    section_story.append(
+                        Spacer(1, 0.20 * cm)
+                    )
+
+                    section_story.append(
+                        Paragraph(
+                            (
+                                f"{scheduled_sessions} agendadas"
+                                f" &nbsp;&nbsp;•&nbsp;&nbsp; "
+                                f"{missed_sessions} faltas"
+                                f" &nbsp;&nbsp;•&nbsp;&nbsp; "
+                                f"{cancelled_sessions} canceladas"
+                            ),
+                            styles["metadata"],
+                        )
+                    )
+
+                    section_story.append(
+                        Spacer(1, 0.35 * cm)
+                    )
 
                 if component.type == "TEXT":
                     content = str(

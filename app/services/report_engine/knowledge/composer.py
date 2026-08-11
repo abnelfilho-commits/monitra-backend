@@ -12,6 +12,7 @@ from .models import (
     ClinicalInterpretationModel,
     RecommendationModel,
     JourneyIndicatorsModel,
+    PTSExecutionModel,
 )
 
 from ..models import (
@@ -125,11 +126,39 @@ class KnowledgeComposer:
 
             return section
 
+        if isinstance(model, PTSExecutionModel):
+
+            section = ReportSection(
+                code="PTS_EXECUTION",
+                title="PTS e Execução Assistencial",
+                order=6,
+            )
+
+            section.add_component(
+                ReportComponent(
+                    type="PTS_EXECUTION",
+                    data={
+                        "status": model.status,
+                        "total_objectives": model.total_objectives,
+                        "total_plannings": model.total_plannings,
+                        "total_sessions": model.total_sessions,
+                        "completed_sessions": model.completed_sessions,
+                        "scheduled_sessions": model.scheduled_sessions,
+                        "missed_sessions": model.missed_sessions,
+                        "cancelled_sessions": model.cancelled_sessions,
+                        "execution_rate": model.execution_rate,
+                    },
+                    order=1,
+                )
+            )
+
+            return section
+
         if isinstance(model, ClinicalInterpretationModel):
             return cls._text_section(
                 code="CLINICAL_INTERPRETATION",
                 title="Interpretação Clínica",
-                order=6,
+                order=7,
                 content=model.interpretation,
             )
 
@@ -137,7 +166,7 @@ class KnowledgeComposer:
             return cls._text_section(
                 code="RECOMMENDATIONS",
                 title="Recomendações",
-                order=7,
+                order=8,
                 content=model.recommendation,
             )
 

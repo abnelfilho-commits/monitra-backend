@@ -75,3 +75,23 @@ class JourneyIndicatorsModel:
     planned_sessions: int = 0
     completed_sessions: int = 0
     scheduled_sessions: int = 0
+    
+@dataclass
+class PTSExecutionModel:
+    """
+    Representa a síntese executiva do
+    Plano Terapêutico Singular e sua execução assistencial.
+    """
+
+    status: str
+
+    total_objectives: int = 0
+    total_plannings: int = 0
+
+    total_sessions: int = 0
+    completed_sessions: int = 0
+    scheduled_sessions: int = 0
+    missed_sessions: int = 0
+    cancelled_sessions: int = 0
+
+    execution_rate: float = 0.0
