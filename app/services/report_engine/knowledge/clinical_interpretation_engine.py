@@ -47,7 +47,7 @@ class ClinicalInterpretationEngine(BaseKnowledgeEngine):
             and sessions.get("total_sessoes", 0) > 0
         ):
             builder.add(
-                "O paciente apresenta continuidade assistencial documentada ao longo do período analisado."
+                "O paciente apresenta continuidade assistencial documentada ao longo de sua jornada de cuidado."
             )
 
             builder.paragraph()

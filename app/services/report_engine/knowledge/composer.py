@@ -13,6 +13,8 @@ from .models import (
     RecommendationModel,
     JourneyIndicatorsModel,
     PTSExecutionModel,
+    AssessmentSummaryModel,
+    DiagnosisSummaryModel,
 )
 
 from ..models import (
@@ -94,11 +96,39 @@ class KnowledgeComposer:
 
             return section
 
+        if isinstance(model, DiagnosisSummaryModel):
+
+            if not model.has_active_diagnosis:
+                return None
+
+            section = ReportSection(
+                code="DIAGNOSIS_SUMMARY",
+                title="Diagnóstico Clínico",
+                order=4,
+            )
+
+            section.add_component(
+                ReportComponent(
+                    type="DIAGNOSIS_SUMMARY",
+                    data={
+                        "cid": model.cid,
+                        "clinical_description": model.clinical_description,
+                        "diagnosis_date": model.diagnosis_date,
+                        "physician_name": model.physician_name,
+                        "physician_specialty": model.physician_specialty,
+                        "physician_registry": model.physician_registry,
+                    },
+                    order=1,
+                )
+            )
+
+            return section
+
         if isinstance(model, LongitudinalNarrativeModel):
             return cls._text_section(
                 code="LONGITUDINAL_NARRATIVE",
                 title="Narrativa Longitudinal",
-                order=4,
+                order=5,
                 content=model.narrative,
             )
             
@@ -107,7 +137,7 @@ class KnowledgeComposer:
             section = ReportSection(
                 code="JOURNEY_INDICATORS",
                 title="Indicadores da Jornada",
-                order=5,
+                order=6,
             )
 
             section.add_component(
@@ -131,7 +161,7 @@ class KnowledgeComposer:
             section = ReportSection(
                 code="PTS_EXECUTION",
                 title="PTS e Execução Assistencial",
-                order=6,
+                order=7,
             )
 
             section.add_component(
@@ -153,12 +183,36 @@ class KnowledgeComposer:
             )
 
             return section
+        
+        if isinstance(model, AssessmentSummaryModel):
+
+            if model.total_assessments == 0:
+                return None
+
+            section = ReportSection(
+                code="ASSESSMENT_SUMMARY",
+                title="Avaliações Clínicas",
+                order=8,
+            )
+
+            section.add_component(
+                ReportComponent(
+                    type="ASSESSMENT_SUMMARY",
+                    data={
+                        "total_assessments": model.total_assessments,
+                        "assessments": model.assessments,
+                    },
+                    order=1,
+                )
+            )
+
+            return section
 
         if isinstance(model, ClinicalInterpretationModel):
             return cls._text_section(
                 code="CLINICAL_INTERPRETATION",
                 title="Interpretação Clínica",
-                order=7,
+                order=9,
                 content=model.interpretation,
             )
 
@@ -166,7 +220,7 @@ class KnowledgeComposer:
             return cls._text_section(
                 code="RECOMMENDATIONS",
                 title="Recomendações",
-                order=8,
+                order=10,
                 content=model.recommendation,
             )
 

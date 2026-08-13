@@ -262,8 +262,8 @@ class PDFRenderer(BaseRenderer):
         story.append(
             Paragraph(
                 (
-                    f"<b>Período:</b> "
-                    f"{report.period_start} a {report.period_end}"
+                    f"<b>Data de geração:</b> "
+                    f"{report.generated_at.strftime('%d/%m/%Y')}"
                 ),
                 styles["metadata"],
             )
@@ -640,10 +640,14 @@ class PDFRenderer(BaseRenderer):
                         0,
                     )
 
-                    execution_rate = float(
-                        data.get("execution_rate")
-                        or 0
+                    execution_rate = data.get(
+                        "execution_rate"
                     )
+
+                    if execution_rate is not None:
+                        execution_rate = float(
+                            execution_rate
+                        )
 
                     summary_table = Table(
                         [
@@ -758,113 +762,522 @@ class PDFRenderer(BaseRenderer):
                         Spacer(1, 0.10 * cm)
                     )
 
-                    section_story.append(
-                        Paragraph(
-                            (
-                                f"{completed_sessions} de "
-                                f"{total_sessions} sessões realizadas "
-                                f"({execution_rate:.0f}%)"
-                            ),
-                            styles["body"],
+                    if total_sessions > 0:
+
+                        section_story.append(
+                            Paragraph(
+                                (
+                                    f"{completed_sessions} de "
+                                    f"{total_sessions} sessões realizadas "
+                                    f"({execution_rate:.0f}%)"
+                                ),
+                                styles["body"],
+                            )
                         )
-                    )
+
+                        section_story.append(
+                            Spacer(1, 0.15 * cm)
+                        )
+
+                        progress_width = 15.6 * cm
+
+                        completed_width = (
+                            progress_width
+                            * min(
+                                max(execution_rate, 0),
+                                100,
+                            )
+                            / 100
+                        )
+
+                        remaining_width = (
+                            progress_width
+                            - completed_width
+                        )
+
+                        progress_table = Table(
+                            [[
+                                "",
+                                "",
+                            ]],
+                            colWidths=[
+                                completed_width,
+                                remaining_width,
+                            ],
+                            rowHeights=[
+                                0.22 * cm,
+                            ],
+                        )
+
+                        progress_table.setStyle(
+                            TableStyle(
+                                [
+                                    (
+                                        "BACKGROUND",
+                                        (0, 0),
+                                        (0, 0),
+                                        colors.HexColor("#2563EB"),
+                                    ),
+                                    (
+                                        "BACKGROUND",
+                                        (1, 0),
+                                        (1, 0),
+                                        colors.HexColor("#E2E8F0"),
+                                    ),
+                                    (
+                                        "LEFTPADDING",
+                                        (0, 0),
+                                        (-1, -1),
+                                        0,
+                                    ),
+                                    (
+                                        "RIGHTPADDING",
+                                        (0, 0),
+                                        (-1, -1),
+                                        0,
+                                    ),
+                                    (
+                                        "TOPPADDING",
+                                        (0, 0),
+                                        (-1, -1),
+                                        0,
+                                    ),
+                                    (
+                                        "BOTTOMPADDING",
+                                        (0, 0),
+                                        (-1, -1),
+                                        0,
+                                    ),
+                                ]
+                            )
+                        )
+
+                        section_story.append(
+                            progress_table
+                        )
+
+                        section_story.append(
+                            Spacer(1, 0.20 * cm)
+                        )
+
+                        section_story.append(
+                            Paragraph(
+                                (
+                                    f"{scheduled_sessions} agendadas"
+                                    f" &nbsp;&nbsp;•&nbsp;&nbsp; "
+                                    f"{missed_sessions} faltas"
+                                    f" &nbsp;&nbsp;•&nbsp;&nbsp; "
+                                    f"{cancelled_sessions} canceladas"
+                                ),
+                                styles["metadata"],
+                            )
+                        )
+
+                    else:
+
+                        section_story.append(
+                            Paragraph(
+                                "Sem sessões assistenciais planejadas.",
+                                styles["body"],
+                            )
+                        )
 
                     section_story.append(
-                        Spacer(1, 0.15 * cm)
+                        Spacer(1, 0.35 * cm)
+                    )
+                    
+                if component.type == "ASSESSMENT_SUMMARY":
+
+                    from datetime import datetime
+
+                    data = component.data or {}
+
+                    assessments = data.get(
+                        "assessments",
+                        [],
                     )
 
-                    progress_width = 15.6 * cm
+                    cards = []
 
-                    completed_width = (
-                        progress_width
-                        * min(
-                            max(execution_rate, 0),
-                            100,
+                    for assessment in assessments:
+
+                        instrument = (
+                            assessment.get("instrument")
+                            or "Avaliação"
                         )
-                        / 100
+
+                        score = assessment.get("score")
+
+                        classification = (
+                            assessment.get("classification")
+                            or "Não informado"
+                        )
+
+                        raw_date = assessment.get("date")
+
+                        formatted_date = ""
+
+                        if raw_date:
+                            try:
+                                parsed_date = datetime.fromisoformat(
+                                    raw_date.replace(
+                                        "Z",
+                                        "+00:00",
+                                    )
+                                )
+
+                                formatted_date = (
+                                    parsed_date.strftime(
+                                        "%d/%m/%Y"
+                                    )
+                                )
+
+                            except ValueError:
+                                formatted_date = raw_date
+
+                        content = [
+                            [
+                                Paragraph(
+                                    f"<b>{instrument}</b>",
+                                    styles["status_value"],
+                                )
+                            ],
+                            [
+                                Paragraph(
+                                    formatted_date,
+                                    styles["metadata"],
+                                )
+                            ],
+                            [
+                                Paragraph(
+                                    (
+                                        f"Score: {score:g}"
+                                        if score is not None
+                                        else "Score não informado"
+                                    ),
+                                    styles["body"],
+                                )
+                            ],
+                            [
+                                Paragraph(
+                                    classification,
+                                    styles["body"],
+                                )
+                            ],
+                        ]
+
+                        card = Table(
+                            content,
+                            colWidths=[
+                                3.45 * cm,
+                            ],
+                        )
+
+                        card.setStyle(
+                            TableStyle(
+                                [
+                                    (
+                                        "BACKGROUND",
+                                        (0, 0),
+                                        (-1, -1),
+                                        colors.HexColor("#F8FAFC"),
+                                    ),
+                                    (
+                                        "BOX",
+                                        (0, 0),
+                                        (-1, -1),
+                                        0.7,
+                                        colors.HexColor("#E2E8F0"),
+                                    ),
+                                    (
+                                        "TOPPADDING",
+                                        (0, 0),
+                                        (-1, -1),
+                                        7,
+                                    ),
+                                    (
+                                        "BOTTOMPADDING",
+                                        (0, 0),
+                                        (-1, -1),
+                                        7,
+                                    ),
+                                    (
+                                        "LEFTPADDING",
+                                        (0, 0),
+                                        (-1, -1),
+                                        8,
+                                    ),
+                                    (
+                                        "RIGHTPADDING",
+                                        (0, 0),
+                                        (-1, -1),
+                                        8,
+                                    ),
+                                    (
+                                        "VALIGN",
+                                        (0, 0),
+                                        (-1, -1),
+                                        "TOP",
+                                    ),
+                                ]
+                            )
+                        )
+
+                        cards.append(card)
+
+                    if cards:
+
+                        assessment_table = Table(
+                            [cards],
+                            colWidths=[
+                                3.85 * cm
+                                for _ in cards
+                            ],
+                            hAlign="LEFT",
+                        )
+
+                        assessment_table.setStyle(
+                            TableStyle(
+                                [
+                                    (
+                                        "VALIGN",
+                                        (0, 0),
+                                        (-1, -1),
+                                        "TOP",
+                                    ),
+                                    (
+                                        "LEFTPADDING",
+                                        (0, 0),
+                                        (-1, -1),
+                                        0,
+                                    ),
+                                    (
+                                        "RIGHTPADDING",
+                                        (0, 0),
+                                        (-1, -1),
+                                        6,
+                                    ),
+                                ]
+                            )
+                        )
+
+                        section_story.append(
+                            assessment_table
+                        )
+
+                        section_story.append(
+                            Spacer(1, 0.35 * cm)
+                        )
+
+                if component.type == "DIAGNOSIS_SUMMARY":
+
+                    from datetime import datetime
+
+                    data = component.data or {}
+
+                    cid = (
+                        data.get("cid")
+                        or "Não informado"
                     )
 
-                    remaining_width = (
-                        progress_width
-                        - completed_width
+                    clinical_description = (
+                        data.get("clinical_description")
+                        or "Não informado"
                     )
 
-                    progress_table = Table(
-                        [[
-                            "",
-                            "",
-                        ]],
+                    raw_date = data.get(
+                        "diagnosis_date"
+                    )
+
+                    formatted_date = ""
+
+                    if raw_date:
+                        try:
+                            parsed_date = datetime.fromisoformat(
+                                raw_date
+                            )
+
+                            formatted_date = parsed_date.strftime(
+                                "%d/%m/%Y"
+                            )
+
+                        except ValueError:
+                            formatted_date = raw_date
+
+                    physician_name = (
+                        data.get("physician_name")
+                        or "Não informado"
+                    )
+
+                    physician_specialty = (
+                        data.get("physician_specialty")
+                        or ""
+                    )
+
+                    physician_registry = (
+                        data.get("physician_registry")
+                        or ""
+                    )
+
+                    diagnosis_table = Table(
+                        [
+                            [
+                                Paragraph(
+                                    "<b>CID</b>",
+                                    styles["metadata"],
+                                ),
+                                Paragraph(
+                                    "<b>Data do diagnóstico</b>",
+                                    styles["metadata"],
+                                ),
+                            ],
+                            [
+                                Paragraph(
+                                    cid,
+                                    styles["status_value"],
+                                ),
+                                Paragraph(
+                                    formatted_date,
+                                    styles["status_value"],
+                                ),
+                            ],
+                            [
+                                Paragraph(
+                                    "<b>Descrição clínica</b>",
+                                    styles["metadata"],
+                                ),
+                                "",
+                            ],
+                            [
+                                Paragraph(
+                                    clinical_description,
+                                    styles["body"],
+                                ),
+                                "",
+                            ],
+                            [
+                                Paragraph(
+                                    "<b>Profissional responsável</b>",
+                                    styles["metadata"],
+                                ),
+                                "",
+                            ],
+                            [
+                                Paragraph(
+                                    physician_name,
+                                    styles["body"],
+                                ),
+                                "",
+                            ],
+                            [
+                                Paragraph(
+                                    (
+                                        f"{physician_specialty}"
+                                        f"{' · ' if physician_specialty and physician_registry else ''}"
+                                        f"{physician_registry}"
+                                    ),
+                                    styles["metadata"],
+                                ),
+                                "",
+                            ],
+                        ],
                         colWidths=[
-                            completed_width,
-                            remaining_width,
-                        ],
-                        rowHeights=[
-                            0.22 * cm,
+                            7.8 * cm,
+                            7.8 * cm,
                         ],
                     )
 
-                    progress_table.setStyle(
+                    diagnosis_table.setStyle(
                         TableStyle(
                             [
                                 (
                                     "BACKGROUND",
                                     (0, 0),
-                                    (0, 0),
-                                    colors.HexColor("#2563EB"),
+                                    (-1, -1),
+                                    colors.HexColor("#F8FAFC"),
                                 ),
                                 (
-                                    "BACKGROUND",
-                                    (1, 0),
-                                    (1, 0),
+                                    "BOX",
+                                    (0, 0),
+                                    (-1, -1),
+                                    0.7,
                                     colors.HexColor("#E2E8F0"),
                                 ),
                                 (
-                                    "LEFTPADDING",
-                                    (0, 0),
-                                    (-1, -1),
-                                    0,
+                                    "SPAN",
+                                    (0, 2),
+                                    (1, 2),
                                 ),
                                 (
-                                    "RIGHTPADDING",
-                                    (0, 0),
-                                    (-1, -1),
-                                    0,
+                                    "SPAN",
+                                    (0, 3),
+                                    (1, 3),
+                                ),
+                                (
+                                    "SPAN",
+                                    (0, 4),
+                                    (1, 4),
+                                ),
+                                (
+                                    "SPAN",
+                                    (0, 5),
+                                    (1, 5),
+                                ),
+                                (
+                                    "SPAN",
+                                    (0, 6),
+                                    (1, 6),
+                                ),
+                                (
+                                    "LINEABOVE",
+                                    (0, 2),
+                                    (-1, 2),
+                                    0.4,
+                                    colors.HexColor("#E2E8F0"),
+                                ),
+                                (
+                                    "LINEABOVE",
+                                    (0, 4),
+                                    (-1, 4),
+                                    0.4,
+                                    colors.HexColor("#E2E8F0"),
                                 ),
                                 (
                                     "TOPPADDING",
                                     (0, 0),
                                     (-1, -1),
-                                    0,
+                                    7,
                                 ),
                                 (
                                     "BOTTOMPADDING",
                                     (0, 0),
                                     (-1, -1),
-                                    0,
+                                    7,
+                                ),
+                                (
+                                    "LEFTPADDING",
+                                    (0, 0),
+                                    (-1, -1),
+                                    10,
+                                ),
+                                (
+                                    "RIGHTPADDING",
+                                    (0, 0),
+                                    (-1, -1),
+                                    10,
+                                ),
+                                (
+                                    "VALIGN",
+                                    (0, 0),
+                                    (-1, -1),
+                                    "TOP",
                                 ),
                             ]
                         )
                     )
 
                     section_story.append(
-                        progress_table
-                    )
-
-                    section_story.append(
-                        Spacer(1, 0.20 * cm)
-                    )
-
-                    section_story.append(
-                        Paragraph(
-                            (
-                                f"{scheduled_sessions} agendadas"
-                                f" &nbsp;&nbsp;•&nbsp;&nbsp; "
-                                f"{missed_sessions} faltas"
-                                f" &nbsp;&nbsp;•&nbsp;&nbsp; "
-                                f"{cancelled_sessions} canceladas"
-                            ),
-                            styles["metadata"],
-                        )
+                        diagnosis_table
                     )
 
                     section_story.append(

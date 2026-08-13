@@ -8,6 +8,8 @@ from .clinical_interpretation_engine import ClinicalInterpretationEngine
 from .recommendation_engine import RecommendationEngine
 from .journey_indicators_engine import JourneyIndicatorsEngine
 from .pts_execution_engine import PTSExecutionEngine
+from .assessment_summary_engine import AssessmentSummaryEngine
+from .diagnosis_summary_engine import DiagnosisSummaryEngine
 
 __all__ = [
     "BaseKnowledgeEngine",
@@ -20,5 +22,7 @@ __all__ = [
     "ClinicalInterpretationEngine",
     "RecommendationEngine",
     "JourneyIndicatorsEngine",
-    "PTSExecutionEngine",   
+    "PTSExecutionEngine",
+    "AssessmentSummaryEngine",
+    "DiagnosisSummaryEngine",   
 ]

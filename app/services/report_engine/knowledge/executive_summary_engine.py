@@ -60,7 +60,7 @@ class ExecutiveSummaryEngine(BaseKnowledgeEngine):
         builder = NarrativeBuilder()
 
         builder.add(
-            f"Durante o período analisado, {patient_name} "
+            f"Ao longo da jornada assistencial registrada, {patient_name} "
             "manteve acompanhamento longitudinal contínuo."
         )
 
@@ -79,17 +79,18 @@ class ExecutiveSummaryEngine(BaseKnowledgeEngine):
         builder.add_if_value(
             len(timeline) if timeline else None,
             lambda total: (
-                f"Foram analisados {total} eventos longitudinais."
+                f"A jornada clínica registrada contempla "
+                f"{total} eventos longitudinais."
             ),
         )
 
-        builder.add_if_value(
-            sessions.get("total_sessoes"),
-            lambda total: (
-                f"A jornada contempla {total} sessões assistenciais."
+        builder.add_if(
+            sessions.get("total_sessoes", 0) > 0,
+            (
+                f"A jornada contempla "
+                f"{sessions.get('total_sessoes')} sessões assistenciais."
             ),
         )
-
         builder.paragraph()
 
         builder.add_if_value(

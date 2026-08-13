@@ -62,7 +62,7 @@ class PTSExecutionEngine(BaseKnowledgeEngine):
         execution_rate = (
             (completed_sessions / total_sessions) * 100
             if total_sessions > 0
-            else 0.0
+            else None
         )
 
         model = PTSExecutionModel(
@@ -93,9 +93,10 @@ class PTSExecutionEngine(BaseKnowledgeEngine):
                 or 0
             ),
 
-            execution_rate=round(
-                execution_rate,
-                1,
+            execution_rate=(
+                round(execution_rate, 1)
+                if execution_rate is not None
+                else None
             ),
         )
 

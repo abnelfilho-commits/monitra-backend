@@ -9,6 +9,8 @@ from .recommendation_engine import RecommendationEngine
 from .longitudinal_narrative_engine import LongitudinalNarrativeEngine
 from .journey_indicators_engine import JourneyIndicatorsEngine
 from .pts_execution_engine import PTSExecutionEngine
+from .assessment_summary_engine import AssessmentSummaryEngine
+from .diagnosis_summary_engine import DiagnosisSummaryEngine
 
 class KnowledgeRegistry:
     """
@@ -53,4 +55,12 @@ knowledge_registry.register(
 
 knowledge_registry.register(
     PTSExecutionEngine
+)
+
+knowledge_registry.register(
+    AssessmentSummaryEngine
+)
+
+knowledge_registry.register(
+    DiagnosisSummaryEngine
 )

@@ -159,7 +159,8 @@ class ReportService:
             for model in result.knowledge:
                 section = KnowledgeComposer.compose(model)
 
-                context.add_section(section)
+                if section is not None:
+                    context.add_section(section)
 
             context.audit.setdefault(
                 "knowledge_engines",

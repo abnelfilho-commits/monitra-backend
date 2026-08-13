@@ -15,7 +15,12 @@ from app.models.profissional import Profissional
 from app.models.usuario import Usuario
 from app.schemas.paciente import PacienteCreate,PacienteUpdate, PacienteResponse
 from app.routers.timeline import listar_timeline_paciente
-from app.services.relatorio_paciente import gerar_pdf_paciente   
+
+from datetime import date
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+from app.services.report_engine.report_service import ReportService  
 
 from app.models.modular import PacienteModulo, ModuloClinico
 
@@ -262,66 +267,156 @@ def baixar_relatorio_paciente_pdf(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    paciente = db.query(Paciente).filter(Paciente.id == paciente_id).first()
+    paciente = (
+        db.query(Paciente)
+        .filter(
+            Paciente.id == paciente_id,
+            Paciente.ativo == True,
+        )
+        .first()
+    )
 
     if not paciente:
-        raise HTTPException(status_code=404, detail="Paciente não encontrado.")
+        raise HTTPException(
+            status_code=404,
+            detail="Paciente não encontrado.",
+        )
 
-    if usuario.clinica_id is not None and paciente.clinica_id != usuario.clinica_id:
+    if (
+        not is_admin_global(usuario)
+        and paciente.clinica_id != usuario.clinica_id
+    ):
         raise HTTPException(
             status_code=403,
-            detail="Usuário sem permissão para este paciente."
+            detail="Usuário sem permissão para este paciente.",
         )
 
-    try:
-        eventos = listar_timeline_paciente(
-            paciente_id=paciente_id,
-            db=db,
-            usuario_atual=usuario,
+    vinculos = (
+        db.query(
+            PacienteModulo,
+            ModuloClinico,
         )
-    except Exception:
-        eventos = []
+        .join(
+            ModuloClinico,
+            ModuloClinico.id == PacienteModulo.modulo_id,
+        )
+        .filter(
+            PacienteModulo.paciente_id == paciente_id,
+            PacienteModulo.ativo == True,
+            ModuloClinico.ativo == True,
+        )
+        .all()
+    )
 
-    eventos_dict = [
-        e.dict() if hasattr(e, "dict") else dict(e)
-        for e in eventos
-    ]
-
-    clinica = None
-    profissional = None
-
-    if getattr(paciente, "clinica_id", None):
-        clinica = db.query(Clinica).filter(Clinica.id == paciente.clinica_id).first()
-
-    if getattr(paciente, "profissional_id", None):
-        profissional = (
-            db.query(Profissional)
-            .filter(Profissional.id == paciente.profissional_id)
-            .first()
+    if not vinculos:
+        raise HTTPException(
+            status_code=400,
+            detail="Paciente sem módulo clínico ativo.",
         )
 
-    paciente_dict = {
-        "nome": paciente.nome,
-        "data_nascimento": paciente.data_nascimento,
-        "genero": paciente.genero,
-        "responsavel_nome": getattr(paciente, "responsavel_nome", None),
-        "responsavel_email": getattr(paciente, "responsavel_email", None),
-        "clinica_nome": clinica.nome if clinica else None,
-        "profissional_nome": profissional.nome if profissional else None,
+    module_map = {
+        "neurodesenvolvimento": "NEURO",
     }
 
+    modulos_suportados = [
+        (
+            paciente_modulo,
+            modulo,
+            module_map.get(modulo.slug),
+        )
+        for paciente_modulo, modulo in vinculos
+        if modulo.slug in module_map
+    ]
+
+    if not modulos_suportados:
+        modulos = ", ".join(
+            modulo.nome
+            for _, modulo in vinculos
+        )
+
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Relatório Longitudinal Inteligente "
+                f"ainda não disponível para: {modulos}."
+            ),
+        )
+
+    if len(modulos_suportados) > 1:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Paciente possui mais de um módulo clínico "
+                "compatível com o relatório. "
+                "É necessário selecionar o módulo."
+            ),
+        )
+
+    _, modulo_clinico, report_module = modulos_suportados[0]
+
+    period_start = (
+        paciente.created_at.date()
+        if paciente.created_at
+        else date.today()
+    )
+
+    period_end = date.today()
+
+    temp_path = None
+
     try:
-        pdf_bytes = gerar_pdf_paciente(paciente_dict, eventos_dict)
-    except Exception as e:
+        service = ReportService()
+
+        context = service.generate(
+            report_code="CLN-001",
+            subject_id=paciente_id,
+            requested_by=usuario.id,
+            period_start=period_start,
+            period_end=period_end,
+            module=report_module,
+            db=db,
+        )
+
+        with NamedTemporaryFile(
+            prefix=f"cln_001_{paciente_id}_",
+            suffix=".pdf",
+            delete=False,
+        ) as temp_file:
+            temp_path = temp_file.name
+
+        service.render(
+            context=context,
+            output_path=temp_path,
+        )
+
+        pdf_bytes = Path(temp_path).read_bytes()
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"Erro ao gerar PDF: {str(e)}"
+            detail=(
+                "Erro ao gerar Relatório Longitudinal Inteligente: "
+                f"{str(exc)}"
+            ),
         )
+
+    finally:
+        if temp_path:
+            path = Path(temp_path)
+
+            if path.exists():
+                path.unlink()
 
     return StreamingResponse(
         BytesIO(pdf_bytes),
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="relatorio_paciente_{paciente_id}.pdf"'
+            "Content-Disposition": (
+                f'attachment; filename="'
+                f'relatorio_longitudinal_{paciente_id}.pdf"'
+            )
         },
     )

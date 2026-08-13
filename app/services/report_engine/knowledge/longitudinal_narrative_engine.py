@@ -48,7 +48,7 @@ class LongitudinalNarrativeEngine(BaseKnowledgeEngine):
         builder.add_if_value(
             len(timeline) if timeline else None,
             lambda total: (
-                f"Durante o período analisado foram registrados "
+                f"A jornada assistencial registrada contempla "
                 f"{total} eventos clínicos longitudinais."
             ),
         )
@@ -57,7 +57,7 @@ class LongitudinalNarrativeEngine(BaseKnowledgeEngine):
         
         builder.add_if(
             pts.get("pts_ativo") is not None,
-            "O paciente manteve Plano Terapêutico Singular ativo durante o período analisado."
+            "O paciente possui Plano Terapêutico Singular ativo."
         )
 
         builder.add_if_value(
@@ -73,36 +73,29 @@ class LongitudinalNarrativeEngine(BaseKnowledgeEngine):
 
         builder.paragraph()
         
-        builder.add_if_value(
-            sessions.get("total_sessoes"),
-            lambda total: (
+        if sessions.get("total_sessoes", 0) > 0:
+
+            builder.add(
                 f"A jornada assistencial contempla "
-                f"{total} sessões planejadas."
-            ),
-        )
+                f"{sessions.get('total_sessoes')} sessões planejadas."
+            )
 
-        builder.add_if_value(
-            sessions.get("realizadas"),
-            lambda total: (
-                f"Até o momento, {total} sessões foram realizadas."
-            ),
-        )
+            builder.add(
+                f"Até o momento, "
+                f"{sessions.get('realizadas', 0)} sessões foram realizadas."
+            )
 
-        builder.add_if_value(
-            sessions.get("agendadas"),
-            lambda total: (
-                f"Outras {total} permanecem agendadas."
-            ),
-        )
+            builder.add(
+                f"Outras "
+                f"{sessions.get('agendadas', 0)} permanecem agendadas."
+            )
 
         builder.paragraph()
         
-        builder.add_if_value(
-            len(assessments) if assessments else None,
-            lambda total: (
-                f"Foram realizadas {total} avaliações clínicas durante o acompanhamento."
-            ),
-        )
+        lambda total: (
+            f"A jornada registrada contempla "
+            f"{total} avaliações clínicas."
+        ),
 
         builder.paragraph()
         

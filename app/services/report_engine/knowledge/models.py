@@ -94,4 +94,34 @@ class PTSExecutionModel:
     missed_sessions: int = 0
     cancelled_sessions: int = 0
 
-    execution_rate: float = 0.0
+    execution_rate: Optional[float] = None
+    
+@dataclass
+class AssessmentSummaryModel:
+    """
+    Representa a síntese das avaliações clínicas
+    realizadas durante o acompanhamento.
+    """
+
+    total_assessments: int = 0
+    assessments: list = None
+
+    def __post_init__(self):
+        if self.assessments is None:
+            self.assessments = []
+            
+@dataclass
+class DiagnosisSummaryModel:
+    """
+    Representa a síntese do diagnóstico clínico ativo.
+    """
+
+    has_active_diagnosis: bool = False
+
+    cid: Optional[str] = None
+    clinical_description: Optional[str] = None
+    diagnosis_date: Optional[str] = None
+
+    physician_name: Optional[str] = None
+    physician_specialty: Optional[str] = None
+    physician_registry: Optional[str] = None
