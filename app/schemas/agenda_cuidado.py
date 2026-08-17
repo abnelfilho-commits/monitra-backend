@@ -72,6 +72,9 @@ class AgendaCuidadoResponse(BaseModel):
     profissional_nome: Optional[str] = None
 
     quantidade_sessoes: Optional[int] = None
+    
+    cronograma_confirmado: bool = False
+    sessoes_geradas: int = 0
 
     created_at: datetime
 

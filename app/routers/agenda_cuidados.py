@@ -21,12 +21,25 @@ from app.schemas.agenda_cuidado import (
     AgendaFrequenciaUpdate,
 )
 
+from app.models.sessao_assistencial import SessaoAssistencial
+
 router = APIRouter(
     prefix="/agenda-cuidados",
     tags=["Agenda de Cuidados"]
 )
 
-def montar_response_agenda(item: AgendaCuidado):
+def montar_response_agenda(
+    item: AgendaCuidado,
+    db: Session,
+):
+    sessoes_geradas = (
+        db.query(SessaoAssistencial.id)
+        .filter(
+            SessaoAssistencial.agenda_cuidado_id == item.id
+        )
+        .count()
+    )
+
     return {
         "id": item.id,
         "pts_id": item.pts_id,
@@ -79,6 +92,12 @@ def montar_response_agenda(item: AgendaCuidado):
 
         "quantidade_sessoes":
             item.quantidade_sessoes,
+            
+        "cronograma_confirmado":
+            sessoes_geradas > 0,
+
+        "sessoes_geradas":
+            sessoes_geradas,
 
         "created_at":
             item.created_at,
@@ -99,7 +118,10 @@ def listar_agenda_objetivo(
         .all()
     )
 
-    return [montar_response_agenda(item) for item in agendas]
+    return [
+        montar_response_agenda(item, db)
+        for item in agendas
+    ]
 
 @router.post(
     "/",
@@ -216,7 +238,10 @@ def criar_agenda_cuidado(
     db.commit()
     db.refresh(agenda)
 
-    return montar_response_agenda(agenda)
+    return montar_response_agenda(
+        agenda,
+        db,
+    )
 
 
 @router.put(
@@ -252,7 +277,10 @@ def atualizar_agenda_cuidado(
     db.commit()
     db.refresh(agenda)
 
-    return montar_response_agenda(agenda)
+    return montar_response_agenda(
+        agenda,
+        db,
+    )
     
 
 @router.delete("/{agenda_id}")
