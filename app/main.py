@@ -38,9 +38,11 @@ from app.routers import diagnosticos
 
 from app.routers import whatsapp
 
-app = FastAPI(title="Monitra API")
+app = FastAPI(title="Integra Care API")
 
 origins = [
+    "https://care.meyio.com.br",
+    "https://app.care.meyio.com.br",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:5174",

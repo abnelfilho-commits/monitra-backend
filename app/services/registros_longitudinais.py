@@ -68,20 +68,6 @@ def criar_registro_longitudinal(db: Session, payload):
         origem=payload.origem,
     )
 
-    print("========== PAYLOAD REGISTRO LONGITUDINAL ==========")
-
-    try:
-        print(payload.model_dump())
-    except Exception:
-        if hasattr(payload, "model_dump"):
-            print(payload.model_dump())
-        elif hasattr(payload, "dict"):
-            print(payload.dict())
-        else:
-            print(vars(payload))
-
-    print("===================================================")
-
     db.add(registro)
     db.flush()
 
