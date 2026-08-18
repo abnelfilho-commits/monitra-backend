@@ -4,8 +4,7 @@ from app.models.usuario import Usuario
 from typing import Optional
 
 def assert_clinica_access(usuario: Usuario, resource_clinica_id: Optional[int]):
-    # Admin vê tudo
-    if usuario.perfil == "admin":
+    if str(usuario.perfil).upper() == "ADMIN":
         return
 
     # Usuário comum precisa estar vinculado a uma clínica

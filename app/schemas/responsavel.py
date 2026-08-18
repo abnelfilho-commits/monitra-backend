@@ -7,7 +7,7 @@ class ResponsavelBase(BaseModel):
     nome: str
     email: EmailStr
     telefone: Optional[str] = None
-
+    clinica_id: Optional[int] = None
 
 class ResponsavelCreate(ResponsavelBase):
     senha: str
@@ -16,6 +16,7 @@ class ResponsavelCreate(ResponsavelBase):
 class ResponsavelOut(ResponsavelBase):
     id: int
     ativo: bool
+    clinica_id: Optional[int] = None
     created_at: datetime
 
     class Config:

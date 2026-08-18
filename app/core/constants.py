@@ -1,0 +1,11 @@
+from enum import Enum
+
+
+class StatusSessao(str, Enum):
+    AGENDADA = "AGENDADA"
+    CONFIRMADA = "CONFIRMADA"
+    EM_ANDAMENTO = "EM_ANDAMENTO"
+    REALIZADA = "REALIZADA"
+    FALTOU = "FALTOU"
+    CANCELADA = "CANCELADA"
+    REAGENDADA = "REAGENDADA"

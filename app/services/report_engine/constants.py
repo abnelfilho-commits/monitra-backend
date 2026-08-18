@@ -1,0 +1,54 @@
+"""
+Constantes do Report Engine.
+"""
+
+# ==========================================================
+# REPORT STATUS
+# ==========================================================
+
+REPORT_STATUS_DRAFT = "DRAFT"
+REPORT_STATUS_IN_REVIEW = "IN_REVIEW"
+REPORT_STATUS_ACTIVE = "ACTIVE"
+REPORT_STATUS_DEPRECATED = "DEPRECATED"
+REPORT_STATUS_ARCHIVED = "ARCHIVED"
+
+
+# ==========================================================
+# RENDERERS
+# ==========================================================
+
+RENDERER_PDF = "PDF"
+RENDERER_HTML = "HTML"
+RENDERER_PREVIEW = "PREVIEW"
+
+
+# ==========================================================
+# DOMAINS
+# ==========================================================
+
+DOMAIN_CLINICAL = "CLINICAL"
+DOMAIN_FAMILY = "FAMILY"
+DOMAIN_MANAGEMENT = "MANAGEMENT"
+DOMAIN_OPERATOR = "OPERATOR"
+DOMAIN_GOVERNMENT = "GOVERNMENT"
+
+
+# ==========================================================
+# SECTION CODES
+# ==========================================================
+
+SECTION_IDENTIFICATION = "IDENTIFICATION"
+SECTION_EXECUTIVE_SUMMARY = "EXECUTIVE_SUMMARY"
+SECTION_CURRENT_STATUS = "CURRENT_STATUS"
+SECTION_LONGITUDINAL_NARRATIVE = "LONGITUDINAL_NARRATIVE"
+SECTION_TIMELINE = "TIMELINE"
+SECTION_PROTOCOLS = "PROTOCOLS"
+SECTION_DIAGNOSIS = "DIAGNOSIS"
+SECTION_PTS = "PTS"
+SECTION_SESSIONS = "SESSIONS"
+SECTION_DAILY_RECORDS = "DAILY_RECORDS"
+SECTION_INTERVENTIONS = "INTERVENTIONS"
+SECTION_INDICATORS = "INDICATORS"
+SECTION_CONCLUSION = "CONCLUSION"
+SECTION_RECOMMENDATIONS = "RECOMMENDATIONS"
+SECTION_AUDIT = "AUDIT"

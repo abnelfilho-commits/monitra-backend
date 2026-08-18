@@ -63,22 +63,40 @@ class DenverAdapter(LongitudinalAdapter):
 
         for chave, dominio in dominios.items():
 
+            titulo = (
+                str(chave)
+                .replace("_", " ")
+                .strip()
+                .title()
+            )
+
+            if isinstance(dominio, dict):
+
+                titulo = (
+                    dominio.get("dominio")
+                    or titulo
+                )
+
+                valor = (
+                    f"Passou: {dominio.get('passou', 0)} | "
+                    f"Falhou: {dominio.get('falhou', 0)} | "
+                    f"Recusou: {dominio.get('recusou', 0)} | "
+                    f"Não observado: {dominio.get('nao_observado', 0)}"
+                )
+
+            else:
+
+                valor = str(dominio).strip()
+
+                if valor:
+                    valor = valor[0].upper() + valor[1:]
+
             conteudo.append({
                 "campo": chave,
-                "titulo": dominio.get("dominio"),
+                "titulo": titulo,
                 "tipo": "text",
-                "valor": (
-                    f"Passou: {dominio.get('passou',0)} | "
-                    f"Falhou: {dominio.get('falhou',0)} | "
-                    f"Recusou: {dominio.get('recusou',0)} | "
-                    f"Não observado: {dominio.get('nao_observado',0)}"
-                ),
-                "label": (
-                    f"Passou: {dominio.get('passou',0)} | "
-                    f"Falhou: {dominio.get('falhou',0)} | "
-                    f"Recusou: {dominio.get('recusou',0)} | "
-                    f"Não observado: {dominio.get('nao_observado',0)}"
-                )
+                "valor": valor,
+                "label": valor,
             })
 
         return self.response(

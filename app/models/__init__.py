@@ -27,3 +27,6 @@ from app.models.atividade_terapeutica import (
 from app.models.agenda_cuidado import AgendaCuidado
 
 from app.models.avaliacao_clinica import AvaliacaoClinica
+from app.models.sessao_assistencial import SessaoAssistencial
+
+from app.models.diagnostico import Diagnostico

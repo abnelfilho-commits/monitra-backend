@@ -1,3 +1,5 @@
+from datetime import datetime, time, timezone
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -5,6 +7,28 @@ from sqlalchemy import text
 from app.database import get_db
 
 from app.services.longitudinal.service import longitudinal_service
+
+from app.services.timeline_event_service import (
+    TimelineEventService,
+)
+
+def iso_timestamp_utc(valor):
+    """
+    Normaliza timestamps técnicos da aplicação para UTC explícito.
+
+    Timestamps sem timezone são tratados como UTC, pois foram
+    gerados pelo servidor/banco nesse padrão.
+    """
+    if valor is None:
+        return None
+
+    if not isinstance(valor, datetime):
+        valor = datetime.combine(valor, time.min)
+
+    if valor.tzinfo is None:
+        valor = valor.replace(tzinfo=timezone.utc)
+
+    return valor.astimezone(timezone.utc).isoformat()
 
 router = APIRouter(
     prefix="/timeline",
@@ -82,10 +106,8 @@ def obter_timeline_paciente(
             "id": r.id,
             "paciente_id": r.paciente_id,
             "tipo_evento": "REGISTRO_DIARIO",
-            "data": (
-                r.criado_em.isoformat()
-                if r.criado_em
-                else r.data_registro.isoformat()
+            "data": iso_timestamp_utc(
+                r.criado_em or r.data_registro
             ),
             "descricao": r.observacao,
             "origem": r.origem or "PROFISSIONAL",
@@ -103,11 +125,12 @@ def obter_timeline_paciente(
                 id,
                 paciente_id,
                 data_intervencao,
+                created_at,
                 descricao,
                 profissional_id
             FROM intervencoes
             WHERE paciente_id = :paciente_id
-            ORDER BY data_intervencao DESC, id DESC
+            ORDER BY created_at DESC, id DESC
         """),
         {"paciente_id": paciente_id}
     ).fetchall()
@@ -117,7 +140,14 @@ def obter_timeline_paciente(
             "id": i.id,
             "paciente_id": i.paciente_id,
             "tipo_evento": "INTERVENCAO",
-            "data": i.data_intervencao.isoformat(),
+            "data": iso_timestamp_utc(
+                i.created_at if i.created_at else i.data_intervencao
+            ),
+            "data_intervencao": (
+                i.data_intervencao.isoformat()
+                if i.data_intervencao
+                else None
+            ),
             "descricao": i.descricao,
             "origem": "PROFISSIONAL",
             "usuario_id": i.profissional_id,
@@ -149,7 +179,7 @@ def obter_timeline_paciente(
             "id": a.id,
             "paciente_id": paciente_id,
             "tipo_evento": "AVALIACAO_CLINICA",
-            "data": a.created_at.isoformat(),
+            "data": iso_timestamp_utc(a.created_at),
             "descricao": (
                 f"Aplicação do {a.instrumento}. "
                 f"Score {a.score}. "
@@ -160,6 +190,15 @@ def obter_timeline_paciente(
             "score": a.score,
             "classificacao": a.classificacao,
         })
+
+    eventos_sessoes = (
+        TimelineEventService.obter_eventos_paciente(
+            db=db,
+            paciente_id=paciente_id,
+        )
+    )
+
+    timeline.extend(eventos_sessoes)
 
     timeline = sorted(
         timeline,
