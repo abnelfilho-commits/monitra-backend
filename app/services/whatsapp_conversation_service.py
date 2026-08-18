@@ -76,6 +76,50 @@ def normalizar_telefone(telefone: str) -> str:
     """
     return re.sub(r"\D", "", telefone or "")
 
+def telefones_equivalentes(telefone_a: str, telefone_b: str) -> bool:
+    """
+    Compara telefones considerando:
+    - caracteres de formatação;
+    - presença/ausência do DDI 55;
+    - presença/ausência do 9º dígito em celulares brasileiros.
+    """
+    a = normalizar_telefone(telefone_a)
+    b = normalizar_telefone(telefone_b)
+
+    if not a or not b:
+        return False
+
+    # Comparação direta
+    if a == b:
+        return True
+
+    # Remove DDI brasileiro quando presente
+    local_a = a[2:] if a.startswith("55") else a
+    local_b = b[2:] if b.startswith("55") else b
+
+    # Mesmo número, apenas com diferença de DDI
+    if local_a == local_b:
+        return True
+
+    # Brasil: DDD (2) + 9º dígito + número (8)
+    # x DDD (2) + número (8)
+    if (
+        len(local_a) == 11
+        and local_a[2] == "9"
+        and len(local_b) == 10
+        and local_a[:2] + local_a[3:] == local_b
+    ):
+        return True
+
+    if (
+        len(local_b) == 11
+        and local_b[2] == "9"
+        and len(local_a) == 10
+        and local_b[:2] + local_b[3:] == local_a
+    ):
+        return True
+
+    return False
 
 def buscar_responsavel_por_telefone(
     db: Session,
@@ -100,20 +144,9 @@ def buscar_responsavel_por_telefone(
         if not telefone_banco:
             continue
 
-        # Comparação direta
-        if telefone_banco == telefone_normalizado:
-            return responsavel
-
-        # Compatibilidade caso o banco esteja sem DDI 55
-        if (
-            telefone_normalizado.startswith("55")
-            and telefone_normalizado[2:] == telefone_banco
-        ):
-            return responsavel
-
-        if (
-            telefone_banco.startswith("55")
-            and telefone_banco[2:] == telefone_normalizado
+        if telefones_equivalentes(
+            telefone_banco,
+            telefone_normalizado,
         ):
             return responsavel
 
