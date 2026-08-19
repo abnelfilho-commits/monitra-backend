@@ -78,7 +78,7 @@ def avaliar_regras(registros):
         getattr(ultimo, "seletividade_alimentar", None)
         in (
             "MODERADA",
-            "INTENSA",
+            "GRAVE",
         )
         and getattr(ultimo, "aceitou_alimento_novo", True) is False
     ):

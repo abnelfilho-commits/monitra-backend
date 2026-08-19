@@ -85,16 +85,15 @@ def _score_tempo_tela(valor):
 def _score_seletividade(valor):
     if not valor:
         return 0
-    if valor == "NAO":
+    if valor == "NENHUMA":
         return 0
     if valor == "LEVE":
         return 1
     if valor == "MODERADA":
         return 2
-    if valor == "INTENSA":
+    if valor == "GRAVE":
         return 3
     return 0
-
 
 def _score_aceitou_alimento_novo(valor):
     if valor is None:
@@ -258,7 +257,7 @@ def gerar_resumo_status(registro, risco_atual: str, tendencia: str) -> str:
     if tempo_tela in ("2_4H", "MAIS_4H"):
         sinais.append("tempo de tela elevado")
 
-    if seletividade in ("MODERADA", "INTENSA"):
+    if seletividade in ("MODERADA", "GRAVE"):
         sinais.append("seletividade alimentar relevante")
 
     if aceitou_novo is False:
@@ -284,6 +283,8 @@ def gerar_resumo_status(registro, risco_atual: str, tendencia: str) -> str:
 
 def calcular_painel_clinico(registros):
     registros_recentes = registros[:5]
+    registros_atuais = registros_recentes[:2]
+    registros_historicos = registros_recentes[2:]
 
     if not registros_recentes:
         return {
@@ -292,6 +293,7 @@ def calcular_painel_clinico(registros):
             "crise_sensorial": 0,
             "intestinal": 0,
             "alimentacao": 0,
+            "alimentacao_historico": 0,
             "total_registros": 0,
         }
 
@@ -305,14 +307,36 @@ def calcular_painel_clinico(registros):
             return 0
         return round(sum(valores) / len(valores))
 
+    def avaliar_alimentacao(registros_avaliados):
+        ocorrencias = 0
+
+        for r in registros_avaliados:
+            seletividade = getattr(
+                r,
+                "seletividade_alimentar",
+                None
+            )
+            aceitou_novo = getattr(
+                r,
+                "aceitou_alimento_novo",
+                None
+            )
+
+            if seletividade in ("MODERADA", "GRAVE"):
+                ocorrencias += 1
+
+            if aceitou_novo is False:
+                ocorrencias += 1
+
+        return ocorrencias
+
     intestinal_score = 0
-    alimentacao_score = 0
 
     for r in registros_recentes:
-        bristol = _to_int(getattr(r, "consistencia_fezes", None))
+        bristol = _to_int(
+            getattr(r, "consistencia_fezes", None)
+        )
         evacuacao = getattr(r, "evacuacao", None)
-        seletividade = getattr(r, "seletividade_alimentar", None)
-        aceitou_novo = getattr(r, "aceitou_alimento_novo", None)
 
         if bristol in (1, 2, 6, 7):
             intestinal_score += 1
@@ -320,27 +344,29 @@ def calcular_painel_clinico(registros):
         if evacuacao is False:
             intestinal_score += 1
 
-        if seletividade in ("MODERADA", "INTENSA"):
-            alimentacao_score += 1
-
-        if aceitou_novo is False:
-            alimentacao_score += 1
-
     return {
         "sono": media_valores("sono_qualidade"),
         "irritabilidade": media_valores("irritabilidade"),
         "crise_sensorial": media_valores("crise_sensorial"),
         "intestinal": intestinal_score,
-        "alimentacao": alimentacao_score,
+        "alimentacao": avaliar_alimentacao(registros_atuais),
+        "alimentacao_historico": avaliar_alimentacao(
+            registros_historicos
+        ),
         "total_registros": len(registros_recentes),
     }
-
 
 def gerar_resumo_clinico_painel(painel):
     if not painel or painel.get("total_registros", 0) == 0:
         return "Ainda não há dados clínicos suficientes para gerar análise."
 
     sinais = []
+
+    alimentacao_atual = painel.get("alimentacao", 0)
+    alimentacao_historico = painel.get(
+        "alimentacao_historico",
+        0
+    )
 
     if painel.get("sono", 0) > 0 and painel["sono"] <= 2:
         sinais.append("sono de baixa qualidade")
@@ -354,11 +380,27 @@ def gerar_resumo_clinico_painel(painel):
     if painel.get("intestinal", 0) >= 2:
         sinais.append("alterações intestinais recorrentes")
 
-    if painel.get("alimentacao", 0) >= 2:
-        sinais.append("seletividade alimentar relevante")
+    if alimentacao_atual >= 2:
+        sinais.append(
+            "seletividade alimentar relevante nos registros mais recentes"
+        )
+
+    if (
+        alimentacao_atual == 0
+        and alimentacao_historico > 0
+        and not sinais
+    ):
+        return (
+            "Os registros mais recentes sugerem estabilidade clínica, "
+            "com parâmetros alimentares atualmente satisfatórios e "
+            "melhora em relação ao histórico recente."
+        )
 
     if not sinais:
-        return "Os registros recentes sugerem estabilidade clínica relativa, sem sinais críticos predominantes."
+        return (
+            "Os registros recentes sugerem estabilidade clínica relativa, "
+            "sem sinais críticos predominantes."
+        )
 
     return (
         "Nos registros recentes, observa-se "
