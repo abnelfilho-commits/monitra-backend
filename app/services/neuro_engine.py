@@ -134,14 +134,11 @@ def obter_registros_neuro_paciente(db: Session, paciente_id: int):
             MAX(CASE WHEN cf.nome_campo = 'sono_qualidade'
                 THEN rr.valor_numero END) AS sono_qualidade,
 
-            COALESCE(
-                BOOL_OR(
-                    CASE
-                        WHEN cf.nome_campo = 'evacuacao'
-                        THEN rr.valor_booleano
-                    END
-                ),
-                false
+            BOOL_OR(
+                CASE
+                    WHEN cf.nome_campo = 'evacuacao'
+                    THEN rr.valor_booleano
+                END
             ) AS evacuacao,
 
             MAX(CASE WHEN cf.nome_campo = 'consistencia_fezes'
@@ -159,14 +156,11 @@ def obter_registros_neuro_paciente(db: Session, paciente_id: int):
             MAX(CASE WHEN cf.nome_campo = 'seletividade_alimentar'
                 THEN rr.valor_texto END) AS seletividade_alimentar,
 
-            COALESCE(
-                BOOL_OR(
-                    CASE
-                        WHEN cf.nome_campo = 'aceitou_alimento_novo'
-                        THEN rr.valor_booleano
-                    END
-                ),
-                false
+            BOOL_OR(
+                CASE
+                    WHEN cf.nome_campo = 'aceitou_alimento_novo'
+                    THEN rr.valor_booleano
+                END
             ) AS aceitou_alimento_novo,
 
             MAX(CASE WHEN cf.nome_campo = 'observacao'
@@ -294,6 +288,8 @@ def calcular_painel_clinico(registros):
             "intestinal": 0,
             "alimentacao": 0,
             "alimentacao_historico": 0,
+            "intestinal_sem_evacuacao": 0,
+            "intestinal_consistencia_alterada": 0,
             "total_registros": 0,
         }
 
@@ -337,6 +333,8 @@ def calcular_painel_clinico(registros):
         return ocorrencias
 
     intestinal_score = 0
+    intestinal_sem_evacuacao = 0
+    intestinal_consistencia_alterada = 0
 
     for r in registros_recentes:
         bristol = _to_int(
@@ -346,15 +344,19 @@ def calcular_painel_clinico(registros):
 
         if bristol in (1, 2, 6, 7):
             intestinal_score += 1
+            intestinal_consistencia_alterada += 1
 
         if evacuacao is False:
             intestinal_score += 1
+            intestinal_sem_evacuacao += 1
 
     return {
         "sono": media_valores("sono_qualidade"),
         "irritabilidade": valor_atual("irritabilidade"),
         "crise_sensorial": valor_atual("crise_sensorial"),
         "intestinal": intestinal_score,
+        "intestinal_sem_evacuacao": intestinal_sem_evacuacao,
+        "intestinal_consistencia_alterada": intestinal_consistencia_alterada,
         "alimentacao": avaliar_alimentacao(registros_atuais),
         "alimentacao_historico": avaliar_alimentacao(
             registros_historicos
@@ -388,7 +390,24 @@ def gerar_resumo_clinico_painel(painel):
         )
 
     if painel.get("intestinal", 0) >= 2:
-        sinais.append("alterações intestinais recorrentes")
+        sem_evacuacao = painel.get("intestinal_sem_evacuacao", 0)
+        consistencia_alterada = painel.get(
+            "intestinal_consistencia_alterada",
+            0
+        )
+
+        if sem_evacuacao >= 2:
+            sinais.append(
+                "ausência de evacuação em múltiplos registros"
+            )
+        elif consistencia_alterada >= 2:
+            sinais.append(
+                "alteração recorrente da consistência das fezes"
+            )
+        else:
+            sinais.append(
+                "alterações intestinais recorrentes"
+            )
 
     if alimentacao_atual >= 2:
         sinais.append(
