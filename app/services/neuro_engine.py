@@ -307,6 +307,12 @@ def calcular_painel_clinico(registros):
             return 0
         return round(sum(valores) / len(valores))
 
+    def valor_atual(campo):
+        valor = _to_int(
+            getattr(registros_recentes[0], campo, None)
+        )
+        return 0 if valor is None else valor
+
     def avaliar_alimentacao(registros_avaliados):
         ocorrencias = 0
 
@@ -346,8 +352,8 @@ def calcular_painel_clinico(registros):
 
     return {
         "sono": media_valores("sono_qualidade"),
-        "irritabilidade": media_valores("irritabilidade"),
-        "crise_sensorial": media_valores("crise_sensorial"),
+        "irritabilidade": valor_atual("irritabilidade"),
+        "crise_sensorial": valor_atual("crise_sensorial"),
         "intestinal": intestinal_score,
         "alimentacao": avaliar_alimentacao(registros_atuais),
         "alimentacao_historico": avaliar_alimentacao(
@@ -372,10 +378,14 @@ def gerar_resumo_clinico_painel(painel):
         sinais.append("sono de baixa qualidade")
 
     if painel.get("irritabilidade", 0) >= 3:
-        sinais.append("irritabilidade elevada")
+        sinais.append(
+            "irritabilidade elevada no registro mais recente"
+        )
 
     if painel.get("crise_sensorial", 0) >= 2:
-        sinais.append("crises sensoriais recorrentes")
+        sinais.append(
+            "crise sensorial moderada ou elevada no registro mais recente"
+        )
 
     if painel.get("intestinal", 0) >= 2:
         sinais.append("alterações intestinais recorrentes")
@@ -507,7 +517,7 @@ def analisar_paciente(db: Session, paciente_id: int):
         "interpretacao": regras["interpretacao"],
 
         "eixo_dominante": regras.get("eixo_dominante"),
-        
+
         "painel_clinico": painel_clinico,
 
         "resumo_clinico": resumo_clinico,
