@@ -85,16 +85,15 @@ def _score_tempo_tela(valor):
 def _score_seletividade(valor):
     if not valor:
         return 0
-    if valor == "NAO":
+    if valor == "NENHUMA":
         return 0
     if valor == "LEVE":
         return 1
     if valor == "MODERADA":
         return 2
-    if valor == "INTENSA":
+    if valor == "GRAVE":
         return 3
     return 0
-
 
 def _score_aceitou_alimento_novo(valor):
     if valor is None:
@@ -135,14 +134,11 @@ def obter_registros_neuro_paciente(db: Session, paciente_id: int):
             MAX(CASE WHEN cf.nome_campo = 'sono_qualidade'
                 THEN rr.valor_numero END) AS sono_qualidade,
 
-            COALESCE(
-                BOOL_OR(
-                    CASE
-                        WHEN cf.nome_campo = 'evacuacao'
-                        THEN rr.valor_booleano
-                    END
-                ),
-                false
+            BOOL_OR(
+                CASE
+                    WHEN cf.nome_campo = 'evacuacao'
+                    THEN rr.valor_booleano
+                END
             ) AS evacuacao,
 
             MAX(CASE WHEN cf.nome_campo = 'consistencia_fezes'
@@ -160,14 +156,11 @@ def obter_registros_neuro_paciente(db: Session, paciente_id: int):
             MAX(CASE WHEN cf.nome_campo = 'seletividade_alimentar'
                 THEN rr.valor_texto END) AS seletividade_alimentar,
 
-            COALESCE(
-                BOOL_OR(
-                    CASE
-                        WHEN cf.nome_campo = 'aceitou_alimento_novo'
-                        THEN rr.valor_booleano
-                    END
-                ),
-                false
+            BOOL_OR(
+                CASE
+                    WHEN cf.nome_campo = 'aceitou_alimento_novo'
+                    THEN rr.valor_booleano
+                END
             ) AS aceitou_alimento_novo,
 
             MAX(CASE WHEN cf.nome_campo = 'observacao'
@@ -258,7 +251,7 @@ def gerar_resumo_status(registro, risco_atual: str, tendencia: str) -> str:
     if tempo_tela in ("2_4H", "MAIS_4H"):
         sinais.append("tempo de tela elevado")
 
-    if seletividade in ("MODERADA", "INTENSA"):
+    if seletividade in ("MODERADA", "GRAVE"):
         sinais.append("seletividade alimentar relevante")
 
     if aceitou_novo is False:
@@ -284,6 +277,8 @@ def gerar_resumo_status(registro, risco_atual: str, tendencia: str) -> str:
 
 def calcular_painel_clinico(registros):
     registros_recentes = registros[:5]
+    registros_atuais = registros_recentes[:2]
+    registros_historicos = registros_recentes[2:]
 
     if not registros_recentes:
         return {
@@ -292,6 +287,9 @@ def calcular_painel_clinico(registros):
             "crise_sensorial": 0,
             "intestinal": 0,
             "alimentacao": 0,
+            "alimentacao_historico": 0,
+            "intestinal_sem_evacuacao": 0,
+            "intestinal_consistencia_alterada": 0,
             "total_registros": 0,
         }
 
@@ -305,36 +303,66 @@ def calcular_painel_clinico(registros):
             return 0
         return round(sum(valores) / len(valores))
 
+    def valor_atual(campo):
+        valor = _to_int(
+            getattr(registros_recentes[0], campo, None)
+        )
+        return 0 if valor is None else valor
+
+    def avaliar_alimentacao(registros_avaliados):
+        ocorrencias = 0
+
+        for r in registros_avaliados:
+            seletividade = getattr(
+                r,
+                "seletividade_alimentar",
+                None
+            )
+            aceitou_novo = getattr(
+                r,
+                "aceitou_alimento_novo",
+                None
+            )
+
+            if seletividade in ("MODERADA", "GRAVE"):
+                ocorrencias += 1
+
+            if aceitou_novo is False:
+                ocorrencias += 1
+
+        return ocorrencias
+
     intestinal_score = 0
-    alimentacao_score = 0
+    intestinal_sem_evacuacao = 0
+    intestinal_consistencia_alterada = 0
 
     for r in registros_recentes:
-        bristol = _to_int(getattr(r, "consistencia_fezes", None))
+        bristol = _to_int(
+            getattr(r, "consistencia_fezes", None)
+        )
         evacuacao = getattr(r, "evacuacao", None)
-        seletividade = getattr(r, "seletividade_alimentar", None)
-        aceitou_novo = getattr(r, "aceitou_alimento_novo", None)
 
         if bristol in (1, 2, 6, 7):
             intestinal_score += 1
+            intestinal_consistencia_alterada += 1
 
         if evacuacao is False:
             intestinal_score += 1
-
-        if seletividade in ("MODERADA", "INTENSA"):
-            alimentacao_score += 1
-
-        if aceitou_novo is False:
-            alimentacao_score += 1
+            intestinal_sem_evacuacao += 1
 
     return {
         "sono": media_valores("sono_qualidade"),
-        "irritabilidade": media_valores("irritabilidade"),
-        "crise_sensorial": media_valores("crise_sensorial"),
+        "irritabilidade": valor_atual("irritabilidade"),
+        "crise_sensorial": valor_atual("crise_sensorial"),
         "intestinal": intestinal_score,
-        "alimentacao": alimentacao_score,
+        "intestinal_sem_evacuacao": intestinal_sem_evacuacao,
+        "intestinal_consistencia_alterada": intestinal_consistencia_alterada,
+        "alimentacao": avaliar_alimentacao(registros_atuais),
+        "alimentacao_historico": avaliar_alimentacao(
+            registros_historicos
+        ),
         "total_registros": len(registros_recentes),
     }
-
 
 def gerar_resumo_clinico_painel(painel):
     if not painel or painel.get("total_registros", 0) == 0:
@@ -342,23 +370,66 @@ def gerar_resumo_clinico_painel(painel):
 
     sinais = []
 
+    alimentacao_atual = painel.get("alimentacao", 0)
+    alimentacao_historico = painel.get(
+        "alimentacao_historico",
+        0
+    )
+
     if painel.get("sono", 0) > 0 and painel["sono"] <= 2:
         sinais.append("sono de baixa qualidade")
 
     if painel.get("irritabilidade", 0) >= 3:
-        sinais.append("irritabilidade elevada")
+        sinais.append(
+            "irritabilidade elevada no registro mais recente"
+        )
 
     if painel.get("crise_sensorial", 0) >= 2:
-        sinais.append("crises sensoriais recorrentes")
+        sinais.append(
+            "crise sensorial moderada ou elevada no registro mais recente"
+        )
 
     if painel.get("intestinal", 0) >= 2:
-        sinais.append("alterações intestinais recorrentes")
+        sem_evacuacao = painel.get("intestinal_sem_evacuacao", 0)
+        consistencia_alterada = painel.get(
+            "intestinal_consistencia_alterada",
+            0
+        )
 
-    if painel.get("alimentacao", 0) >= 2:
-        sinais.append("seletividade alimentar relevante")
+        if sem_evacuacao >= 2:
+            sinais.append(
+                "ausência de evacuação em múltiplos registros"
+            )
+        elif consistencia_alterada >= 2:
+            sinais.append(
+                "alteração recorrente da consistência das fezes"
+            )
+        else:
+            sinais.append(
+                "alterações intestinais recorrentes"
+            )
+
+    if alimentacao_atual >= 2:
+        sinais.append(
+            "seletividade alimentar relevante nos registros mais recentes"
+        )
+
+    if (
+        alimentacao_atual == 0
+        and alimentacao_historico > 0
+        and not sinais
+    ):
+        return (
+            "Os registros mais recentes sugerem estabilidade clínica, "
+            "com parâmetros alimentares atualmente satisfatórios e "
+            "melhora em relação ao histórico recente."
+        )
 
     if not sinais:
-        return "Os registros recentes sugerem estabilidade clínica relativa, sem sinais críticos predominantes."
+        return (
+            "Os registros recentes sugerem estabilidade clínica relativa, "
+            "sem sinais críticos predominantes."
+        )
 
     return (
         "Nos registros recentes, observa-se "
@@ -465,7 +536,7 @@ def analisar_paciente(db: Session, paciente_id: int):
         "interpretacao": regras["interpretacao"],
 
         "eixo_dominante": regras.get("eixo_dominante"),
-        
+
         "painel_clinico": painel_clinico,
 
         "resumo_clinico": resumo_clinico,
