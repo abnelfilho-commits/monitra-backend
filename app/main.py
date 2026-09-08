@@ -11,6 +11,7 @@ from app.routers import cardiometabolico
 from app.routers import registros_longitudinais
 from app.routers import responsavel_cardio
 from app.routers.analytics import router as analytics_router
+from app.routers.cockpit import router as cockpit_router
 from app.routers.usuarios import router as usuarios_router
 from app.routers.pacientes import router as pacientes_router
 from app.routers.clinicas import router as clinicas_router
@@ -73,6 +74,7 @@ async def integrity_error_handler(request: Request, exc: IntegrityError):
     )
 
 app.include_router(analytics_router)
+app.include_router(cockpit_router)
 app.include_router(usuarios_router)
 app.include_router(pacientes_router)
 app.include_router(clinicas_router)
