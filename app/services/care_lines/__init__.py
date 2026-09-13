@@ -1,4 +1,4 @@
-from .context import CareContext
+from .context import CareContext, CareOrigin
 from .definitions import CareLineCapabilityStatus, CareLineDefinition
 from .exceptions import (
     AmbiguousCareLine,
@@ -15,6 +15,7 @@ __all__ = [
     "AmbiguousCareLine",
     "CARDIO",
     "CareContext",
+    "CareOrigin",
     "CareLineCapabilityNotSupported",
     "CareLineCapabilityStatus",
     "CareLineDefinition",

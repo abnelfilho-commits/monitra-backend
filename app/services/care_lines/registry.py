@@ -50,34 +50,38 @@ CARDIO = CareLineDefinition(
 
 class CareLineRegistry:
     def __init__(self, definitions: Optional[Iterable[CareLineDefinition]] = None):
-        items = tuple(definitions or (NEURO, CARDIO))
-        self._by_code: Dict[str, CareLineDefinition] = {
-            item.code.upper(): item for item in items
-        }
-        self._by_slug: Dict[str, CareLineDefinition] = {
-            item.slug.lower(): item for item in items
-        }
-        self._by_module_id: Dict[int, CareLineDefinition] = {
-            item.module_id: item for item in items
-        }
+        items = tuple((NEURO, CARDIO) if definitions is None else definitions)
+        self._by_alias: Dict[str, CareLineDefinition] = {}
+        self._by_module_id: Dict[int, CareLineDefinition] = {}
+        for item in items:
+            aliases = {item.code.strip().casefold(), item.slug.strip().casefold()}
+            if item.module_id in self._by_module_id:
+                raise ValueError("Duplicate care line module_id.")
+            if any(alias in self._by_alias or alias.isdecimal() for alias in aliases):
+                raise ValueError("Duplicate or numeric care line alias.")
+            self._by_module_id[item.module_id] = item
+            for alias in aliases:
+                self._by_alias[alias] = item
 
     def all(self) -> Iterable[CareLineDefinition]:
-        return tuple(self._by_code.values())
+        return tuple(self._by_module_id.values())
 
     def get(self, identifier: Union[str, int]) -> Optional[CareLineDefinition]:
-        if isinstance(identifier, int):
+        if type(identifier) is int:
             return self._by_module_id.get(identifier)
 
-        value = str(identifier).strip()
+        if not isinstance(identifier, str):
+            return None
+        value = identifier.strip()
         if not value:
             return None
 
-        if value.isdigit():
+        if value.isdecimal():
             by_id = self._by_module_id.get(int(value))
             if by_id is not None:
                 return by_id
 
-        return self._by_code.get(value.upper()) or self._by_slug.get(value.lower())
+        return self._by_alias.get(value.casefold())
 
 
 care_line_registry = CareLineRegistry()

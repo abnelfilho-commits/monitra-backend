@@ -39,14 +39,17 @@ class CareLineResolver:
         candidates = self._patient_candidates(db, patient_id)
         candidates = [item for item in candidates if item.active]
 
-        if required_capability:
+        if not candidates:
+            raise PatientCareLineNotFound("Paciente não possui linha de cuidado ativa.")
+
+        if required_capability is not None:
             candidates = [
                 item for item in candidates if item.supports(required_capability)
             ]
 
         if not candidates:
-            raise PatientCareLineNotFound(
-                "Paciente não possui linha de cuidado ativa compatível com a operação."
+            raise CareLineCapabilityNotSupported(
+                "Nenhuma linha de cuidado ativa possui a capacidade solicitada."
             )
 
         if len(candidates) > 1:
@@ -64,7 +67,7 @@ class CareLineResolver:
         if not care_line.active:
             raise CareLineInactive("Linha de cuidado está inativa na aplicação.")
 
-        if required_capability and not care_line.supports(required_capability):
+        if required_capability is not None and not care_line.supports(required_capability):
             raise CareLineCapabilityNotSupported(
                 "Linha de cuidado não possui a capacidade ativa para esta operação."
             )
@@ -104,6 +107,7 @@ class CareLineResolver:
                 PacienteModulo.ativo.is_(True),
                 ModuloClinico.ativo.is_(True),
             )
+            .distinct()
             .all()
         )
 
