@@ -108,8 +108,13 @@ class ResolverTests(unittest.TestCase):
             self.resolver.resolve(self.db, 10, 'unknown')
 
     def test_capabilities(self):
+        # Keep the Wave 1 PLANNED fixture deterministic as real capabilities evolve.
+        planned_cardio = replace(CARDIO, capabilities={
+            **CARDIO.capabilities, 'clinical_reading': Status.PLANNED,
+        })
+        self.resolver = CareLineResolver(CareLineRegistry([NEURO, planned_cardio]))
         self.link(2)
-        self.assertIs(self.resolver.resolve(self.db, 10, 'CARDIO', 'daily_record'), CARDIO)
+        self.assertIs(self.resolver.resolve(self.db, 10, 'CARDIO', 'daily_record'), planned_cardio)
         for requested in (None, 'CARDIO'):
             for capability in ('clinical_reading', 'unknown', ''):
                 with self.subTest(requested=requested, capability=capability):
