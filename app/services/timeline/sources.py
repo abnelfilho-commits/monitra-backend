@@ -72,16 +72,16 @@ def daily_records(db, patient_id, registry):
 
 def generic_interventions(db, patient_id, registry):
     result = []
-    for r in rows(db, '''SELECT id, profissional_id, tipo, descricao, data_intervencao, created_at
+    for r in rows(db, '''SELECT id, modulo_id, profissional_id, tipo, descricao, data_intervencao, created_at
                         FROM intervencoes WHERE paciente_id=:patient_id''', patient_id):
         occurrence = as_datetime(r['data_intervencao'])
-        result.append(TimelineEvent(S.GENERIC_INTERVENTION, r['id'], patient_id, None,
-            A.UNASSIGNED, E.INTERVENTION, 'Intervenção',
+        result.append(TimelineEvent(S.GENERIC_INTERVENTION, r['id'], patient_id, registry.get(r['modulo_id']),
+            A.EXPLICIT if r['modulo_id'] is not None else A.UNASSIGNED, E.INTERVENTION, 'Intervenção',
             reference_date=occurrence.date() if occurrence else None,
             reference_time=occurrence.timetz() if occurrence else None,
             temporal_precision=P.DATETIME if occurrence else None,
             created_at=as_datetime(r['created_at']), summary=r['descricao'],
-            actor=actor('usuarios', r['profissional_id']), metadata={'type': r['tipo']}))
+            actor=actor('usuarios', r['profissional_id']), metadata={'type': r['tipo'], 'module_id': r['modulo_id']}))
     return result
 
 

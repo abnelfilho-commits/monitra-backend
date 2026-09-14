@@ -99,7 +99,7 @@ class SourceTests(unittest.TestCase):
             'registros_longitudinais':'id INTEGER, paciente_id INTEGER, modulo_id INTEGER, formulario_id INTEGER, data_registro TEXT, criado_em TEXT, origem TEXT, criado_por_usuario_id INTEGER, criado_por_responsavel_id INTEGER',
             'campos_formulario':'id INTEGER, formulario_id INTEGER, nome_campo TEXT',
             'respostas_registro':'registro_id INTEGER, campo_id INTEGER, valor_texto TEXT, valor_numero NUMERIC, valor_booleano BOOLEAN, valor_data TEXT, valor_hora TEXT, valor_json TEXT',
-            'intervencoes':'id INTEGER, paciente_id INTEGER, profissional_id INTEGER, tipo TEXT, descricao TEXT, data_intervencao TEXT, created_at TEXT',
+            'intervencoes':'id INTEGER, modulo_id INTEGER, paciente_id INTEGER, profissional_id INTEGER, tipo TEXT, descricao TEXT, data_intervencao TEXT, created_at TEXT',
             'intervencoes_cardiometabolicas':'id INTEGER, paciente_id INTEGER, profissional_id INTEGER, tipo TEXT, descricao TEXT, prioridade TEXT, created_at TEXT',
             'avaliacoes_clinicas':'id INTEGER, paciente_id INTEGER, modulo_id INTEGER, registro_id INTEGER, instrumento TEXT, score NUMERIC, classificacao TEXT, interpretacao TEXT, profissional_id INTEGER, status TEXT, executado_em TEXT, created_at TEXT',
             'pts':'id INTEGER, modulo_id INTEGER, paciente_id INTEGER',
@@ -170,6 +170,26 @@ class SourceTests(unittest.TestCase):
         self.assertTrue(all(e.care_line==CARDIO for e in result))
         with self.assertRaises(CareLineNotFound):
             TimelineService.get_events(self.db,TimelineQuery(10,scope='CARE_LINE',requested_care_line='missing'))
+
+    def test_explicit_generic_module_and_unknown_identity(self):
+        self.insert('intervencoes',id=2,paciente_id=10,modulo_id=1,tipo='authored',
+                    descricao='new',data_intervencao='2026-01-10T13:45:00')
+        self.insert('intervencoes',id=3,paciente_id=10,modulo_id=999,tipo='authored',
+                    descricao='unknown',data_intervencao='2026-01-10T13:45:00')
+        patient=TimelineService.get_events(self.db,TimelineQuery(10))
+        generic=[e for e in patient if e.source_type==SourceType.GENERIC_INTERVENTION]
+        self.assertEqual(len(generic),3)
+        known=next(e for e in generic if e.source_id==2)
+        self.assertEqual(known.care_line,NEURO)
+        self.assertEqual(known.care_line_association,CareLineAssociation.EXPLICIT)
+        self.assertEqual(known.reference_date.isoformat(),'2026-01-10')
+        self.assertEqual(known.reference_time.isoformat(),'13:45:00')
+        unknown=next(e for e in generic if e.source_id==3)
+        self.assertIsNone(unknown.care_line)
+        self.assertEqual(unknown.care_line_association,CareLineAssociation.EXPLICIT)
+        self.assertEqual(unknown.metadata['module_id'],999)
+        scoped=TimelineService.get_events(self.db,TimelineQuery(10,scope='CARE_LINE',requested_care_line='NEURO'))
+        self.assertEqual([e.source_id for e in scoped if e.source_type==SourceType.GENERIC_INTERVENTION],[2])
 
     def test_bounded_is_global_prefix(self):
         full = TimelineService.get_events(self.db,TimelineQuery(10))

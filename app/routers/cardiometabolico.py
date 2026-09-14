@@ -3,6 +3,9 @@ from app.services.daily_record import ActorRef, ActorType, DailyRecordSubmission
 from app.services.daily_record.adapters import call_write
 from app.services.daily_record.providers.cardio import NUMERIC, TEXT
 from app.services.care_lines import CareOrigin
+from app.services.interventions import InterventionService, InterventionSubmission
+from app.services.interventions.models import SourceType
+from app.services.interventions.http import call as intervention_call, cardio_response
 
 
 from datetime import datetime
@@ -30,6 +33,9 @@ router = APIRouter(
     prefix="/cardiometabolico",
     tags=["Cardiometabólico"]
 )
+
+intervention_service = InterventionService()
+
 
 @router.get("/pacientes/{paciente_id}")
 def obter_paciente_cardiometabolico(
@@ -1409,69 +1415,15 @@ def mapa_risco_cardiometabolico(
     ) 
 
 @router.post("/pacientes/{paciente_id}/intervencoes")
-def criar_intervencao(
-    paciente_id: int,
-    payload: IntervencaoCreate,
-    db: Session = Depends(get_db)
-):
-    db.execute(
-        text("""
-            INSERT INTO intervencoes_cardiometabolicas (
-                paciente_id,
-                tipo,
-                descricao,
-                prioridade
-            )
-            VALUES (
-                :paciente_id,
-                :tipo,
-                :descricao,
-                :prioridade
-            )
-        """),
-        {
-            "paciente_id": paciente_id,
-            "tipo": payload.tipo,
-            "descricao": payload.descricao,
-            "prioridade": payload.prioridade,
-        }
-    )
+def criar_intervencao(paciente_id: int, payload: IntervencaoCreate,
+                     db: Session = Depends(get_db), usuario=Depends(get_usuario_atual)):
+    intervention_call(lambda: intervention_service.create(db, InterventionSubmission(
+        paciente_id, 'CARDIO', ActorRef(ActorType.PROFESSIONAL, usuario.id),
+        payload.tipo, payload.descricao, payload={'priority': payload.prioridade}), user=usuario))
+    return {"success": True}
 
-    db.commit()
 
-    return {
-        "success": True
-    }
-    
 @router.get("/pacientes/{paciente_id}/intervencoes")
-def listar_intervencoes(
-    paciente_id: int,
-    db: Session = Depends(get_db)
-):
-    rows = db.execute(
-        text("""
-            SELECT
-                id,
-                tipo,
-                descricao,
-                prioridade,
-                created_at
-            FROM intervencoes_cardiometabolicas
-            WHERE paciente_id = :paciente_id
-            ORDER BY created_at DESC
-        """),
-        {
-            "paciente_id": paciente_id
-        }
-    ).fetchall()
-
-    return [
-        {
-            "id": r.id,
-            "tipo": r.tipo,
-            "descricao": r.descricao,
-            "prioridade": r.prioridade,
-            "created_at": r.created_at.isoformat(),
-        }
-        for r in rows
-    ]
+def listar_intervencoes(paciente_id: int, db: Session = Depends(get_db), usuario=Depends(get_usuario_atual)):
+    return [cardio_response(r) for r in intervention_call(lambda: intervention_service.list_for_patient(
+        db, paciente_id, user=usuario, source_type=SourceType.CARDIO_INTERVENTION))]
