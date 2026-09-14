@@ -59,7 +59,8 @@ def preencher_resposta(resposta: RespostaRegistro, valor):
         resposta.valor_json = valor
 
 
-def criar_registro_longitudinal(db: Session, payload):
+def persistir_registro_longitudinal(db: Session, payload):
+    """Insert without committing; caller owns transaction completion."""
     registro = RegistroLongitudinal(
         paciente_id=payload.paciente_id,
         modulo_id=payload.modulo_id,
@@ -79,9 +80,12 @@ def criar_registro_longitudinal(db: Session, payload):
 
         preencher_resposta(resposta, item.valor)
         db.add(resposta)
-        
-        print("RESPOSTA:", item.campo_id, item.valor)
-        
+
+    return registro
+
+
+def criar_registro_longitudinal(db: Session, payload):
+    registro = persistir_registro_longitudinal(db, payload)
     db.commit()
     db.refresh(registro)
 

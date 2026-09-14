@@ -1,3 +1,8 @@
+from app.services.daily_record import ActorRef, ActorType, DailyRecordSubmission
+from app.services.daily_record.adapters import call_write
+from app.services.daily_record.providers.neuro import FIELDS
+from app.services.care_lines import CareOrigin
+from app.models.modular import RegistroLongitudinal
 from datetime import date, timedelta
 from types import SimpleNamespace
 
@@ -215,41 +220,13 @@ def criar_registro_meu_paciente(
             detail="A data do registro deve ser hoje ou ontem."
         )
 
-    existente = db.execute(text("""
-        SELECT id
-        FROM registros_longitudinais
-        WHERE paciente_id = :paciente_id
-          AND modulo_id = :modulo_id
-          AND formulario_id = :formulario_id
-          AND data_registro = :data_registro
-          AND origem = 'RESPONSAVEL'
-        LIMIT 1
-    """), {
-        "paciente_id": paciente_id,
-        "modulo_id": MODULO_NEURO_ID,
-        "formulario_id": FORMULARIO_REGISTRO_NEURO_ID,
-        "data_registro": payload.data,
-    }).fetchone()
-
-    if existente:
-        raise HTTPException(
-            status_code=400,
-            detail="Você já enviou um registro para esta data."
-        )
-
-    payload_longitudinal = SimpleNamespace(
-        paciente_id=paciente_id,
-        modulo_id=MODULO_NEURO_ID,
-        formulario_id=FORMULARIO_REGISTRO_NEURO_ID,
-        data_registro=payload.data,
-        origem="RESPONSAVEL",
-        respostas=montar_respostas(payload),
+    submission = DailyRecordSubmission(
+        paciente_id, 'NEURO', payload.data, CareOrigin.RESPONSAVEL_APP,
+        ActorRef(ActorType.RESPONSIBLE, responsavel.id),
+        {name: getattr(payload, name) for name in FIELDS},
     )
-
-    registro = criar_registro_longitudinal(
-        db=db,
-        payload=payload_longitudinal,
-    )
+    result = call_write(db, submission)
+    registro = db.query(RegistroLongitudinal).filter(RegistroLongitudinal.id == result.record_id).one()
 
     respostas = extrair_respostas_registro(db, registro.id)
 

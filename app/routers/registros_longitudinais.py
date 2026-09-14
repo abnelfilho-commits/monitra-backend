@@ -1,3 +1,5 @@
+from app.services.daily_record.adapters import is_daily, write_legacy_longitudinal
+from app.models.modular import RegistroLongitudinal
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -24,6 +26,9 @@ def criar_registro(
     payload: RegistroLongitudinalCreate,
     db: Session = Depends(get_db),
 ):
+    if is_daily(db, payload.formulario_id):
+        result = write_legacy_longitudinal(db, payload)
+        return {"id": result.record_id, "status": "ok"}
     registro = criar_registro_longitudinal(db, payload)
 
     return {
@@ -46,4 +51,8 @@ def atualizar_registro(
     payload: RegistroLongitudinalUpdate,
     db: Session = Depends(get_db),
 ):
+    existing = db.query(RegistroLongitudinal).filter(RegistroLongitudinal.id == registro_id).first()
+    if is_daily(db, payload.formulario_id) or (existing and is_daily(db, existing.formulario_id)):
+        write_legacy_longitudinal(db, payload, registro_id)
+        return obter_registro_longitudinal(db, registro_id)
     return atualizar_registro_longitudinal(db, registro_id, payload)
