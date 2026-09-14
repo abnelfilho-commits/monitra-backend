@@ -1,32 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-
 from app.database import get_db
-
+from app.core.deps import get_usuario_atual
 from app.models.agenda_cuidado import AgendaCuidado
-from app.models.pts import PTS, PTSObjetivo
-
-from app.models.atividade_terapeutica import (
-    AtividadeTerapeutica,
-    OcupacaoProfissional,
-)
-
-from app.models.paciente import Paciente
-from app.models.profissional import Profissional
-
-from app.schemas.agenda_cuidado import (
-    AgendaCuidadoCreate,
-    AgendaCuidadoUpdate,
-    AgendaCuidadoResponse,
-    AgendaFrequenciaUpdate,
-)
-
 from app.models.sessao_assistencial import SessaoAssistencial
+from app.schemas.agenda_cuidado import (AgendaCuidadoCreate, AgendaCuidadoUpdate,
+    AgendaCuidadoResponse, AgendaFrequenciaUpdate)
+from app.services.care_plan_service import CarePlanService, call
 
-router = APIRouter(
-    prefix="/agenda-cuidados",
-    tags=["Agenda de Cuidados"]
-)
+router = APIRouter(prefix="/agenda-cuidados", tags=["Agenda de Cuidados"])
+service = CarePlanService()
 
 def montar_response_agenda(
     item: AgendaCuidado,
@@ -103,245 +86,32 @@ def montar_response_agenda(
             item.created_at,
     }
 
-@router.get(
-    "/objetivo/{objetivo_id}",
-    response_model=list[AgendaCuidadoResponse]
-)
-def listar_agenda_objetivo(
-    objetivo_id: int,
-    db: Session = Depends(get_db)
-):
-    agendas = (
-        db.query(AgendaCuidado)
-        .filter(AgendaCuidado.objetivo_id == objetivo_id)
-        .order_by(AgendaCuidado.created_at.desc())
-        .all()
-    )
 
-    return [
-        montar_response_agenda(item, db)
-        for item in agendas
-    ]
+@router.get("/objetivo/{objetivo_id}", response_model=list[AgendaCuidadoResponse])
+def listar_agenda_objetivo(objetivo_id: int, db: Session = Depends(get_db), usuario=Depends(get_usuario_atual)):
+    rows = call(lambda: service.list_agendas(db, objetivo_id, usuario))
+    return [montar_response_agenda(row, db) for row in rows]
 
-@router.post(
-    "/",
-    response_model=AgendaCuidadoResponse
-)
-def criar_agenda_cuidado(
-    payload: AgendaCuidadoCreate,
-    db: Session = Depends(get_db)
-):
-    objetivo = (
-        db.query(PTSObjetivo)
-        .filter(
-            PTSObjetivo.id == payload.objetivo_id
-        )
-        .first()
-    )
+@router.post("/", response_model=AgendaCuidadoResponse)
+def criar_agenda_cuidado(payload: AgendaCuidadoCreate, db: Session = Depends(get_db), usuario=Depends(get_usuario_atual)):
+    row = call(lambda: service.create_agenda(db, payload, usuario))
+    return montar_response_agenda(row, db)
 
-    if not objetivo:
-        raise HTTPException(
-            status_code=404,
-            detail="Objetivo não encontrado."
-        )
-
-    # 1. VALIDAR SE O OBJETIVO PERTENCE AO PTS
-    if objetivo.pts_id != payload.pts_id:
-        raise HTTPException(
-            status_code=400,
-            detail="O objetivo informado não pertence ao PTS."
-        )
-
-    # 2. BUSCAR O PTS
-    pts = (
-        db.query(PTS)
-        .filter(PTS.id == payload.pts_id)
-        .first()
-    )
-
-    if not pts:
-        raise HTTPException(
-            status_code=404,
-            detail="PTS não encontrado."
-        )
-
-    # 3. BUSCAR O PACIENTE DO PTS
-    paciente = (
-        db.query(Paciente)
-        .filter(Paciente.id == pts.paciente_id)
-        .first()
-    )
-
-    if not paciente:
-        raise HTTPException(
-            status_code=404,
-            detail="Paciente do PTS não encontrado."
-        )
-
-    # 4. VALIDAR O PROFISSIONAL RESPONSÁVEL
-    if payload.profissional_id is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Selecione o profissional responsável pelo planejamento."
-        )
-
-    profissional = (
-        db.query(Profissional)
-        .filter(
-            Profissional.id == payload.profissional_id,
-            Profissional.ativo == True,
-        )
-        .first()
-    )
-
-    if not profissional:
-        raise HTTPException(
-            status_code=400,
-            detail="Profissional responsável inválido ou inativo."
-        )
-
-    if profissional.clinica_id != paciente.clinica_id:
-        raise HTTPException(
-            status_code=400,
-            detail="O profissional responsável não pertence à mesma clínica do paciente."
-        )
-
-    if profissional.ocupacao_id != payload.ocupacao_id:
-        raise HTTPException(
-            status_code=400,
-            detail="O profissional responsável não possui a ocupação selecionada."
-        )
-
-    # 5. SOMENTE DEPOIS DAS VALIDAÇÕES, CRIA A AGENDA
-    agenda = AgendaCuidado(
-        pts_id=payload.pts_id,
-        objetivo_id=payload.objetivo_id,
-
-        atividade_id=payload.atividade_id,
-        ocupacao_id=payload.ocupacao_id,
-
-        profissional_id=payload.profissional_id,
-
-        frequencia_semanal=payload.frequencia_semanal,
-        quantidade_sessoes=payload.quantidade_sessoes,
-        duracao_minutos=payload.duracao_minutos,
-
-        data_inicio=payload.data_inicio,
-        data_fim=payload.data_fim,
-
-        observacoes=payload.observacoes,
-
-        status="PLANEJADO",
-    )
-
-    db.add(agenda)
-    db.commit()
-    db.refresh(agenda)
-
-    return montar_response_agenda(
-        agenda,
-        db,
-    )
-
-
-@router.put(
-    "/{agenda_id}",
-    response_model=AgendaCuidadoResponse
-)
-def atualizar_agenda_cuidado(
-    agenda_id: int,
-    payload: AgendaCuidadoUpdate,
-    db: Session = Depends(get_db)
-):
-    agenda = (
-        db.query(AgendaCuidado)
-        .filter(
-            AgendaCuidado.id == agenda_id
-        )
-        .first()
-    )
-
-    if not agenda:
-        raise HTTPException(
-            status_code=404,
-            detail="Agenda não encontrada."
-        )
-
-    dados = payload.model_dump(
-        exclude_unset=True
-    )
-
-    for campo, valor in dados.items():
-        setattr(agenda, campo, valor)
-
-    db.commit()
-    db.refresh(agenda)
-
-    return montar_response_agenda(
-        agenda,
-        db,
-    )
-    
+@router.put("/{agenda_id}", response_model=AgendaCuidadoResponse)
+def atualizar_agenda_cuidado(agenda_id: int, payload: AgendaCuidadoUpdate,
+                            db: Session = Depends(get_db), usuario=Depends(get_usuario_atual)):
+    row = call(lambda: service.update_agenda(db, agenda_id, payload, usuario))
+    return montar_response_agenda(row, db)
 
 @router.delete("/{agenda_id}")
-def excluir_agenda_cuidado(
-    agenda_id: int,
-    db: Session = Depends(get_db)
-):
-    agenda = (
-        db.query(AgendaCuidado)
-        .filter(
-            AgendaCuidado.id == agenda_id
-        )
-        .first()
-    )
+def excluir_agenda_cuidado(agenda_id: int, db: Session = Depends(get_db), usuario=Depends(get_usuario_atual)):
+    call(lambda: service.delete_agenda(db, agenda_id, usuario))
+    return {"message": "Agenda removida com sucesso."}
 
-    if not agenda:
-        raise HTTPException(
-            status_code=404,
-            detail="Agenda não encontrada."
-        )
-
-    db.delete(agenda)
-    db.commit()
-
-    return {
-        "message":
-            "Agenda removida com sucesso."
-    }
-    
-@router.patch(
-    "/{agenda_id}/frequencia",
-    response_model=AgendaCuidadoResponse
-)
-def registrar_frequencia(
-    agenda_id: int,
-    payload: AgendaFrequenciaUpdate,
-    db: Session = Depends(get_db)
-):
-    agenda = (
-        db.query(AgendaCuidado)
-        .filter(
-            AgendaCuidado.id == agenda_id
-        )
-        .first()
-    )
-
-    if not agenda:
-        raise HTTPException(
-            status_code=404,
-            detail="Agenda não encontrada."
-        )
-
-    agenda.status_execucao = payload.status_execucao
-
-    agenda.data_realizacao = payload.data_realizacao
-
-    agenda.observacao_execucao = (
-        payload.observacao_execucao
-    )
-
-    db.commit()
-    db.refresh(agenda)
-
-    return montar_response_agenda(agenda)
+@router.patch("/{agenda_id}/frequencia", response_model=AgendaCuidadoResponse)
+def registrar_frequencia(agenda_id: int, payload: AgendaFrequenciaUpdate,
+                         db: Session = Depends(get_db), usuario=Depends(get_usuario_atual)):
+    # Preserve legacy replacement (including omitted optional fields becoming null).
+    update = AgendaCuidadoUpdate(**payload.model_dump())
+    row = call(lambda: service.update_agenda(db, agenda_id, update, usuario))
+    return montar_response_agenda(row, db)

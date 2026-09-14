@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.agenda_cuidado import AgendaCuidado
+from app.core.deps import get_usuario_atual
+from app.services.care_plan_service import CarePlanService, call
 
 from app.schemas.scheduling import (
     ConfirmarCronogramaRequest,
@@ -29,18 +30,9 @@ router = APIRouter(
 def sugerir_cronograma(
     agenda_id: int,
     db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
-    agenda = (
-        db.query(AgendaCuidado)
-        .filter(AgendaCuidado.id == agenda_id)
-        .first()
-    )
-
-    if not agenda:
-        raise HTTPException(
-            status_code=404,
-            detail="Planejamento Assistencial não encontrado.",
-        )
+    agenda = call(lambda: CarePlanService().scheduling_agenda(db, agenda_id, usuario))
 
     try:
         planejamento = PlanejamentoAssistencial.from_model(
@@ -87,18 +79,9 @@ def confirmar_cronograma(
     agenda_id: int,
     payload: ConfirmarCronogramaRequest,
     db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
-    agenda = (
-        db.query(AgendaCuidado)
-        .filter(AgendaCuidado.id == agenda_id)
-        .first()
-    )
-
-    if not agenda:
-        raise HTTPException(
-            status_code=404,
-            detail="Planejamento Assistencial não encontrado.",
-        )
+    agenda = call(lambda: CarePlanService().scheduling_agenda(db, agenda_id, usuario))
 
     try:
         sessoes = SchedulingService.confirmar_cronograma(
