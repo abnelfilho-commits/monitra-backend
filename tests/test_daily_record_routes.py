@@ -18,7 +18,11 @@ DAY = fixtures.DAY
 
 
 class RouteTests(unittest.TestCase):
-    setUp = fixtures.PersistenceTests.setUp
+    def setUp(self):
+        fixtures.PersistenceTests.setUp(self)
+        # Generic PATCH now checks canonical attendance linkage before dispatch.
+        from app.models import SessaoAssistencial
+        SessaoAssistencial.__table__.create(self.engine)
     tearDown = fixtures.PersistenceTests.tearDown
     count = fixtures.PersistenceTests.count
     # Separate adapter tests use the same synthetic database fixture.

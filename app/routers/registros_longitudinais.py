@@ -13,6 +13,7 @@ from app.services.registros_longitudinais import (
     criar_registro_longitudinal,
     obter_registro_longitudinal,
     atualizar_registro_longitudinal,
+    proteger_atendimento_canonico,
 )
 
 router = APIRouter(
@@ -51,7 +52,7 @@ def atualizar_registro(
     payload: RegistroLongitudinalUpdate,
     db: Session = Depends(get_db),
 ):
-    existing = db.query(RegistroLongitudinal).filter(RegistroLongitudinal.id == registro_id).first()
+    existing = proteger_atendimento_canonico(db, registro_id)
     if is_daily(db, payload.formulario_id) or (existing and is_daily(db, existing.formulario_id)):
         write_legacy_longitudinal(db, payload, registro_id)
         return obter_registro_longitudinal(db, registro_id)

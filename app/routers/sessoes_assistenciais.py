@@ -31,6 +31,7 @@ from app.services.registro_longitudinal_service import (
 )
 
 from app.core.deps import get_usuario_atual
+from app.services.session_service import SessionService
 from app.models.sessao_assistencial import SessaoAssistencial
 
 router = APIRouter(
@@ -73,33 +74,7 @@ def listar_minhas_sessoes(
     usuario=Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ):
-    if usuario.perfil != "PROFISSIONAL":
-        raise HTTPException(
-            status_code=403,
-            detail="A Agenda Assistencial é exclusiva do profissional.",
-        )
-
-    if not usuario.profissional_id:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "O usuário autenticado não está vinculado "
-                "a um profissional."
-            ),
-        )
-
-    sessoes = (
-        db.query(SessaoAssistencial)
-        .filter(
-            SessaoAssistencial.profissional_id
-            == usuario.profissional_id
-        )
-        .order_by(
-            SessaoAssistencial.data_agendada.asc(),
-            SessaoAssistencial.hora_inicio.asc(),
-        )
-        .all()
-    )
+    sessoes = SessionService().personal_sessions(db, usuario)
 
     return [
         {
@@ -143,6 +118,7 @@ def listar_minhas_sessoes(
 def confirmar_sessao(
     sessao_id: int,
     db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
     sessao = buscar_sessao(sessao_id, db)
 
@@ -150,6 +126,7 @@ def confirmar_sessao(
         return AssistentialExecutionService.confirmar(
             db=db,
             sessao=sessao,
+            usuario=usuario,
         )
     except ValueError as erro:
         tratar_erro_transicao(erro)
@@ -162,6 +139,7 @@ def confirmar_sessao(
 def iniciar_sessao(
     sessao_id: int,
     db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
     sessao = buscar_sessao(sessao_id, db)
 
@@ -169,6 +147,7 @@ def iniciar_sessao(
         return AssistentialExecutionService.iniciar(
             db=db,
             sessao=sessao,
+            usuario=usuario,
         )
     except ValueError as erro:
         tratar_erro_transicao(erro)
@@ -181,6 +160,7 @@ def iniciar_sessao(
 def finalizar_sessao(
     sessao_id: int,
     db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
     sessao = buscar_sessao(sessao_id, db)
 
@@ -188,6 +168,7 @@ def finalizar_sessao(
         return AssistentialExecutionService.finalizar(
             db=db,
             sessao=sessao,
+            usuario=usuario,
         )
     except ValueError as erro:
         tratar_erro_transicao(erro)
@@ -201,6 +182,7 @@ def reagendar_sessao(
     sessao_id: int,
     payload: ReagendarSessaoRequest,
     db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
     sessao = buscar_sessao(sessao_id, db)
 
@@ -208,6 +190,7 @@ def reagendar_sessao(
         return AssistentialExecutionService.reagendar(
             db=db,
             sessao=sessao,
+            usuario=usuario,
             motivo=payload.motivo,
         )
     except ValueError as erro:
@@ -221,6 +204,7 @@ def registrar_evolucao_sessao(
     sessao_id: int,
     payload: RegistroLongitudinalCreate,
     db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
     sessao = buscar_sessao(
         sessao_id=sessao_id,
@@ -233,6 +217,7 @@ def registrar_evolucao_sessao(
             .criar_a_partir_da_sessao(
                 db=db,
                 sessao=sessao,
+                usuario=usuario,
                 payload=payload,
             )
         )
@@ -261,6 +246,7 @@ def registrar_atendimento(
     sessao_id: int,
     payload: RegistrarAtendimentoRequest,
     db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
     sessao = buscar_sessao(
         sessao_id=sessao_id,
@@ -271,6 +257,7 @@ def registrar_atendimento(
         return AssistentialExecutionService.registrar_atendimento(
             db=db,
             sessao=sessao,
+            usuario=usuario,
             payload=payload,
         )
 
@@ -281,24 +268,14 @@ def registrar_atendimento(
 def listar_sessoes_por_paciente(
     paciente_id: int,
     db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
     """
     Lista as Sessões Assistenciais de um paciente,
     ordenadas cronologicamente.
     """
 
-    sessoes = (
-        db.query(SessaoAssistencial)
-        .filter(
-            SessaoAssistencial.paciente_id == paciente_id
-        )
-        .order_by(
-            SessaoAssistencial.data_agendada.asc(),
-            SessaoAssistencial.hora_inicio.asc(),
-            SessaoAssistencial.numero_sessao.asc(),
-        )
-        .all()
-    )
+    sessoes = SessionService().patient_sessions(db, paciente_id, usuario)
 
     return [
         {
@@ -339,11 +316,13 @@ def listar_sessoes_por_paciente(
 def obter_sessao_assistencial(
     sessao_id: int,
     db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
     """
     Retorna todos os dados da Sessão Assistencial.
     """
 
+    SessionService().context(db, sessao_id, usuario)
     return AssistentialSessionService.get_session_details(
         db=db,
         sessao_id=sessao_id,

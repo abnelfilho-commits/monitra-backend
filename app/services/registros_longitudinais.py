@@ -149,15 +149,22 @@ def obter_registro_longitudinal(db: Session, registro_id: int):
     }
 
 
-def atualizar_registro_longitudinal(db: Session, registro_id: int, payload):
-    registro = (
-        db.query(RegistroLongitudinal)
-        .filter(RegistroLongitudinal.id == registro_id)
-        .first()
-    )
-
-    if not registro:
+def proteger_atendimento_canonico(db: Session, registro_id: int):
+    """Lock before checking linkage; protect all generic dispatch paths."""
+    from app.models.sessao_assistencial import SessaoAssistencial
+    registro = db.query(RegistroLongitudinal).filter(
+        RegistroLongitudinal.id == registro_id).populate_existing().with_for_update().first()
+    if registro is None:
         raise HTTPException(status_code=404, detail="Registro longitudinal não encontrado.")
+    if db.query(SessaoAssistencial.id).filter(
+            SessaoAssistencial.registro_longitudinal_id == registro_id).first():
+        raise HTTPException(status_code=409,
+            detail="Atendimento canônico não permite alteração pelo PATCH longitudinal genérico.")
+    return registro
+
+
+def atualizar_registro_longitudinal(db: Session, registro_id: int, payload):
+    registro = proteger_atendimento_canonico(db, registro_id)
 
     registro.paciente_id = payload.paciente_id
     registro.modulo_id = payload.modulo_id
