@@ -90,7 +90,7 @@ class PersistenceTests(unittest.TestCase):
                 'glicemia_pos_prandial':'NUMERIC', 'pressao_sistolica':'NUMERIC',
                 'pressao_diastolica':'NUMERIC', 'peso':'NUMERIC', 'atividade_fisica':'TEXT',
                 'sono':'TEXT', 'humor':'TEXT', 'score_clinico':'INTEGER', 'risco':'TEXT',
-                'protocolo':'TEXT', 'leitura_clinica':'TEXT'}.items():
+                'protocolo':'TEXT', 'leitura_clinica':'TEXT', 'observacoes':'TEXT'}.items():
                 connection.execute(text('ALTER TABLE registros_longitudinais ADD COLUMN '+name+' '+kind))
         self.db = Session(self.engine)
         for line in (NEURO, CARDIO):
@@ -148,6 +148,41 @@ class PersistenceTests(unittest.TestCase):
         self.assertEqual(reading.risk, row[1])
         self.assertIsNone(reading.trend)
         self.assertEqual(result.reference_date, reading.reference_date)
+
+    def test_cardio_observations_are_exact_text_not_engine_input(self):
+        narrative = "  Synthetic observation\nsecond line  "
+        values = {'glicemia_jejum':180,'peso':100}
+        with patch.object(cardio_engine,'calcular_score',wraps=cardio_engine.calcular_score) as score, \
+             patch.object(cardio_engine,'gerar_leitura_clinica',wraps=cardio_engine.gerar_leitura_clinica) as summary:
+            self.service.create(self.db,self.submission('CARDIO',dict(values,observacoes=narrative)))
+            self.assertEqual(score.call_args.args[0],values)
+            self.assertEqual(summary.call_args.args[0],values)
+        row=self.db.execute(text('SELECT observacoes,score_clinico FROM registros_longitudinais')).one()
+        self.assertEqual(row[0],narrative)
+        self.assertEqual(row[1],cardio_engine.calcular_score(values))
+        self.assertEqual(self.db.query(CampoFormulario).filter_by(nome_campo='observacoes').count(),0)
+        self.assertEqual(self.db.query(RespostaRegistro).count(),2)
+        self.assertNotIn('observacoes',read_cardio(self.db,10,CARDIO).metadata['measurements'])
+
+    def test_observations_only_do_not_fabricate_interpretation(self):
+        with patch.object(cardio_engine,'calcular_score',side_effect=AssertionError('text is not clinical evidence')):
+            self.service.create(self.db,self.submission('CARDIO',{'observacoes':'Synthetic text'}))
+        row=self.db.execute(text('SELECT observacoes,score_clinico,risco,protocolo,leitura_clinica FROM registros_longitudinais')).one()
+        self.assertEqual(tuple(row),('Synthetic text',None,None,None,None))
+        self.assertIsNone(read_cardio(self.db,10,CARDIO).risk)
+        self.assertIsNone(read_cardio(self.db,10,CARDIO).trend)
+
+    def test_observation_update_preserves_omitted_and_accepts_explicit_clear(self):
+        record=self.service.create(self.db,self.submission('CARDIO',{'observacoes':'original','peso':90}))
+        self.service.update(self.db,record.record_id,self.submission('CARDIO',{'peso':95}))
+        self.assertEqual(self.db.execute(text('SELECT observacoes FROM registros_longitudinais')).scalar(),'original')
+        self.service.update(self.db,record.record_id,self.submission('CARDIO',{'observacoes':None,'peso':95}))
+        self.assertIsNone(self.db.execute(text('SELECT observacoes FROM registros_longitudinais')).scalar())
+
+    def test_observation_invalid_type_rolls_back(self):
+        with self.assertRaises(InvalidDailyRecordPayload):
+            self.service.create(self.db,self.submission('CARDIO',{'observacoes':{'invalid':'value'}}))
+        self.assertEqual(self.count(),(0,0))
 
     def test_cardio_no_data(self):
         self.service.create(self.db, self.submission('CARDIO'))
@@ -221,7 +256,7 @@ class PersistenceTests(unittest.TestCase):
         self.assertEqual(self.count(), (0, 0))
 
     def test_no_aliases(self):
-        for name in ('observacoes', 'uso_medicacao', 'qualidade_sono', 'adesao_alimentar'):
+        for name in ('uso_medicacao', 'qualidade_sono', 'adesao_alimentar'):
             with self.assertRaises(InvalidDailyRecordPayload):
                 self.service.create(self.db, self.submission('CARDIO', {name:'x'}))
 
@@ -312,7 +347,7 @@ class PersistenceTests(unittest.TestCase):
         result = self.service.create(self.db, submission)
         record = self.db.query(RegistroLongitudinal).one()
         self.assertEqual(record.criado_por_responsavel_id, 99)
-        self.assertEqual(record.origem, 'RESPONSAVEL')
+        self.assertEqual(record.origem, 'RESPONSAVEL_APP')
         self.assertEqual(result.origin, CareOrigin.RESPONSAVEL_APP)
         with self.assertRaises(DuplicateDailyRecord):
             self.service.create(self.db, submission)

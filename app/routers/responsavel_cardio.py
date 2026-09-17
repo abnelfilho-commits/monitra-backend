@@ -10,12 +10,10 @@ from app.models.responsavel_paciente import ResponsavelPaciente
 from app.models.paciente import Paciente
 from app.core.deps import get_responsavel_atual
 from app.schemas.responsavel_cardio import RegistroCardioResponsavelCreate
-from app.services.cardiometabolico_engine import (
-    calcular_score,
-    classificar_risco,
-    definir_protocolo,
-    gerar_leitura_clinica,
-)
+from app.services.daily_record import DailyRecordSubmission, ActorRef, ActorType
+from app.services.daily_record.adapters import call_write
+from app.services.care_lines import CareOrigin
+
 
 router = APIRouter(
     prefix="/responsavel",
@@ -49,6 +47,7 @@ def criar_registro_cardio_responsavel(
     paciente = (
         db.query(Paciente)
         .filter(Paciente.id == paciente_id, Paciente.ativo == True)
+        .with_for_update()
         .first()
     )
 
@@ -69,7 +68,7 @@ def criar_registro_cardio_responsavel(
             FROM registros_longitudinais
             WHERE paciente_id = :paciente_id
               AND data_registro = :data_registro
-              AND origem = 'RESPONSAVEL'
+              AND origem IN ('RESPONSAVEL', 'RESPONSAVEL_APP', 'RESPONSAVEL_WHATSAPP')
               AND criado_por_responsavel_id = :responsavel_id
               AND modulo_id = 2
             LIMIT 1
@@ -87,178 +86,21 @@ def criar_registro_cardio_responsavel(
             detail="Você já enviou um registro cardiometabólico para esta data."
         )
 
-    dados_motor = {
-        "glicemia_jejum": payload.glicemia_jejum,
-        "pressao_sistolica": payload.pressao_sistolica,
-        "pressao_diastolica": payload.pressao_diastolica,
-        "peso": payload.peso,
-        "atividade_fisica": None,
-        "humor": payload.humor,
-        "sono": payload.sono,
-    }
-
-    score = calcular_score(dados_motor)
-    risco = classificar_risco(score)
-    protocolo = definir_protocolo(score)
-    leitura_clinica = gerar_leitura_clinica(dados_motor, score)
-
-    formulario = db.execute(
-        text("""
-            SELECT id
-            FROM formularios_modulo
-            WHERE modulo_id = 2
-            AND tipo = 'REGISTRO_DIARIO'
-            AND ativo = true
-            ORDER BY id
-            LIMIT 1
-        """)
-    ).fetchone()
-
-    if not formulario:
-        raise HTTPException(
-            status_code=400,
-            detail="Formulário cardiometabólico não configurado."
-        )
-
-    registro = db.execute(
-        text("""
-            INSERT INTO registros_longitudinais (
-                paciente_id,
-                modulo_id,
-                formulario_id,
-                origem,
-                data_registro,
-                modulo,
-                glicemia_jejum,
-                pressao_sistolica,
-                pressao_diastolica,
-                peso,
-                sono,
-                humor,
-                observacoes,
-                score_clinico,
-                risco,
-                protocolo,
-                leitura_clinica,
-                criado_por_responsavel_id
-            )
-            VALUES (
-                :paciente_id,
-                2,
-                :formulario_id,
-                'RESPONSAVEL',
-                :data_registro,
-                'cardiometabolico',
-                :glicemia_jejum,
-                :pressao_sistolica,
-                :pressao_diastolica,
-                :peso,
-                :sono,
-                :humor,
-                :observacoes,
-                :score_clinico,
-                :risco,
-                :protocolo,
-                :leitura_clinica,
-                :responsavel_id
-            )
-            RETURNING id
-        """),
-        {
-            "paciente_id": paciente_id,
-            "formulario_id": formulario.id,
-            "data_registro": payload.data,
-            "glicemia_jejum": payload.glicemia_jejum,
-            "pressao_sistolica": payload.pressao_sistolica,
-            "pressao_diastolica": payload.pressao_diastolica,
-            "peso": payload.peso,
-            "sono": payload.sono,
-            "humor": payload.humor,
-            "observacoes": payload.observacoes,
-            "score_clinico": score,
-            "risco": risco,
-            "protocolo": protocolo,
-            "leitura_clinica": leitura_clinica,
-            "responsavel_id": responsavel.id,
-        }
-    ).fetchone()
-
-    campos = {
-        "glicemia_jejum": payload.glicemia_jejum,
-        "pressao_sistolica": payload.pressao_sistolica,
-        "pressao_diastolica": payload.pressao_diastolica,
-        "peso": payload.peso,
-        "sono": payload.sono,
-        "humor": payload.humor,
-    }
-
-    for nome_campo, valor in campos.items():
-        if valor is None:
-            continue
-
-        campo = db.execute(
-            text("""
-                SELECT id
-                FROM campos_formulario
-                WHERE nome_campo = :nome_campo
-                LIMIT 1
-            """),
-            {"nome_campo": nome_campo}
-        ).fetchone()
-
-        if not campo:
-            continue
-
-        if isinstance(valor, (int, float)):
-            db.execute(
-                text("""
-                    INSERT INTO respostas_registro (
-                        registro_id,
-                        campo_id,
-                        valor_numero
-                    )
-                    VALUES (
-                        :registro_id,
-                        :campo_id,
-                        :valor
-                    )
-                """),
-                {
-                    "registro_id": registro.id,
-                    "campo_id": campo.id,
-                    "valor": valor,
-                }
-            )
-        else:
-            db.execute(
-                text("""
-                    INSERT INTO respostas_registro (
-                        registro_id,
-                        campo_id,
-                        valor_texto
-                    )
-                    VALUES (
-                        :registro_id,
-                        :campo_id,
-                        :valor
-                    )
-                """),
-                {
-                    "registro_id": registro.id,
-                    "campo_id": campo.id,
-                    "valor": str(valor),
-                }
-            )
-
-    db.commit()
+    # The shared provider resolves the active Cardio membership and form, scopes
+    # answer fields to that form and persists observations in the approved column.
+    values = payload.model_dump(exclude={'data'})
+    result = call_write(db, DailyRecordSubmission(paciente_id, 'CARDIO', payload.data,
+        CareOrigin.RESPONSAVEL_APP, ActorRef(ActorType.RESPONSIBLE, responsavel.id), values))
+    derived = db.execute(text("""SELECT score_clinico, risco, protocolo, leitura_clinica
+        FROM registros_longitudinais WHERE id=:id"""), {'id': result.record_id}).mappings().one()
 
     return {
         "message": "Registro cardiometabólico criado com sucesso.",
-        "registro_id": registro.id,
-        "score_clinico": score,
-        "risco": risco,
-        "protocolo": protocolo,
-        "leitura_clinica": leitura_clinica,
+        "registro_id": result.record_id,
+        "score_clinico": derived["score_clinico"],
+        "risco": derived["risco"],
+        "protocolo": derived["protocolo"],
+        "leitura_clinica": derived["leitura_clinica"],
     }
     
 @router.get("/pacientes/{paciente_id}/registros-cardio")
@@ -291,11 +133,13 @@ def listar_registros_cardio_responsavel(
                 risco,
                 protocolo,
                 leitura_clinica,
-                observacoes
+                observacoes,
+                origem,
+                criado_por_responsavel_id
             FROM registros_longitudinais
             WHERE paciente_id = :paciente_id
               AND modulo_id = 2
-              AND origem = 'RESPONSAVEL'
+              AND origem IN ('RESPONSAVEL', 'RESPONSAVEL_APP', 'RESPONSAVEL_WHATSAPP')
             ORDER BY data_registro DESC
         """),
         {

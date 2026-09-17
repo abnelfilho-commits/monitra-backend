@@ -239,12 +239,12 @@ class BoundaryTests(SessionFixture):
         for changes in ({'paciente_id':20},{'modulo_id':2},{'formulario_id':206},
                         {'respostas':[{'campo_id':1050,'valor':'replacement'}]}):
             values={**original,**changes}
-            with self.assertRaises(HTTPException) as cm: atualizar_registro(rid,RegistroLongitudinalUpdate(**values),self.db)
+            with self.assertRaises(HTTPException) as cm: atualizar_registro(rid,RegistroLongitudinalUpdate(**values),self.db,self.user)
             self.assertEqual(cm.exception.status_code,409)
             self.db.rollback()
         unrelated=RegistroLongitudinal(paciente_id=10,modulo_id=1,formulario_id=105,origem='PROFISSIONAL',data_registro=DAY)
         self.db.add(unrelated); self.db.commit()
-        result=atualizar_registro(unrelated.id,RegistroLongitudinalUpdate(**original),self.db)
+        result=atualizar_registro(unrelated.id,RegistroLongitudinalUpdate(**original),self.db,self.user)
         self.assertEqual(result['respostas']['narrativa_atendimento'],'Synthetic')
 
     def test_third_line_registration_and_form_only_no_core_branch(self):
@@ -282,7 +282,7 @@ class BoundaryTests(SessionFixture):
         self.db.add(FormularioModulo(id=777,modulo_id=1,nome='Synthetic daily',codigo='DAILY',tipo='REGISTRO_DIARIO',ativo=True)); self.db.commit()
         payload=RegistroLongitudinalUpdate(**{**self.legacy(session).model_dump(),'formulario_id':777})
         with patch('app.routers.registros_longitudinais.write_legacy_longitudinal') as daily:
-            with self.assertRaises(HTTPException) as cm: atualizar_registro(rid,payload,self.db)
+            with self.assertRaises(HTTPException) as cm: atualizar_registro(rid,payload,self.db,self.user)
             self.assertEqual(cm.exception.status_code,409)
             daily.assert_not_called()
 

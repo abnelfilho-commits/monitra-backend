@@ -135,9 +135,9 @@ def montar_response_registro(row, respostas):
         "aceitou_alimento_novo": respostas.get("aceitou_alimento_novo"),
         "observacao": respostas.get("observacao"),
         "origem": row.origem,
-        "responsavel_id": None,
+        "responsavel_id": row.criado_por_responsavel_id,
         "criado_por_tipo": "RESPONSAVEL",
-        "criado_por_id": None,
+        "criado_por_id": row.criado_por_responsavel_id,
         "created_at": row.criado_em,
     }
 
@@ -160,12 +160,13 @@ def listar_registros_meu_paciente(
             paciente_id,
             data_registro,
             origem,
+            criado_por_responsavel_id,
             criado_em
         FROM registros_longitudinais
         WHERE paciente_id = :paciente_id
           AND modulo_id = :modulo_id
           AND formulario_id = :formulario_id
-          AND origem = 'RESPONSAVEL'
+          AND origem IN ('RESPONSAVEL', 'RESPONSAVEL_APP', 'RESPONSAVEL_WHATSAPP')
         ORDER BY data_registro DESC, id DESC
     """), {
         "paciente_id": paciente_id,
@@ -203,6 +204,7 @@ def criar_registro_meu_paciente(
             Paciente.id == paciente_id,
             Paciente.ativo == True,
         )
+        .with_for_update()
         .first()
     )
 
@@ -245,12 +247,13 @@ def obter_registro(
             paciente_id,
             data_registro,
             origem,
+            criado_por_responsavel_id,
             criado_em
         FROM registros_longitudinais
         WHERE id = :registro_id
           AND modulo_id = :modulo_id
           AND formulario_id = :formulario_id
-          AND origem = 'RESPONSAVEL'
+          AND origem IN ('RESPONSAVEL', 'RESPONSAVEL_APP', 'RESPONSAVEL_WHATSAPP')
         LIMIT 1
     """), {
         "registro_id": registro_id,

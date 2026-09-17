@@ -36,7 +36,7 @@ with engine.begin() as conn:
             'glicemia_pos_prandial':'NUMERIC', 'pressao_sistolica':'NUMERIC',
             'pressao_diastolica':'NUMERIC', 'peso':'NUMERIC', 'atividade_fisica':'TEXT',
             'sono':'TEXT', 'humor':'TEXT', 'score_clinico':'INTEGER', 'risco':'TEXT',
-            'protocolo':'TEXT', 'leitura_clinica':'TEXT'}.items():
+            'protocolo':'TEXT', 'leitura_clinica':'TEXT', 'observacoes':'TEXT'}.items():
         conn.execute(text('ALTER TABLE registros_longitudinais ADD COLUMN '+name+' '+kind))
     conn.execute(text("INSERT INTO modulos_clinicos(id,nome,slug,ativo) VALUES (1,'Neurodesenvolvimento','neurodesenvolvimento',true),(2,'Cardiometabólico','cardiometabolico',true)"))
     for revision in ('5a01c7e2d903','8c01a0d1a001','8c01a0d1a002','8c01a0d1a003'):

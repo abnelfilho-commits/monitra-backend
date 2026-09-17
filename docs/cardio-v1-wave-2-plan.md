@@ -1,8 +1,10 @@
 # WAVE 2 — AS-IS + EXECUTION PLAN
 
-2026-09-17. STATUS: BLOCKED on the product/data representation of Cardio general
-observations before write-path convergence. No Wave 2 implementation yet.
-Gate 1 is PASS; this issue does not reopen its identity/line decision.
+2026-09-17. Plano/AS-IS histórico, anterior à implementação.
+CARDIO-DR-OBS-001 e a correção transversal WhatsApp foram posteriormente aprovados.
+Implementação e Gate técnico isolado concluídos; configuração real Meta pendente.
+Consulte cardio-v1-wave-2-checkpoint.md para decisões finais e evidências.
+Gate 1 permanece fechado.
 
 ## Confirmed AS-IS
 
@@ -57,7 +59,7 @@ Gate 1 is PASS; this issue does not reopen its identity/line decision.
 8. Keep Cardio interventions independent of PTS; retain the ownership/authorship
    behavior already validated in Gate 1. No new clinical indicators.
 
-## Decision required: CARDIO-DR-OBS-001
+## Historical decision request: CARDIO-DR-OBS-001 (resolved: option A approved)
 
 This is a current field contract, not a problem caused by old test records.
 Deleting the current mass does not resolve the input mismatch.
@@ -84,7 +86,8 @@ C. Keep the explicit Responsible route exclusion. Its existing value remains
    preserved, but full provider convergence cannot be claimed; the Portal's
    accepted-and-omitted observations still need a product decision.
 
-No option was implemented. No observations were discarded, renamed or migrated.
+At the time of this initial plan no option was implemented. Option A is now implemented.
+No observations were discarded, renamed or migrated.
 No shared database changes, frontend Wave 2 changes, outbound messages or deploy.
 
 ## Wave 1 handoff

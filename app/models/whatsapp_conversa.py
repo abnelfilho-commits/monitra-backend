@@ -41,6 +41,8 @@ class WhatsAppConversa(Base):
         index=True,
     )
 
+    care_line = Column(String(32), nullable=True)
+
     etapa_atual = Column(
         String(50),
         nullable=False,

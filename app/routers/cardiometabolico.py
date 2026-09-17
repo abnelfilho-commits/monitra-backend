@@ -810,7 +810,7 @@ def timeline_cardiometabolica(
                 "origem": r.origem,
                 "tipo_evento": (
                     "❤️ Registro do Responsável"
-                    if r.origem == "RESPONSAVEL"
+                    if r.origem in ("RESPONSAVEL", "RESPONSAVEL_APP", "RESPONSAVEL_WHATSAPP")
                     else "📈 Registro diário"
                 ),
 
@@ -1331,12 +1331,14 @@ def alertas_cardiometabolico(
 @router.post("/registro-diario")
 def criar_registro_diario(
     payload: RegistroDiarioCardio,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
     ):
-    # Preserve the legacy channel's effective fields; do not invent medication/food aliases.
-    values = {name: getattr(payload, name) for name in NUMERIC | TEXT}
+    authorized_patient(db, usuario, payload.paciente_id, 'CARDIO', write=True)
+    # Preserve approved structured fields and the independent complementary narrative.
+    values = {name: getattr(payload, name) for name in NUMERIC | TEXT | {'observacoes'}}
     submission = DailyRecordSubmission(payload.paciente_id, 'CARDIO', clinical_date.today(),
-        CareOrigin.PROFISSIONAL, ActorRef(ActorType.PROFESSIONAL), values)
+        CareOrigin.PROFISSIONAL, ActorRef(ActorType.PROFESSIONAL, usuario.id), values)
     result = call_write(db, submission)
     return {"message": "Registro diário criado com sucesso.", "registro_id": result.record_id}
 

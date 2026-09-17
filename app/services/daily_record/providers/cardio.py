@@ -15,7 +15,7 @@ PROJECTION_FIELDS = {'glicemia_jejum', 'glicemia_pos_prandial', 'pressao_sistoli
 class CardioDailyRecordProvider:
     def prepare(self, db, line, submission, record_id=None):
         form = resolve_form(db, line)
-        if set(submission.payload) - (NUMERIC | TEXT):
+        if set(submission.payload) - (NUMERIC | TEXT | {"observacoes"}):
             raise InvalidDailyRecordPayload('Unsupported Cardio field; no clinical alias is inferred.')
         values = dict(submission.payload)
         for name, value in values.items():
@@ -26,11 +26,14 @@ class CardioDailyRecordProvider:
                     raise InvalidDailyRecordPayload('Cardio measurement must be finite numeric data.')
             elif not isinstance(value, str):
                 raise InvalidDailyRecordPayload('Cardio classification must be text.')
-        answers = resolve_fields(db, form.id, values)
+        # General narrative has its own approved column, never a questionnaire alias.
+        answers = resolve_fields(db, form.id, {k: v for k, v in values.items() if k != "observacoes"})
         usable = {key: value for key, value in values.items()
                   if key in ENGINE_FIELDS and value is not None
                   and (not isinstance(value, str) or value.strip())}
         projection = {key: values.get(key) for key in PROJECTION_FIELDS}
+        if "observacoes" in values:
+            projection["observacoes"] = values["observacoes"]
         projection.update(modulo=line.slug, score_clinico=None, risco=None,
                           protocolo=None, leitura_clinica=None)
         if usable:
@@ -46,7 +49,7 @@ class CardioDailyRecordProvider:
             # Projection keys are private provider output, never request SQL identifiers.
             allowed = {'modulo', 'glicemia_jejum', 'glicemia_pos_prandial', 'pressao_sistolica',
                        'pressao_diastolica', 'peso', 'atividade_fisica', 'sono', 'humor',
-                       'score_clinico', 'risco', 'protocolo', 'leitura_clinica'}
+                       'score_clinico', 'risco', 'protocolo', 'leitura_clinica', 'observacoes'}
             if not set(projection) <= allowed:
                 raise DailyRecordError('Unsupported projection column.')
             assignments = ', '.join(key + ' = :' + key for key in sorted(projection))

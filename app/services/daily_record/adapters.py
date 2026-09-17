@@ -22,8 +22,8 @@ def is_daily(db, form_id):
     return form is not None and form.tipo == 'REGISTRO_DIARIO'
 
 
-def write_legacy_longitudinal(db, payload, record_id=None):
-    # Existing professional routes provide no authenticated identity. Do not invent one.
+def write_legacy_longitudinal(db, payload, record_id=None, user_id=None):
+    # HTTP boundary authenticates and authorizes; propagate its actual user id.
     try:
         service = DailyRecordService()
         line = service.resolver.resolve(db, payload.paciente_id, payload.modulo_id, 'daily_record')
@@ -41,7 +41,7 @@ def write_legacy_longitudinal(db, payload, record_id=None):
         if payload.origem != 'PROFISSIONAL':
             raise DailyRecordError('This compatibility adapter supports professional submissions only.')
         submission = DailyRecordSubmission(payload.paciente_id, line.code, payload.data_registro,
-            CareOrigin.PROFISSIONAL, ActorRef(ActorType.PROFESSIONAL), values)
+            CareOrigin.PROFISSIONAL, ActorRef(ActorType.PROFESSIONAL, user_id), values)
         return call_write(db, submission, record_id)
     except (DailyRecordError, CareLineError) as exc:
         db.rollback()

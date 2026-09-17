@@ -30,6 +30,8 @@ class RouteTests(unittest.TestCase):
         app = FastAPI()
         app.include_router(registros_longitudinais.router)
         app.dependency_overrides[get_db] = lambda: self.db
+        from app.core.deps import get_usuario_atual
+        app.dependency_overrides[get_usuario_atual] = lambda: SimpleNamespace(id=7)
         async def send():
             messages = []
             delivered = False
@@ -49,7 +51,8 @@ class RouteTests(unittest.TestCase):
             status = next(m['status'] for m in messages if m['type']=='http.response.start')
             body = b''.join(m.get('body', b'') for m in messages if m['type']=='http.response.body').decode()
             return SimpleNamespace(status_code=status, text=body, json=lambda:json.loads(body))
-        return asyncio.run(send())
+        with patch.object(registros_longitudinais, "authorized_patient"):
+            return asyncio.run(send())
 
     def test_http_neuro_create_get_patch(self):
         payload = dict(paciente_id=10, modulo_id=1, formulario_id=100,
@@ -76,14 +79,16 @@ class RouteTests(unittest.TestCase):
 
     def test_non_daily_still_uses_legacy_service(self):
         with patch.object(registros_longitudinais, 'is_daily', return_value=False), \
-             patch.object(registros_longitudinais, 'criar_registro_longitudinal', return_value=SimpleNamespace(id=77)) as legacy:
-            result = registros_longitudinais.criar_registro(SimpleNamespace(formulario_id=90), self.db)
+             patch.object(registros_longitudinais, 'criar_registro_longitudinal', return_value=SimpleNamespace(id=77)) as legacy, \
+             patch.object(registros_longitudinais, "authorized_patient"):
+            result = registros_longitudinais.criar_registro(SimpleNamespace(formulario_id=90,paciente_id=10,modulo_id=1), self.db)
             self.assertEqual(result, {'id':77, 'status':'ok'})
             legacy.assert_called_once()
 
     def test_cardio_adapter_explicit_date_and_shape(self):
         payload = RegistroDiarioCardio(paciente_id=10, peso=100, atividade_fisica='baixa')
-        result = cardiometabolico.criar_registro_diario(payload, self.db)
+        with patch.object(cardiometabolico, 'authorized_patient'):
+            result = cardiometabolico.criar_registro_diario(payload, self.db, SimpleNamespace(id=7))
         self.assertEqual(set(result), {'message', 'registro_id'})
         from app.models.modular import RegistroLongitudinal
         self.assertEqual(self.db.query(RegistroLongitudinal).one().data_registro, date.today())
@@ -96,7 +101,7 @@ class RouteTests(unittest.TestCase):
         def query(model, *args):
             if model is responsavel_registros.Paciente:
                 mock = unittest.mock.MagicMock()
-                mock.filter.return_value.first.return_value = SimpleNamespace(id=10)
+                mock.filter.return_value.with_for_update.return_value.first.return_value = SimpleNamespace(id=10)
                 return mock
             return actual_query(model, *args)
         with patch.object(responsavel_registros, 'validar_vinculo_ativo', return_value=True), \
@@ -104,6 +109,6 @@ class RouteTests(unittest.TestCase):
             result = responsavel_registros.criar_registro_meu_paciente(10,
                 RegistroDiarioResponsavelCreate(data=date.today(), sono_qualidade=4),
                 self.db, SimpleNamespace(id=99))
-        self.assertEqual(result['origem'], 'RESPONSAVEL')
+        self.assertEqual(result['origem'], 'RESPONSAVEL_APP')
         self.assertEqual(result['sono_qualidade'], 4)
         self.assertEqual(self.db.query(RegistroLongitudinal).one().criado_por_responsavel_id, 99)

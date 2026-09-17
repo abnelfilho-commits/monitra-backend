@@ -73,7 +73,8 @@ class MigrationTests(unittest.TestCase):
         config=Config(str(ROOT/'alembic.ini'))
         config.set_main_option('script_location',str(ROOT/'alembic'))
         scripts=ScriptDirectory.from_config(config)
-        self.assertEqual(scripts.get_heads(),['8c01a0d1a003'])
+        self.assertEqual(scripts.get_heads(),['8c01a0d1a004'])
+        self.assertEqual(scripts.get_revision('8c01a0d1a004').down_revision,'8c01a0d1a003')
         self.assertEqual(scripts.get_revision('5a01c7e2d903').down_revision,'fb27d5139e1e')
 
     def test_postgres_adapters_defaults_and_namespaces(self):

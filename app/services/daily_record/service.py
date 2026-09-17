@@ -12,13 +12,13 @@ class DailyRecordService:
         self.resolver = resolver or care_line_resolver
         self.providers = dict(PROVIDERS if providers is None else providers)
 
-    def create(self, db, submission):
-        return self._write(db, submission)
+    def create(self, db, submission, commit=True):
+        return self._write(db, submission, commit=commit)
 
     def update(self, db, record_id, submission):
         return self._write(db, submission, record_id)
 
-    def _write(self, db, submission, record_id=None):
+    def _write(self, db, submission, record_id=None, commit=True):
         try:
             line = self.resolver.resolve(db, submission.patient_id,
                                          submission.requested_care_line, 'daily_record')
@@ -34,10 +34,7 @@ class DailyRecordService:
                 if (record.paciente_id, record.modulo_id) != (submission.patient_id, line.module_id):
                     raise DailyRecordIdentityConflict('Patient and care line are immutable.')
             prepared = provider.prepare(db, line, submission, record_id)
-            # Compatibility: old Responsible reads/WhatsApp duplicate checks share this origin.
-            stored_origin = ('RESPONSAVEL' if submission.origin in (
-                CareOrigin.RESPONSAVEL_APP, CareOrigin.RESPONSAVEL_WHATSAPP)
-                else submission.origin.value)
+            stored_origin = submission.origin.value
             if record is None:
                 payload = SimpleNamespace(paciente_id=submission.patient_id, modulo_id=line.module_id,
                     formulario_id=prepared.form_id, data_registro=submission.reference_date,
@@ -65,8 +62,10 @@ class DailyRecordService:
             # Materialize result before commit: no refresh/query can fail after persistence.
             result = DailyRecordResult(record.id, submission.patient_id, line,
                 record.data_registro, submission.origin, record.criado_em)
-            db.commit()
+            if commit:
+                db.commit()
             return result
         except Exception:
-            db.rollback()
+            if commit:
+                db.rollback()
             raise

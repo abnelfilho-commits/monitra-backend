@@ -30,3 +30,5 @@ from app.models.avaliacao_clinica import AvaliacaoClinica
 from app.models.sessao_assistencial import SessaoAssistencial
 
 from app.models.diagnostico import Diagnostico
+from .whatsapp_conversa import WhatsAppConversa
+from .whatsapp_mensagem import WhatsAppMensagem
