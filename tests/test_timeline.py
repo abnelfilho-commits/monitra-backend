@@ -96,7 +96,7 @@ class SourceTests(unittest.TestCase):
         self.db = Session(self.engine)
         schemas = {
             'formularios_modulo':'id INTEGER, modulo_id INTEGER, tipo TEXT, ativo BOOLEAN',
-            'registros_longitudinais':'id INTEGER, paciente_id INTEGER, modulo_id INTEGER, formulario_id INTEGER, data_registro TEXT, criado_em TEXT, origem TEXT, criado_por_usuario_id INTEGER, criado_por_responsavel_id INTEGER',
+            'registros_longitudinais':'id INTEGER, paciente_id INTEGER, modulo_id INTEGER, formulario_id INTEGER, data_registro TEXT, criado_em TEXT, origem TEXT, criado_por_usuario_id INTEGER, criado_por_responsavel_id INTEGER, observacoes TEXT',
             'campos_formulario':'id INTEGER, formulario_id INTEGER, nome_campo TEXT',
             'respostas_registro':'registro_id INTEGER, campo_id INTEGER, valor_texto TEXT, valor_numero NUMERIC, valor_booleano BOOLEAN, valor_data TEXT, valor_hora TEXT, valor_json TEXT',
             'intervencoes':'id INTEGER, modulo_id INTEGER, paciente_id INTEGER, profissional_id INTEGER, tipo TEXT, descricao TEXT, data_intervencao TEXT, created_at TEXT',

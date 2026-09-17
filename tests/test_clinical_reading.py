@@ -202,7 +202,7 @@ class DatabaseReadingTests(unittest.TestCase):
     def test_cardio_resolution(self):
         self.assertTrue(CARDIO.supports('clinical_reading'))
         self.assertEqual(CARDIO.capability_status('report'), Status.PLANNED)
-        self.assertEqual(CARDIO.capability_status('cockpit'), Status.PLANNED)
+        self.assertEqual(CARDIO.capability_status('cockpit'), Status.ACTIVE)
         self.link(2)
         self.assertEqual(self.service.get_reading(self.db, 10).care_line.code, 'CARDIO')
 

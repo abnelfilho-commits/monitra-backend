@@ -313,6 +313,24 @@ class TimelineService:
 
 
     @staticmethod
+    def get_recent_events(db, patient_ids, care_line, limit=10, sources=None):
+        """Authorized population, constant collector-query count; no patient loop."""
+        if not patient_ids:
+            return []
+        events = []
+        if type(limit) is not int or limit <= 0:
+            raise ValueError('Positive recent-event limit required.')
+        for collect in (SOURCES if sources is None else sources):
+            collected = (collect(db, list(patient_ids), care_line_registry) if sources is None else
+                         collect(db, list(patient_ids), care_line_registry, module_id=care_line.module_id, limit=limit))
+            events.extend(e for e in collected
+                          if e.patient_id in patient_ids and e.care_line is not None
+                          and e.care_line.module_id == care_line.module_id
+                          and e.care_line_association in (CareLineAssociation.EXPLICIT, CareLineAssociation.DERIVED))
+        events.sort(key=event_order_key)
+        return events[:limit]
+
+    @staticmethod
     def get_neuro_legacy_timeline(db, paciente_id):
         """Legacy acquisition profile: preserve Neuro shape, counts and dates."""
         registros = db.execute(

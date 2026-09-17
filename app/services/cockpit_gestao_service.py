@@ -431,16 +431,8 @@ class CockpitGestaoService:
         7+    -> crítica
         """
 
-        if dias_sem_registro is None:
-            return "NAO_INICIADA"
-
-        if dias_sem_registro >= 7:
-            return "CRITICA"
-
-        if dias_sem_registro >= 4:
-            return "ATENCAO"
-
-        return "REGULAR"
+        from app.services.continuity_service import classify_continuity
+        return classify_continuity(dias_sem_registro)
 
     @staticmethod
     def _iso_timestamp_utc(valor):

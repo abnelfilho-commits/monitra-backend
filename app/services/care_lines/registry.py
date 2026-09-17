@@ -43,7 +43,7 @@ CARDIO = CareLineDefinition(
         CAP_INTERVENTIONS: CareLineCapabilityStatus.ACTIVE,
         CAP_WHATSAPP: CareLineCapabilityStatus.ACTIVE,
         CAP_REPORT: CareLineCapabilityStatus.PLANNED,
-        CAP_COCKPIT: CareLineCapabilityStatus.PLANNED,
+        CAP_COCKPIT: CareLineCapabilityStatus.ACTIVE,
     },
 )
 
