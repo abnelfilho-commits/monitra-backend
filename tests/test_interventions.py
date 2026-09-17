@@ -15,6 +15,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 from app.models import Clinica, Paciente, Profissional, Usuario, Intervencao, OcupacaoProfissional
 from app.models.modular import ModuloClinico, PacienteModulo
+from app.models.profissional_modulo import ProfissionalModulo
+from sqlalchemy.exc import IntegrityError
 from app.services.care_lines import (NEURO, CARDIO, CareLineRegistry, CareLineResolver,
     CareLineCapabilityStatus, AmbiguousCareLine, CareLineInactive,
     PatientCareLineNotFound, CareLineCapabilityNotSupported, CareLineNotFound)
@@ -32,11 +34,11 @@ class Fixture(unittest.TestCase):
         self.engine = create_engine('sqlite:///:memory:', poolclass=StaticPool,
                                     connect_args={'check_same_thread': False})
         for model in (Clinica, OcupacaoProfissional, Profissional, Usuario, Paciente,
-                      ModuloClinico, PacienteModulo, Intervencao):
+                      ModuloClinico, PacienteModulo, ProfissionalModulo, Intervencao):
             model.__table__.create(self.engine)
         with self.engine.begin() as conn:
             conn.execute(text('''CREATE TABLE intervencoes_cardiometabolicas (
-                id INTEGER PRIMARY KEY, paciente_id INTEGER NOT NULL, profissional_id INTEGER,
+                id INTEGER PRIMARY KEY, paciente_id INTEGER NOT NULL, modulo_id INTEGER NOT NULL, profissional_id INTEGER,
                 tipo VARCHAR(100) NOT NULL, descricao TEXT, prioridade VARCHAR(30) DEFAULT 'moderada',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)'''))
         self.db = Session(self.engine)
@@ -50,6 +52,7 @@ class Fixture(unittest.TestCase):
             self.db.add(ModuloClinico(id=line.module_id, nome=line.code, slug=line.slug, ativo=True))
         for pid, module in ((10,1),(11,2),(20,1),(20,2)):
             self.db.add(PacienteModulo(paciente_id=pid, modulo_id=module, ativo=True))
+        self.db.add_all([ProfissionalModulo(profissional_id=700, modulo_id=i) for i in (1,2)])
         self.db.commit()
         self.user = SimpleNamespace(id=50, perfil='PROFISSIONAL', clinica_id=1, profissional_id=700)
         self.service = InterventionService()
@@ -71,7 +74,7 @@ class Fixture(unittest.TestCase):
     def generic(self):
         return self.service.create(self.db, self.submit(), user=self.user)
 
-    def historical(self, module=None, patient=10):
+    def historical(self, module=1, patient=10):
         row = Intervencao(paciente_id=patient, profissional_id=50, modulo_id=module,
                           tipo='historical', descricao='Synthetic', data_intervencao=DAY)
         self.db.add(row)
@@ -87,7 +90,7 @@ class ContractTests(unittest.TestCase):
         a.payload['nested'].append(1)
         self.assertEqual(original, {'nested': []})
         self.assertEqual(b.payload, original)
-        record = InterventionRecord(G,1,1,None,None,CareLineAssociation.UNASSIGNED,
+        record = InterventionRecord(G,1,1,NEURO,1,CareLineAssociation.EXPLICIT,
             None,'type',None,None,None)
         other = replace(record)
         record.metadata['x'] = 1
@@ -154,12 +157,14 @@ class PersistenceTests(Fixture):
             with self.assertRaises(PatientCareLineNotFound): self.generic()
             row=self.db.query(model).filter(model.id==1).one(); row.ativo=True; self.db.commit()
 
-    def test_legacy_null_and_unknown_module(self):
-        for module,association in ((None,CareLineAssociation.UNASSIGNED),(999,CareLineAssociation.EXPLICIT)):
-            r=self.service.get(self.db,G,self.historical(module),user=self.user)
-            self.assertEqual(r.module_id,module)
-            self.assertIsNone(r.care_line)
-            self.assertEqual(r.care_line_association,association)
+    def test_null_line_is_rejected_by_database(self):
+        with self.assertRaises(IntegrityError):
+            self.historical(module=None)
+        self.db.rollback()
+
+    def test_unknown_module_is_not_readable(self):
+        with self.assertRaises(InvalidInterventionPayload):
+            self.service.get(self.db,G,self.historical(module=999),user=self.user)
 
     def test_orphan_is_not_an_institutional_resource(self):
         identity=self.historical(patient=None)
@@ -170,8 +175,8 @@ class PersistenceTests(Fixture):
         r=self.generic()
         self.db.query(PacienteModulo).delete(); self.db.commit()
         self.assertEqual(self.service.get(self.db,G,r.source_id,user=self.user).module_id,1)
-        updated=self.service.update(self.db,G,r.source_id,InterventionUpdate('edit',None,DAY),user=self.user)
-        self.assertEqual(updated.module_id,1)
+        with self.assertRaises(HTTPException):
+            self.service.update(self.db,G,r.source_id,InterventionUpdate('edit',None,DAY),user=self.user)
 
     def test_generic_rejects_missing_date_and_specialized_payload(self):
         for changes in ({'reference_datetime':None},{'payload':{'priority':'alta'}}):
@@ -190,25 +195,27 @@ class PersistenceTests(Fixture):
         self.assertEqual(read.actor,{'namespace':'profissionais','id':700})
         self.assertEqual(read.metadata,{'priority':'alta'})
         self.assertEqual(read.care_line,CARDIO)
-        self.assertEqual(read.care_line_association,CareLineAssociation.DERIVED)
+        self.assertEqual(read.care_line_association,CareLineAssociation.EXPLICIT)
         self.assertIsNone(read.reference_datetime)
         self.assertIsNotNone(read.created_at)
 
     def test_cardio_no_professional_admin(self):
         self.user=SimpleNamespace(id=50,perfil='ADMIN',clinica_id=None,profissional_id=None)
-        self.assertIsNone(self.cardio().actor)
+        record = self.cardio()
+        self.assertEqual(record.care_line, CARDIO)
+        self.assertIsNone(record.actor)
 
     def test_cardio_no_professional_same_clinic(self):
         self.user.profissional_id=None
-        self.assertIsNone(self.cardio().actor)
+        with self.assertRaises(HTTPException): self.cardio()
 
     def test_cardio_invalid_professional(self):
         for field,value in (('ativo',False),('clinica_id',2)):
             row=self.db.get(Profissional,700); setattr(row,field,value); self.db.commit()
-            with self.assertRaises(InvalidInterventionPayload): self.cardio()
+            with self.assertRaises(HTTPException): self.cardio()
             row=self.db.get(Profissional,700); setattr(row,field,True if field=='ativo' else 1); self.db.commit()
         self.user.profissional_id=999
-        with self.assertRaises(InvalidInterventionPayload): self.cardio()
+        with self.assertRaises(HTTPException): self.cardio()
 
     def test_cardio_rejects_clinical_date(self):
         with self.assertRaises(InvalidInterventionPayload):
@@ -228,8 +235,8 @@ class PersistenceTests(Fixture):
     def test_update_legacy_null_preserves_uncertainty(self):
         identity=self.historical()
         r=self.service.update(self.db,G,identity,InterventionUpdate('edit','new',DAY),user=self.user)
-        self.assertIsNone(r.module_id)
-        self.assertEqual(r.care_line_association,CareLineAssociation.UNASSIGNED)
+        self.assertEqual(r.module_id,1)
+        self.assertEqual(r.care_line_association,CareLineAssociation.EXPLICIT)
 
     def test_patient_reassignment_and_untyped_mutation_rejected(self):
         r=self.generic()
@@ -252,11 +259,10 @@ class PersistenceTests(Fixture):
 
     def test_list_source_and_historical_line_filters(self):
         explicit=self.generic(); legacy=self.historical()
-        self.db.query(PacienteModulo).delete(); self.db.commit()
         self.assertEqual(len(self.service.list_for_patient(self.db,10,user=self.user,source_type=G)),2)
         result=self.service.list_for_patient(self.db,10,user=self.user,requested_care_line='NEURO')
-        self.assertEqual([r.source_id for r in result],[explicit.source_id])
-        with self.assertRaises(CareLineNotFound):
+        self.assertEqual([r.source_id for r in result],[explicit.source_id, legacy])
+        with self.assertRaises(HTTPException):
             self.service.list_for_patient(self.db,10,user=self.user,requested_care_line='missing')
 
     def test_all_operations_clinic_acl_and_admin(self):
@@ -315,7 +321,8 @@ class PersistenceTests(Fixture):
     def test_future_line_uses_generic_adapter_without_service_change(self):
         future=replace(NEURO,code='FUTURE',slug='future',module_id=3)
         self.db.add(ModuloClinico(id=3,nome='Future',slug='future',ativo=True))
-        self.db.add(PacienteModulo(paciente_id=10,modulo_id=3,ativo=True)); self.db.commit()
+        self.db.add(PacienteModulo(paciente_id=10,modulo_id=3,ativo=True))
+        self.db.add(ProfissionalModulo(profissional_id=700,modulo_id=3)); self.db.commit()
         service=InterventionService(resolver=CareLineResolver(CareLineRegistry([NEURO,CARDIO,future])),
             line_sources={'NEURO':G,'CARDIO':C,'FUTURE':G})
         r=service.create(self.db,self.submit(line='FUTURE'),user=self.user)

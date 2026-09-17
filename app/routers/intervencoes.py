@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.core.deps import get_usuario_atual
@@ -25,28 +25,28 @@ def criar_intervencao(intervencao: IntervencaoCreate, db: Session = Depends(get_
 
 
 @router.get('/paciente/{paciente_id}')
-def listar_por_paciente(paciente_id: int, db: Session = Depends(get_db),
+def listar_por_paciente(paciente_id: int, care_line: str = Query(...), db: Session = Depends(get_db),
                         usuario: Usuario = Depends(get_usuario_atual)):
     return [generic_response(r) for r in call(lambda: service.list_for_patient(
-        db, paciente_id, user=usuario, source_type=SOURCE))]
+        db, paciente_id, user=usuario, source_type=SOURCE, requested_care_line=care_line))]
 
 
 @router.get('/{intervencao_id}')
-def obter_intervencao(intervencao_id: int, db: Session = Depends(get_db),
+def obter_intervencao(intervencao_id: int, care_line: str = Query(...), db: Session = Depends(get_db),
                      usuario: Usuario = Depends(get_usuario_atual)):
-    return generic_response(call(lambda: service.get(db, SOURCE, intervencao_id, user=usuario)))
+    return generic_response(call(lambda: service.get(db, SOURCE, intervencao_id, user=usuario, requested_care_line=care_line)))
 
 
 @router.put('/{intervencao_id}')
-def atualizar_intervencao(intervencao_id: int, payload: IntervencaoUpdate,
+def atualizar_intervencao(intervencao_id: int, payload: IntervencaoUpdate, care_line: str = Query(...),
                          db: Session = Depends(get_db), usuario: Usuario = Depends(get_usuario_atual)):
     return generic_response(call(lambda: service.update(db, SOURCE, intervencao_id,
         InterventionUpdate(payload.tipo, payload.descricao, payload.data_intervencao),
-        user=usuario, expected_patient_id=payload.paciente_id)))
+        user=usuario, expected_patient_id=payload.paciente_id, requested_care_line=care_line)))
 
 
 @router.delete('/{intervencao_id}')
-def excluir_intervencao(intervencao_id: int, db: Session = Depends(get_db),
+def excluir_intervencao(intervencao_id: int, care_line: str = Query(...), db: Session = Depends(get_db),
                        usuario: Usuario = Depends(get_usuario_atual)):
-    call(lambda: service.delete(db, SOURCE, intervencao_id, user=usuario))
+    call(lambda: service.delete(db, SOURCE, intervencao_id, user=usuario, requested_care_line=care_line))
     return {'ok': True}

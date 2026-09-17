@@ -13,7 +13,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 from alembic.config import Config
-from app.models import Clinica, OcupacaoProfissional, Profissional, Usuario, Paciente, Intervencao
+from app.models import Clinica, OcupacaoProfissional, Profissional, Usuario, Paciente, Intervencao, ProfissionalModulo
 from app.models.modular import ModuloClinico, PacienteModulo
 from app.services.interventions import InterventionService, InterventionSubmission
 from app.services.interventions.models import ActorRef, SourceType
@@ -73,15 +73,16 @@ class MigrationTests(unittest.TestCase):
         config=Config(str(ROOT/'alembic.ini'))
         config.set_main_option('script_location',str(ROOT/'alembic'))
         scripts=ScriptDirectory.from_config(config)
-        self.assertEqual(scripts.get_heads(),['5a01c7e2d903'])
+        self.assertEqual(scripts.get_heads(),['8c01a0d1a003'])
         self.assertEqual(scripts.get_revision('5a01c7e2d903').down_revision,'fb27d5139e1e')
 
     def test_postgres_adapters_defaults_and_namespaces(self):
-        for model in (Clinica,OcupacaoProfissional,Profissional,Usuario,Paciente,ModuloClinico,PacienteModulo,Intervencao):
+        for model in (Clinica,OcupacaoProfissional,Profissional,Usuario,Paciente,ModuloClinico,PacienteModulo,Intervencao,ProfissionalModulo):
             model.__table__.create(self.engine)
         with self.engine.begin() as conn:
             conn.execute(text('''CREATE TABLE intervencoes_cardiometabolicas (
                 id SERIAL PRIMARY KEY, paciente_id INTEGER NOT NULL REFERENCES pacientes(id),
+                modulo_id INTEGER NOT NULL REFERENCES modulos_clinicos(id),
                 profissional_id INTEGER REFERENCES profissionais(id), tipo VARCHAR(100) NOT NULL,
                 descricao TEXT, prioridade VARCHAR(30) DEFAULT 'moderada',
                 created_at TIMESTAMP DEFAULT now())'''))
@@ -93,6 +94,7 @@ class MigrationTests(unittest.TestCase):
             for mid,slug in ((1,'neurodesenvolvimento'),(2,'cardiometabolico')):
                 db.add(ModuloClinico(id=mid,nome=slug,slug=slug,ativo=True)); db.flush()
                 db.add(PacienteModulo(paciente_id=10,modulo_id=mid,ativo=True)); db.flush()
+                db.add(ProfissionalModulo(profissional_id=700,modulo_id=mid)); db.flush()
             db.commit()
             service=InterventionService()
             user=SimpleNamespace(id=50,perfil='PROFISSIONAL',clinica_id=1,profissional_id=700)

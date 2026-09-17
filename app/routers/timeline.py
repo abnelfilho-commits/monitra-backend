@@ -1,3 +1,5 @@
+from app.core.deps import get_usuario_atual
+from app.services.care_lines.access import authorized_patient
 from app.services.timeline_service import TimelineService
 from datetime import datetime, time, timezone
 
@@ -40,8 +42,10 @@ router = APIRouter(
 @router.get("/pacientes/{paciente_id}")
 def obter_timeline_paciente(
     paciente_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
+    authorized_patient(db, usuario, paciente_id, "NEURO")
     return TimelineService.get_neuro_legacy_timeline(db, paciente_id)
 
 

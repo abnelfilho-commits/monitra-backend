@@ -1,4 +1,5 @@
 from datetime import datetime, time
+from typing import Optional
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -10,6 +11,7 @@ class TimelineEventService:
     def coletar_eventos_sessoes(
         db: Session,
         paciente_id: int,
+        module_id: Optional[int] = None,
     ):
         sessoes = db.execute(
             text(
@@ -48,6 +50,7 @@ class TimelineEventService:
 
                 WHERE sa.paciente_id = :paciente_id
                   AND sa.status = 'REALIZADA'
+                  AND (:module_id IS NULL OR EXISTS (SELECT 1 FROM pts p WHERE p.id=ac.pts_id AND p.modulo_id=:module_id))
 
                 ORDER BY
                     sa.data_realizacao DESC,
@@ -56,6 +59,7 @@ class TimelineEventService:
             ),
             {
                 "paciente_id": paciente_id,
+                "module_id": module_id,
             },
         ).fetchall()
 
@@ -109,12 +113,14 @@ class TimelineEventService:
     def coletar_eventos_diagnosticos(
         db: Session,
         paciente_id: int,
+        module_id: Optional[int] = None,
     ):
         diagnosticos = (
             db.query(Diagnostico)
             .filter(
                 Diagnostico.paciente_id == paciente_id,
                 Diagnostico.status != "CANCELADO",
+                True if module_id is None else Diagnostico.modulo_id == module_id,
             )
             .order_by(
                 Diagnostico.data_diagnostico.desc()
@@ -161,6 +167,7 @@ class TimelineEventService:
     def obter_eventos_paciente(
         db: Session,
         paciente_id: int,
+        module_id: Optional[int] = None,
     ):
         eventos = []
 
@@ -168,6 +175,7 @@ class TimelineEventService:
             TimelineEventService.coletar_eventos_sessoes(
                 db=db,
                 paciente_id=paciente_id,
+                module_id=module_id,
             )
         )
 
@@ -175,6 +183,7 @@ class TimelineEventService:
             TimelineEventService.coletar_eventos_diagnosticos(
                 db=db,
                 paciente_id=paciente_id,
+                module_id=module_id,
             )
         )
 

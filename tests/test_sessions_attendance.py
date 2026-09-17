@@ -41,6 +41,21 @@ class SessionFixture(unittest.TestCase):
 
 
 class ExistingBehaviorTests(SessionFixture):
+    def test_patient_sessions_filter_persisted_pts_line(self):
+        from app.models import AgendaCuidado
+        from app.services.session_service import SessionService
+        neuro = self.observation_session(10,1)
+        cardio = self.observation_session(20,2)
+        self.user.profissional_id = 70
+        cardio.paciente_id = 10
+        agenda = self.db.get(AgendaCuidado,cardio.agenda_cuidado_id)
+        self.db.get(PTS,agenda.pts_id).paciente_id = 10
+        self.db.add(PacienteModulo(paciente_id=10,modulo_id=2,ativo=True))
+        self.db.commit()
+        service = SessionService()
+        self.assertEqual([r.id for r in service.patient_sessions(self.db,10,self.user,'NEURO')],[neuro.id])
+        self.assertEqual([r.id for r in service.patient_sessions(self.db,10,self.user,'CARDIO')],[cardio.id])
+
     def test_effective_neuro_payload_response_and_separate_finalize(self):
         session=self.observation_session()
         result=AssistentialExecutionService.registrar_atendimento(self.db,session,

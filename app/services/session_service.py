@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models import (SessaoAssistencial, RegistroLongitudinal, FormularioModulo,
-                        CampoFormulario)
+                        CampoFormulario, AgendaCuidado, PTS)
 from app.schemas.registros_longitudinais import RegistroLongitudinalCreate, CampoResposta
 from app.schemas.sessao_assistencial import SessaoAssistencialResponse
 from app.services.care_plan_service import CarePlanService, transaction
@@ -40,9 +40,15 @@ class SessionService:
                 raise HTTPException(409, 'Vínculo longitudinal da sessão inconsistente.')
         return session, pts, line
 
-    def patient_sessions(self, db, patient_id, user):
+    def patient_sessions(self, db, patient_id, user, care_line=None):
         self.care_plans.patient(db, patient_id, user)
-        rows = db.query(SessaoAssistencial).filter_by(paciente_id=patient_id).order_by(
+        query = db.query(SessaoAssistencial).filter_by(paciente_id=patient_id)
+        if care_line is not None:
+            from app.services.care_lines.access import authorized_patient
+            _, line = authorized_patient(db, user, patient_id, care_line)
+            query = query.join(AgendaCuidado, SessaoAssistencial.agenda_cuidado_id == AgendaCuidado.id).join(
+                PTS, AgendaCuidado.pts_id == PTS.id).filter(PTS.modulo_id == line.module_id)
+        rows = query.order_by(
             SessaoAssistencial.data_agendada, SessaoAssistencial.hora_inicio,
             SessaoAssistencial.numero_sessao).all()
         for row in rows:

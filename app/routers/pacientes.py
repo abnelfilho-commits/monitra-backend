@@ -1,3 +1,7 @@
+from typing import Optional
+from pydantic import BaseModel
+from app.services.patient_line_service import list_patients, link_patient
+from app.services.care_lines.access import authorized_line, authorized_patient
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -54,7 +58,12 @@ def serializar_paciente(p: Paciente):
 def listar_pacientes(
     db: Session = Depends(get_db),
     usuario_atual: Usuario = Depends(get_usuario_atual),
+    care_line: Optional[str] = None,
 ):
+    if care_line is not None:
+        return [serializar_paciente(p) for p in list_patients(db, usuario_atual, care_line)]
+    if usuario_atual.perfil == "PROFISSIONAL":
+        raise HTTPException(400, "Linha de cuidado obrigatória.")
     query = db.query(Paciente).filter(Paciente.ativo == True)
 
     if not is_admin_global(usuario_atual):
@@ -66,12 +75,24 @@ def listar_pacientes(
     return [serializar_paciente(p) for p in pacientes]
 
 
+class PatientLineLink(BaseModel):
+    care_line: str
+
+
+@router.post("/{paciente_id}/care-lines")
+def associar_linha(paciente_id: int, payload: PatientLineLink,
+                   db: Session = Depends(get_db), usuario=Depends(get_usuario_atual)):
+    return link_patient(db, usuario, paciente_id, payload.care_line)
+
+
 @router.get("/{paciente_id}")
 def obter_paciente(
     paciente_id: int,
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
+    care_line: str = "NEURO",
 ):
+    authorized_patient(db, usuario, paciente_id, care_line)
     paciente = db.query(Paciente).filter(Paciente.id == paciente_id, Paciente.ativo == True).first()
     if not paciente:
         raise HTTPException(status_code=404, detail="Paciente não encontrado")
@@ -106,6 +127,7 @@ def criar_paciente(
     data = payload.dict()
 
     modulo_id = data.pop("modulo_id", None)
+    authorized_line(db, usuario, modulo_id, write=True)
 
     if not modulo_id:
         raise HTTPException(
@@ -146,7 +168,7 @@ def criar_paciente(
                 detail="Profissional não encontrado",
             )
 
-    if not is_admin(usuario):
+    if not is_admin_global(usuario):
         if usuario.clinica_id is None:
             raise HTTPException(
                 status_code=403,

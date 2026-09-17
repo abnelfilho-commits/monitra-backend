@@ -56,6 +56,7 @@ class DiagnosticoBase(BaseModel):
 
 
 class DiagnosticoCreate(DiagnosticoBase):
+    care_line: str = Field(min_length=1)
     paciente_id: int = Field(
         gt=0,
     )
@@ -107,6 +108,7 @@ class DiagnosticoResponse(DiagnosticoBase):
     )
 
     id: int
+    modulo_id: int
     paciente_id: int
     created_at: datetime
     updated_at: Optional[datetime] = None

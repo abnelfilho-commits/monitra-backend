@@ -25,7 +25,7 @@ def get_usuario_atual(
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         sub = payload.get("sub")
-        if not sub:
+        if not sub or payload.get("tipo") not in (None, "usuario"):
             raise cred_exc
         user_id = int(sub)
     except (JWTError, ValueError, TypeError):

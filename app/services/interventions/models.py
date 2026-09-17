@@ -45,8 +45,8 @@ class InterventionRecord:
     source_type: SourceType
     source_id: int
     patient_id: int
-    care_line: Optional[CareLineDefinition]
-    module_id: Optional[int]
+    care_line: CareLineDefinition
+    module_id: int
     care_line_association: CareLineAssociation
     actor: Optional[Mapping[str, Any]]
     type: str
@@ -56,6 +56,10 @@ class InterventionRecord:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
+        if (not isinstance(self.care_line, CareLineDefinition)
+                or self.module_id != self.care_line.module_id
+                or self.care_line_association != CareLineAssociation.EXPLICIT):
+            raise InvalidInterventionPayload('Intervenção exige linha persistida explícita.')
         object.__setattr__(self, 'metadata', deepcopy(dict(self.metadata)))
         if self.actor is not None:
             object.__setattr__(self, 'actor', deepcopy(dict(self.actor)))

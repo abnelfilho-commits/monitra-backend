@@ -267,6 +267,7 @@ def registrar_atendimento(
 @router.get("/paciente/{paciente_id}")
 def listar_sessoes_por_paciente(
     paciente_id: int,
+    care_line: str = "NEURO",
     db: Session = Depends(get_db),
     usuario=Depends(get_usuario_atual),
 ):
@@ -275,7 +276,7 @@ def listar_sessoes_por_paciente(
     ordenadas cronologicamente.
     """
 
-    sessoes = SessionService().patient_sessions(db, paciente_id, usuario)
+    sessoes = SessionService().patient_sessions(db, paciente_id, usuario, care_line=care_line)
 
     return [
         {

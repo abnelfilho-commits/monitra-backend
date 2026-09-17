@@ -403,7 +403,7 @@ class TimelineService:
                     descricao,
                     profissional_id
                 FROM intervencoes
-                WHERE paciente_id = :paciente_id
+                WHERE paciente_id = :paciente_id AND modulo_id = 1
                 ORDER BY created_at DESC, id DESC
             """),
             {"paciente_id": paciente_id}
@@ -442,7 +442,7 @@ class TimelineService:
                 FROM avaliacoes_clinicas ac
                 JOIN registros_longitudinais rl
                     ON rl.id = ac.registro_id
-                WHERE rl.paciente_id = :paciente_id
+                WHERE rl.paciente_id = :paciente_id AND rl.modulo_id = 1
                 ORDER BY ac.created_at DESC
             """),
             {"paciente_id": paciente_id}
@@ -469,6 +469,7 @@ class TimelineService:
             TimelineEventService.obter_eventos_paciente(
                 db=db,
                 paciente_id=paciente_id,
+                module_id=1,
             )
         )
 

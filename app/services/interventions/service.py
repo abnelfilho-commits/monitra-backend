@@ -1,9 +1,9 @@
 """Institutional authorization, resolution and transaction boundary."""
 from contextlib import contextmanager
 from app.core.acl import assert_clinica_access
+from app.services.care_lines.access import authorized_patient
 from app.models.paciente import Paciente
 from app.services.care_lines import care_line_resolver
-from app.services.care_lines.exceptions import CareLineNotFound
 from .adapters import GenericAdapter, CardioAdapter
 from .models import InterventionSubmission, InterventionUpdate, SourceType
 from .exceptions import (InterventionNotFound, InterventionIdentityConflict,
@@ -46,13 +46,17 @@ class InterventionService:
         assert_clinica_access(user, patient.clinica_id)
         return patient
 
-    def _resource(self, db, source_type, source_id, user, lock=False):
+    def _resource(self, db, source_type, source_id, user, lock=False, requested_care_line=None):
         adapter = self._adapter(source_type)
         raw = adapter.get(db, source_id, lock=lock)
         if raw is None:
             raise InterventionNotFound('Intervenção não encontrada.')
         record = adapter.to_record(raw, self.registry)
+        if requested_care_line is not None and self.registry.get(requested_care_line) != record.care_line:
+            raise InterventionNotFound("Intervenção não encontrada nesta linha.")
         self._patient(db, record.patient_id, user)
+        authorized_patient(db, user, record.patient_id, record.module_id, write=lock,
+                           require_link=lock, resolver=self.resolver)
         return adapter, raw, record
 
     def create(self, db, submission, *, user):
@@ -61,33 +65,32 @@ class InterventionService:
                 raise InvalidInterventionPayload('Executor deve corresponder ao usuário autenticado.')
             patient = self._patient(db, submission.patient_id, user)
             line = self.resolver.resolve(db, patient.id, submission.requested_care_line, 'interventions')
+            authorized_patient(db, user, patient.id, line.code, write=True, resolver=self.resolver)
             adapter = self._adapter(self.line_sources.get(line.code))
             raw = adapter.create(db, submission, line, user, patient)
             return adapter.to_record(raw, self.registry)
 
-    def get(self, db, source_type, source_id, *, user):
-        return self._resource(db, source_type, source_id, user)[2]
+    def get(self, db, source_type, source_id, *, user, requested_care_line=None):
+        return self._resource(db, source_type, source_id, user, requested_care_line=requested_care_line)[2]
 
     def list_for_patient(self, db, patient_id, *, user, source_type=None, requested_care_line=None):
         self._patient(db, patient_id, user)
-        line = None
-        if requested_care_line is not None:
-            line = self.registry.get(requested_care_line)
-            if line is None:
-                raise CareLineNotFound('Linha de cuidado não reconhecida pela aplicação.')
+        if requested_care_line is None:
+            requested_care_line = self.resolver.resolve(db, patient_id).code
+        _, line = authorized_patient(db, user, patient_id, requested_care_line, resolver=self.resolver)
         adapters = [self._adapter(source_type)] if source_type is not None else self.adapters.values()
         result = []
         for adapter in adapters:
             for raw in adapter.list_for_patient(db, patient_id):
                 record = adapter.to_record(raw, self.registry)
-                if line is None or record.module_id == line.module_id:
+                if record.module_id == line.module_id:
                     result.append(record)
         # Source-local ordering is preserved; no invented common clinical timestamp.
         return result
 
-    def update(self, db, source_type, source_id, changes, *, user, expected_patient_id=None):
+    def update(self, db, source_type, source_id, changes, *, user, expected_patient_id=None, requested_care_line=None):
         with self._transaction(db):
-            adapter, raw, record = self._resource(db, source_type, source_id, user, lock=True)
+            adapter, raw, record = self._resource(db, source_type, source_id, user, lock=True, requested_care_line=requested_care_line)
             if record.source_type != SourceType.GENERIC_INTERVENTION:
                 raise InterventionOperationNotSupported('Edição Cardio indisponível em V1.')
             if expected_patient_id is not None and expected_patient_id != record.patient_id:
@@ -96,9 +99,9 @@ class InterventionService:
                 raise InvalidInterventionPayload('Somente campos mutáveis são aceitos.')
             return adapter.to_record(adapter.update(db, raw, changes), self.registry)
 
-    def delete(self, db, source_type, source_id, *, user):
+    def delete(self, db, source_type, source_id, *, user, requested_care_line=None):
         with self._transaction(db):
-            adapter, raw, record = self._resource(db, source_type, source_id, user, lock=True)
+            adapter, raw, record = self._resource(db, source_type, source_id, user, lock=True, requested_care_line=requested_care_line)
             if record.source_type != SourceType.GENERIC_INTERVENTION:
                 raise InterventionOperationNotSupported('Exclusão Cardio indisponível em V1.')
             adapter.delete(db, raw)

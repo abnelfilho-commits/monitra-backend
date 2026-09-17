@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 from app.models import (Clinica, OcupacaoProfissional, Profissional, Usuario, Paciente,
     ModuloClinico, PacienteModulo, PTS, PTSObjetivo, AgendaCuidado,
-    AtividadeTerapeutica, AtividadeOcupacao, SessaoAssistencial)
+    AtividadeTerapeutica, AtividadeOcupacao, SessaoAssistencial, ProfissionalModulo)
 from app.schemas.pts import PTSCreate, PTSObjetivoCreate, PTSObjetivoUpdate
 from app.schemas.agenda_cuidado import AgendaCuidadoCreate, AgendaCuidadoUpdate, AgendaFrequenciaUpdate
 from app.services.care_plan_service import CarePlanService
@@ -26,7 +26,7 @@ from app.services.scheduling_service import SchedulingService
 DAY = date(2026, 1, 10)
 MODELS = (Clinica, OcupacaoProfissional, Profissional, Usuario, Paciente,
     ModuloClinico, PacienteModulo, PTS, PTSObjetivo, AtividadeTerapeutica,
-    AtividadeOcupacao, AgendaCuidado, SessaoAssistencial)
+    AtividadeOcupacao, AgendaCuidado, SessaoAssistencial, ProfissionalModulo)
 
 
 def seed(db):
@@ -44,6 +44,9 @@ def seed(db):
     db.add_all([ModuloClinico(id=1,nome='Neuro',slug='neurodesenvolvimento',ativo=True),
                 ModuloClinico(id=2,nome='Cardio',slug='cardiometabolico',ativo=True)])
     db.flush()
+    for professional in (70, 72, 73):
+        for module in (1, 2):
+            db.add(ProfissionalModulo(profissional_id=professional, modulo_id=module))
     for pid, module in ((10,1),(20,2),(30,1),(40,1),(40,2)):
         db.add(PacienteModulo(paciente_id=pid,modulo_id=module,ativo=True))
     for i, module in ((1,1),(2,2),(3,None)):

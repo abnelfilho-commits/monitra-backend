@@ -13,7 +13,7 @@ from test_interventions import Fixture, DAY
 
 class ConsumerTests(Fixture):
     def seed_interventions(self):
-        for index,module in enumerate((None,1,2),1):
+        for index,module in enumerate((1,1,2),1):
             self.db.add(Intervencao(id=index,paciente_id=10,profissional_id=50,modulo_id=module,
                 tipo='authored',descricao='Synthetic '+str(index),data_intervencao=datetime.combine(date.today(),DAY.time())))
         self.db.commit()
@@ -80,7 +80,7 @@ class ConsumerTests(Fixture):
         self.db.add(SessaoAssistencial(id=1,agenda_cuidado_id=1,paciente_id=10,numero_sessao=1,
             data_agendada=DAY.date(),duracao_minutos=30,status='AGENDADA'))
         for identity in range(1,7):
-            self.db.add(Intervencao(id=identity,paciente_id=10,modulo_id=2 if identity%2 else None,
+            self.db.add(Intervencao(id=identity,paciente_id=10,modulo_id=2 if identity%2 else 1,
                 tipo='authored',descricao=str(identity),data_intervencao=DAY+timedelta(days=identity)))
         self.db.commit()
         result=AssistentialSessionService.get_session_details(self.db,1)

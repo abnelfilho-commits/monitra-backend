@@ -100,12 +100,12 @@ class SourceTests(unittest.TestCase):
             'campos_formulario':'id INTEGER, formulario_id INTEGER, nome_campo TEXT',
             'respostas_registro':'registro_id INTEGER, campo_id INTEGER, valor_texto TEXT, valor_numero NUMERIC, valor_booleano BOOLEAN, valor_data TEXT, valor_hora TEXT, valor_json TEXT',
             'intervencoes':'id INTEGER, modulo_id INTEGER, paciente_id INTEGER, profissional_id INTEGER, tipo TEXT, descricao TEXT, data_intervencao TEXT, created_at TEXT',
-            'intervencoes_cardiometabolicas':'id INTEGER, paciente_id INTEGER, profissional_id INTEGER, tipo TEXT, descricao TEXT, prioridade TEXT, created_at TEXT',
+            'intervencoes_cardiometabolicas':'modulo_id INTEGER, id INTEGER, paciente_id INTEGER, profissional_id INTEGER, tipo TEXT, descricao TEXT, prioridade TEXT, created_at TEXT',
             'avaliacoes_clinicas':'id INTEGER, paciente_id INTEGER, modulo_id INTEGER, registro_id INTEGER, instrumento TEXT, score NUMERIC, classificacao TEXT, interpretacao TEXT, profissional_id INTEGER, status TEXT, executado_em TEXT, created_at TEXT',
             'pts':'id INTEGER, modulo_id INTEGER, paciente_id INTEGER',
             'agenda_cuidados':'id INTEGER, pts_id INTEGER, profissional_id INTEGER',
             'sessoes_assistenciais':'id INTEGER, paciente_id INTEGER, agenda_cuidado_id INTEGER, profissional_id INTEGER, data_realizacao TEXT, hora_fim_real TEXT, created_at TEXT, numero_sessao INTEGER, registro_longitudinal_id INTEGER, status TEXT',
-            'diagnosticos':'id INTEGER, paciente_id INTEGER, data_diagnostico TEXT, created_at TEXT, descricao_clinica TEXT, medico_nome TEXT, cid TEXT, status TEXT',
+            'diagnosticos':'modulo_id INTEGER, id INTEGER, paciente_id INTEGER, data_diagnostico TEXT, created_at TEXT, descricao_clinica TEXT, medico_nome TEXT, cid TEXT, status TEXT',
         }
         for table, columns in schemas.items():
             self.db.execute(text('CREATE TABLE '+table+' ('+columns+')'))
@@ -114,14 +114,14 @@ class SourceTests(unittest.TestCase):
             self.insert('formularios_modulo', id=id, modulo_id=module, tipo=kind, ativo=False)
             self.insert('registros_longitudinais', id=id, paciente_id=10, modulo_id=module,
                         formulario_id=id, data_registro='2026-01-10', criado_em='2026-02-01T12:00:00', origem='PROFISSIONAL')
-        self.insert('intervencoes', id=1, paciente_id=10, tipo='test', descricao='authored', data_intervencao='2026-01-10T11:00:00')
-        self.insert('intervencoes_cardiometabolicas', id=1, paciente_id=10, tipo='test', descricao='authored cardio', prioridade='alta', created_at='2026-01-10T12:00:00')
+        self.insert('intervencoes', modulo_id=1, id=1, paciente_id=10, tipo='test', descricao='authored', data_intervencao='2026-01-10T11:00:00')
+        self.insert('intervencoes_cardiometabolicas', modulo_id=2, id=1, paciente_id=10, tipo='test', descricao='authored cardio', prioridade='alta', created_at='2026-01-10T12:00:00')
         self.insert('avaliacoes_clinicas', id=1, paciente_id=10, modulo_id=1, registro_id=3, instrumento='MCHAT', score=2, interpretacao='persisted', status='CONCLUIDA')
         self.insert('pts', id=1, modulo_id=2, paciente_id=10)
         self.insert('agenda_cuidados', id=1, pts_id=1)
         self.insert('sessoes_assistenciais', id=1, paciente_id=10, agenda_cuidado_id=1,
                     status='REALIZADA', data_realizacao='2026-01-11', hora_fim_real='10:30:00')
-        self.insert('diagnosticos', id=1, paciente_id=10, data_diagnostico='2026-01-09', medico_nome='synthetic', status='ATIVO')
+        self.insert('diagnosticos', modulo_id=1, id=1, paciente_id=10, data_diagnostico='2026-01-09', medico_nome='synthetic', status='ATIVO')
         self.db.commit()
 
     def insert(self, table, **values):
@@ -146,7 +146,7 @@ class SourceTests(unittest.TestCase):
         result = TimelineService.get_events(self.db,TimelineQuery(10))
         self.assertEqual(len(result),8)
         self.assertEqual(len({(e.source_type,e.source_id) for e in result}),8)
-        self.assertTrue(any(e.care_line_association==CareLineAssociation.UNASSIGNED for e in result))
+        self.assertFalse(any(e.care_line_association==CareLineAssociation.UNASSIGNED for e in result))
         self.assertFalse(any(e.care_line_association==CareLineAssociation.TRANSVERSAL for e in result))
         unknown = next(e for e in result if e.source_type==SourceType.LONGITUDINAL_RECORD and e.source_id==5)
         self.assertIsNone(unknown.care_line)
@@ -156,7 +156,7 @@ class SourceTests(unittest.TestCase):
     def test_no_active_link_required_for_historical_line(self):
         registry = CareLineRegistry([replace(NEURO,active=False),CARDIO])
         result = TimelineService.get_events(self.db,TimelineQuery(10,scope='CARE_LINE',requested_care_line='NEURO'),registry=registry)
-        self.assertEqual({e.event_type for e in result},{EventType.DAILY_RECORD,EventType.ASSESSMENT})
+        self.assertEqual({e.event_type for e in result},{EventType.DAILY_RECORD,EventType.ASSESSMENT,EventType.INTERVENTION,EventType.DIAGNOSIS})
 
     def test_other_patient_and_noncompleted_sources_excluded(self):
         self.insert('diagnosticos',id=2,paciente_id=11,data_diagnostico='2026-01-01',status='ATIVO')
@@ -189,7 +189,7 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(unknown.care_line_association,CareLineAssociation.EXPLICIT)
         self.assertEqual(unknown.metadata['module_id'],999)
         scoped=TimelineService.get_events(self.db,TimelineQuery(10,scope='CARE_LINE',requested_care_line='NEURO'))
-        self.assertEqual([e.source_id for e in scoped if e.source_type==SourceType.GENERIC_INTERVENTION],[2])
+        self.assertEqual([e.source_id for e in scoped if e.source_type==SourceType.GENERIC_INTERVENTION],[2, 1])
 
     def test_bounded_is_global_prefix(self):
         full = TimelineService.get_events(self.db,TimelineQuery(10))
@@ -266,7 +266,8 @@ class LegacyTests(unittest.TestCase):
     def test_neuro_shape_and_endpoint_facade(self):
         from app.routers.timeline import obter_timeline_paciente
         with patch('app.services.timeline_service.TimelineEventService.obter_eventos_paciente',return_value=[]):
-            result = obter_timeline_paciente(10,self.fake_db())
+            with patch("app.routers.timeline.authorized_patient"):
+                result = obter_timeline_paciente(10,self.fake_db(),SimpleNamespace(id=1))
         self.assertEqual(len(result),4)
         self.assertEqual(result[0]['sono_qualidade'],'4')
         self.assertEqual(result[0]['crise_sensorial'],True)
@@ -289,6 +290,8 @@ class LegacyTests(unittest.TestCase):
         from app.routers.timeline import router
         app = FastAPI()
         app.include_router(router)
+        from app.core.deps import get_usuario_atual
+        app.dependency_overrides[get_usuario_atual] = lambda: SimpleNamespace(id=1)
         app.dependency_overrides[get_db] = self.fake_db
         async def request():
             messages = []
@@ -304,7 +307,8 @@ class LegacyTests(unittest.TestCase):
             self.assertEqual(next(m['status'] for m in messages if m['type']=='http.response.start'),200)
             return json.loads(b''.join(m.get('body',b'') for m in messages))
         with patch('app.services.timeline_service.TimelineEventService.obter_eventos_paciente',return_value=[]):
-            result = asyncio.run(request())
+            with patch('app.routers.timeline.authorized_patient'):
+                result = asyncio.run(request())
         self.assertEqual(len(result),4)
         self.assertEqual(result[0]['tipo_evento'],'REGISTRO_DIARIO')
         self.assertEqual(result[0]['sono_qualidade'],'4')

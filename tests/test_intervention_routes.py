@@ -28,8 +28,10 @@ class RouteTests(Fixture):
                     return {'type':'http.request','body':json.dumps(payload).encode(),'more_body':False}
                 await asyncio.sleep(3600)
             async def send(message): messages.append(message)
+            from urllib.parse import urlsplit
+            parsed = urlsplit(path)
             scope={'type':'http','asgi':{'version':'3.0'},'http_version':'1.1','method':method,
-                'scheme':'http','path':path,'raw_path':path.encode(),'query_string':b'',
+                'scheme':'http','path':parsed.path,'raw_path':parsed.path.encode(),'query_string':parsed.query.encode(),
                 'headers':[(b'content-type',b'application/json')], 'client':('127.0.0.1',1),
                 'server':('test',80),'root_path':''}
             await app(scope,receive,send)
@@ -45,12 +47,28 @@ class RouteTests(Fixture):
 
     def operations(self, identity):
         return [('POST','/intervencoes/',self.payload()),
-            ('GET','/intervencoes/paciente/10',None),
-            ('GET','/intervencoes/'+str(identity),None),
-            ('PUT','/intervencoes/'+str(identity),self.payload()),
-            ('DELETE','/intervencoes/'+str(identity),None),
+            ('GET','/intervencoes/paciente/10?care_line=NEURO',None),
+            ('GET','/intervencoes/'+str(identity)+'?care_line=NEURO',None),
+            ('PUT','/intervencoes/'+str(identity)+'?care_line=NEURO',self.payload()),
+            ('DELETE','/intervencoes/'+str(identity)+'?care_line=NEURO',None),
             ('POST','/cardiometabolico/pacientes/11/intervencoes',{'tipo':'nutricao','descricao':'Synthetic','prioridade':'alta'}),
             ('GET','/cardiometabolico/pacientes/11/intervencoes',None)]
+
+    def test_cross_line_read_update_delete_are_rejected(self):
+        record = self.generic()
+        for method in ('GET', 'PUT', 'DELETE'):
+            result = self.request(method, '/intervencoes/'+str(record.source_id)+'?care_line=CARDIO',
+                                  self.payload() if method == 'PUT' else None)
+            self.assertEqual(result.status_code, 404)
+        self.assertEqual(self.service.get(self.db, G, record.source_id, user=self.user).module_id, 1)
+
+    def test_cardio_read_endpoints_require_auth_and_clinic(self):
+        for suffix in ('', '/timeline', '/evolucao'):
+            path = '/cardiometabolico/pacientes/11' + suffix
+            self.assertEqual(self.request('GET', path, authenticated=False).status_code, 401)
+            self.user.clinica_id = 2
+            self.assertIn(self.request('GET', path).status_code, (403, 404))
+            self.user.clinica_id = 1
 
     def test_seven_routes_require_authentication(self):
         r=self.generic()
@@ -66,7 +84,7 @@ class RouteTests(Fixture):
             for method,path,payload in self.operations(r.source_id):
                 with self.subTest(role=role,method=method,path=path):
                     response=self.request(method,path,payload)
-                    self.assertEqual(response.status_code,403,response.json)
+                    self.assertIn(response.status_code,(403,404),response.json)
 
     def test_seven_routes_allow_same_clinic(self):
         r=self.generic()
@@ -91,26 +109,26 @@ class RouteTests(Fixture):
         self.assertEqual(original['profissional_id'],50)
         identity=original['id']
         self.user.id=60
-        response=self.request('PUT','/intervencoes/'+str(identity),self.payload(tipo='edited',modulo_id=2,profissional_id=60))
+        response=self.request('PUT','/intervencoes/'+str(identity)+'?care_line=NEURO',self.payload(tipo='edited',modulo_id=2,profissional_id=60))
         self.assertEqual(response.status_code,200,response.json)
         self.assertEqual(response.json['profissional_id'],50)
         self.assertEqual(response.json['created_at'],original['created_at'])
         self.assertEqual(self.service.get(self.db,G,identity,user=self.user).module_id,1)
-        rejected=self.request('PUT','/intervencoes/'+str(identity),self.payload(paciente_id=11))
+        rejected=self.request('PUT','/intervencoes/'+str(identity)+'?care_line=NEURO',self.payload(paciente_id=11))
         self.assertEqual(rejected.status_code,409)
         self.assertIn('INTERVENTION_IDENTITY_CONFLICT',rejected.json['detail'])
-        response=self.request('DELETE','/intervencoes/'+str(identity))
+        response=self.request('DELETE','/intervencoes/'+str(identity)+'?care_line=NEURO')
         self.assertEqual(response.json,{'ok':True})
 
     def test_cardio_shapes_and_source_only_listing(self):
-        self.historical(patient=11)
+        self.historical(patient=11,module=2)
         response=self.request('POST','/cardiometabolico/pacientes/11/intervencoes',{'tipo':'nutricao','descricao':'','prioridade':'alta'})
         self.assertEqual(response.json,{'success':True})
         listed=self.request('GET','/cardiometabolico/pacientes/11/intervencoes')
         self.assertEqual(len(listed.json),1)
         self.assertEqual(set(listed.json[0]),{'id','tipo','descricao','prioridade','created_at'})
         self.assertEqual(listed.json[0]['prioridade'],'alta')
-        generic=self.request('GET','/intervencoes/paciente/11')
+        generic=self.request('GET','/intervencoes/paciente/11?care_line=CARDIO')
         self.assertEqual(len(generic.json),1)
         self.assertEqual(generic.json[0]['tipo'],'historical')
 
@@ -119,7 +137,7 @@ class RouteTests(Fixture):
         response=self.request('POST','/intervencoes/',self.payload())
         self.assertEqual(response.status_code,409)
         self.assertIn('AMBIGUOUS_CARE_LINE',response.json['detail'])
-        self.assertEqual(self.service.list_for_patient(self.db,10,user=self.user),[])
+        self.assertEqual(self.service.list_for_patient(self.db,10,user=self.user,requested_care_line="NEURO"),[])
         response=self.request('POST','/intervencoes/',self.payload(requested_care_line='NEURO'))
         self.assertEqual(response.status_code,200,response.json)
 
@@ -130,5 +148,5 @@ class RouteTests(Fixture):
 
     def test_update_acl_uses_resource_patient(self):
         identity=self.historical(patient=20)
-        response=self.request('PUT','/intervencoes/'+str(identity),self.payload())
+        response=self.request('PUT','/intervencoes/'+str(identity)+'?care_line=NEURO',self.payload())
         self.assertEqual(response.status_code,403)

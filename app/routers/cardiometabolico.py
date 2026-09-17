@@ -1,3 +1,5 @@
+from app.services.patient_line_service import list_patients
+from app.services.care_lines.access import authorized_patient
 from datetime import date as clinical_date
 from app.services.daily_record import ActorRef, ActorType, DailyRecordSubmission
 from app.services.daily_record.adapters import call_write
@@ -41,7 +43,9 @@ intervention_service = InterventionService()
 def obter_paciente_cardiometabolico(
     paciente_id: int,
     db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
+    authorized_patient(db, usuario, paciente_id, "CARDIO")
     paciente = db.execute(
         text("""
             SELECT
@@ -490,6 +494,7 @@ def listar_pacientes_cardiometabolico(
     db: Session = Depends(get_db),
     usuario = Depends(get_usuario_atual),
 ):
+    members = list_patients(db, usuario, "CARDIO")
     rows = db.execute(
         text("""
             WITH ultimos AS (
@@ -641,19 +646,24 @@ def listar_pacientes_cardiometabolico(
             "altura": row.altura,
             "imc": imc,
 
-            "score_clinico": row.score_clinico or 0,
+            "score_clinico": row.score_clinico,
 
-            "risco": row.risco or "baixo",
+            "risco": row.risco,
         })
 
-    return pacientes
+    values = {item["id"]: item for item in pacientes}
+    return [values.get(p.id, {"id": p.id, "nome": p.nome, "altura": p.altura,
+             "risco": None, "score_clinico": None, "glicemia": None,
+             "pressao": None, "peso": None, "imc": None}) for p in members]
 
 
 @router.get("/pacientes/{paciente_id}/evolucao")
 def evolucao_cardiometabolica(
     paciente_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
+    authorized_patient(db, usuario, paciente_id, "CARDIO")
     rows = db.execute(
         text("""
             SELECT
@@ -701,8 +711,10 @@ def evolucao_cardiometabolica(
 @router.get("/pacientes/{paciente_id}/timeline")
 def timeline_cardiometabolica(
     paciente_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
+    authorized_patient(db, usuario, paciente_id, "CARDIO")
     rows = db.execute(
         text("""
             SELECT
@@ -852,7 +864,7 @@ def timeline_cardiometabolica(
                 prioridade,
                 created_at
             FROM intervencoes_cardiometabolicas
-            WHERE paciente_id = :paciente_id
+            WHERE paciente_id = :paciente_id AND modulo_id = 2
             ORDER BY created_at DESC
         """),
         {
@@ -1426,4 +1438,4 @@ def criar_intervencao(paciente_id: int, payload: IntervencaoCreate,
 @router.get("/pacientes/{paciente_id}/intervencoes")
 def listar_intervencoes(paciente_id: int, db: Session = Depends(get_db), usuario=Depends(get_usuario_atual)):
     return [cardio_response(r) for r in intervention_call(lambda: intervention_service.list_for_patient(
-        db, paciente_id, user=usuario, source_type=SourceType.CARDIO_INTERVENTION))]
+        db, paciente_id, user=usuario, source_type=SourceType.CARDIO_INTERVENTION, requested_care_line="CARDIO"))]

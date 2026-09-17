@@ -76,7 +76,7 @@ def generic_interventions(db, patient_id, registry):
                         FROM intervencoes WHERE paciente_id=:patient_id''', patient_id):
         occurrence = as_datetime(r['data_intervencao'])
         result.append(TimelineEvent(S.GENERIC_INTERVENTION, r['id'], patient_id, registry.get(r['modulo_id']),
-            A.EXPLICIT if r['modulo_id'] is not None else A.UNASSIGNED, E.INTERVENTION, 'Intervenção',
+            A.EXPLICIT, E.INTERVENTION, 'Intervenção',
             reference_date=occurrence.date() if occurrence else None,
             reference_time=occurrence.timetz() if occurrence else None,
             temporal_precision=P.DATETIME if occurrence else None,
@@ -86,12 +86,11 @@ def generic_interventions(db, patient_id, registry):
 
 
 def cardio_interventions(db, patient_id, registry):
-    line = registry.get('cardiometabolico')  # Association derives from this specialized source.
-    return [TimelineEvent(S.CARDIO_INTERVENTION, r['id'], patient_id, line, A.DERIVED,
+    return [TimelineEvent(S.CARDIO_INTERVENTION, r['id'], patient_id, registry.get(r['modulo_id']), A.EXPLICIT,
         E.INTERVENTION, 'Intervenção', created_at=as_datetime(r['created_at']),
         summary=r['descricao'], actor=actor('intervencoes_cardiometabolicas.profissional_id', r['profissional_id']),
         metadata={'source_care_line':'cardiometabolico', 'type':r['tipo'], 'priority':r['prioridade']})
-        for r in rows(db, '''SELECT id, profissional_id, tipo, descricao, prioridade, created_at
+        for r in rows(db, '''SELECT id, modulo_id, profissional_id, tipo, descricao, prioridade, created_at
             FROM intervencoes_cardiometabolicas WHERE paciente_id=:patient_id''', patient_id)]
 
 
@@ -136,12 +135,12 @@ def sessions(db, patient_id, registry):
 
 
 def diagnoses(db, patient_id, registry):
-    return [TimelineEvent(S.DIAGNOSIS, r['id'], patient_id, None, A.UNASSIGNED,
+    return [TimelineEvent(S.DIAGNOSIS, r['id'], patient_id, registry.get(r['modulo_id']), A.EXPLICIT,
         E.DIAGNOSIS, 'Diagnóstico', reference_date=as_date(r['data_diagnostico']),
         temporal_precision=P.DATE, created_at=as_datetime(r['created_at']),
         summary=r['descricao_clinica'], actor=actor('authored_physician', None, r['medico_nome']),
         metadata={'cid':r['cid'], 'status':r['status']})
-        for r in rows(db, '''SELECT id, data_diagnostico, created_at, descricao_clinica,
+        for r in rows(db, '''SELECT id, modulo_id, data_diagnostico, created_at, descricao_clinica,
             medico_nome, cid, status FROM diagnosticos
             WHERE paciente_id=:patient_id AND status <> 'CANCELADO' ''', patient_id)]
 

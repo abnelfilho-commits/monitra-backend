@@ -22,9 +22,11 @@ class GenericAdapter:
             Intervencao.data_intervencao.desc()).all()
 
     def to_record(self, row, registry):
+        line = registry.get(row.modulo_id)
+        if line is None:
+            raise InvalidInterventionPayload('Intervenção sem linha válida.')
         return InterventionRecord(self.source_type, row.id, row.paciente_id,
-            registry.get(row.modulo_id) if row.modulo_id is not None else None,
-            row.modulo_id, CareLineAssociation.EXPLICIT if row.modulo_id is not None else CareLineAssociation.UNASSIGNED,
+            line, row.modulo_id, CareLineAssociation.EXPLICIT,
             actor('usuarios', row.profissional_id), row.tipo, row.descricao,
             row.data_intervencao, row.created_at)
 
@@ -55,6 +57,7 @@ class GenericAdapter:
 # Typed SQL projection of the existing table, not an ORM model or schema creator.
 CARDIO_TABLE = Table('intervencoes_cardiometabolicas', MetaData(),
     Column('id', Integer, primary_key=True), Column('paciente_id', Integer),
+    Column('modulo_id', Integer, nullable=False),
     Column('profissional_id', Integer), Column('tipo', String(100)),
     Column('descricao', Text), Column('prioridade', String(30)), Column('created_at', DateTime))
 
@@ -71,9 +74,11 @@ class CardioAdapter:
             .order_by(CARDIO_TABLE.c.created_at.desc())).mappings().all()
 
     def to_record(self, row, registry):
-        line = registry.get('CARDIO')
+        line = registry.get(row['modulo_id'])
+        if line is None or line.code != 'CARDIO':
+            raise InvalidInterventionPayload('Intervenção Cardio com linha incompatível.')
         return InterventionRecord(self.source_type, row['id'], row['paciente_id'], line,
-            line.module_id if line else None, CareLineAssociation.DERIVED,
+            line.module_id, CareLineAssociation.EXPLICIT,
             actor('profissionais', row['profissional_id']), row['tipo'], row['descricao'],
             None, row['created_at'], {'priority': row['prioridade']})
 
@@ -93,7 +98,7 @@ class CardioAdapter:
             if professional is None or not professional.ativo or professional.clinica_id != patient.clinica_id:
                 raise InvalidInterventionPayload('Vínculo profissional incompatível ou inativo.')
         # Omit created_at: preserve the database default, not an application clock.
-        row = db.execute(CARDIO_TABLE.insert().values(paciente_id=patient.id,
+        row = db.execute(CARDIO_TABLE.insert().values(paciente_id=patient.id, modulo_id=line.module_id,
             profissional_id=professional_id, tipo=submission.type,
             descricao=submission.narrative, prioridade=priority).returning(*CARDIO_TABLE.c)).mappings().one()
         db.flush()
