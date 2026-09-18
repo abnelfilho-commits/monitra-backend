@@ -286,103 +286,35 @@ def inativar_paciente(
 @router.get("/{paciente_id}/relatorio-pdf")
 def baixar_relatorio_paciente_pdf(
     paciente_id: int,
+    care_line: Optional[str] = None,
+    period_start: Optional[date] = None,
+    period_end: Optional[date] = None,
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    paciente = (
-        db.query(Paciente)
-        .filter(
-            Paciente.id == paciente_id,
-            Paciente.ativo == True,
-        )
-        .first()
-    )
-
-    if not paciente:
-        raise HTTPException(
-            status_code=404,
-            detail="Paciente não encontrado.",
-        )
-
-    if (
-        not is_admin_global(usuario)
-        and paciente.clinica_id != usuario.clinica_id
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="Usuário sem permissão para este paciente.",
-        )
-
-    vinculos = (
-        db.query(
-            PacienteModulo,
-            ModuloClinico,
-        )
-        .join(
-            ModuloClinico,
-            ModuloClinico.id == PacienteModulo.modulo_id,
-        )
-        .filter(
-            PacienteModulo.paciente_id == paciente_id,
-            PacienteModulo.ativo == True,
-            ModuloClinico.ativo == True,
-        )
-        .all()
-    )
-
-    if not vinculos:
-        raise HTTPException(
-            status_code=400,
-            detail="Paciente sem módulo clínico ativo.",
-        )
-
-    module_map = {
-        "neurodesenvolvimento": "NEURO",
-    }
-
-    modulos_suportados = [
-        (
-            paciente_modulo,
-            modulo,
-            module_map.get(modulo.slug),
-        )
-        for paciente_modulo, modulo in vinculos
-        if modulo.slug in module_map
-    ]
-
-    if not modulos_suportados:
-        modulos = ", ".join(
-            modulo.nome
-            for _, modulo in vinculos
-        )
-
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "Relatório Longitudinal Inteligente "
-                f"ainda não disponível para: {modulos}."
-            ),
-        )
-
-    if len(modulos_suportados) > 1:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Paciente possui mais de um módulo clínico "
-                "compatível com o relatório. "
-                "É necessário selecionar o módulo."
-            ),
-        )
-
-    _, modulo_clinico, report_module = modulos_suportados[0]
-
-    period_start = (
-        paciente.created_at.date()
-        if paciente.created_at
-        else date.today()
-    )
-
-    period_end = date.today()
+    from app.services.care_lines.access import authorized_patient
+    from app.services.care_lines import care_line_resolver
+    from app.services.care_lines.exceptions import CareLineError
+    role = (usuario.perfil or '').strip().upper()
+    if role not in {'ADMIN', 'ADMINISTRADOR', 'ADMIN_CLINICA', 'PROFISSIONAL', 'SUPORTE'}:
+        raise HTTPException(403, 'Perfil sem acesso assistencial.')
+    query = db.query(Paciente).filter(Paciente.id == paciente_id, Paciente.ativo.is_(True))
+    if role not in {'ADMIN', 'ADMINISTRADOR'}:
+        if usuario.clinica_id is None:
+            raise HTTPException(403, 'Usuário sem clínica vinculada.')
+        query = query.filter(Paciente.clinica_id == usuario.clinica_id)
+    if query.first() is None:
+        raise HTTPException(404, 'Paciente não encontrado.')
+    try:
+        line = care_line_resolver.resolve(db, paciente_id, care_line, 'report')
+        paciente, line = authorized_patient(db, usuario, paciente_id, line.code)
+    except CareLineError as exc:
+        raise HTTPException(409 if exc.code=='AMBIGUOUS_CARE_LINE' else 400, exc.code) from exc
+    period_start = period_start or (paciente.created_at.date() if paciente.created_at else date.today())
+    period_end = period_end or date.today()
+    if period_start > period_end:
+        raise HTTPException(422, 'Período inválido.')
+    definition = ReportService().registry.for_care_line(line.code)
 
     temp_path = None
 
@@ -390,12 +322,12 @@ def baixar_relatorio_paciente_pdf(
         service = ReportService()
 
         context = service.generate(
-            report_code="CLN-001",
+            report_code=definition.code,
             subject_id=paciente_id,
             requested_by=usuario.id,
             period_start=period_start,
             period_end=period_end,
-            module=report_module,
+            module=line.code,
             db=db,
         )
 
@@ -421,7 +353,7 @@ def baixar_relatorio_paciente_pdf(
             status_code=500,
             detail=(
                 "Erro ao gerar Relatório Longitudinal Inteligente: "
-                f"{str(exc)}"
+                "Consulte o suporte."
             ),
         )
 

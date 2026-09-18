@@ -14,9 +14,17 @@ from app.services.report_engine.providers import (
     DiagnosisProvider,
     PTSProvider,
     SessionProvider,
-    ClinicalEngineProvider,
+
 )
 
+
+from app.services.report_engine.providers.clinical_engine_provider import NeuroClinicalEngineProvider
+from app.services.report_engine.knowledge.registry import (
+    ExecutiveSummaryEngine, CurrentStatusEngine, LongitudinalNarrativeEngine,
+    JourneyIndicatorsEngine, ClinicalInterpretationEngine, RecommendationEngine,
+    PTSExecutionEngine, AssessmentSummaryEngine, DiagnosisSummaryEngine)
+from app.services.report_engine.sections.identification import IdentificationSectionBuilder
+from app.services.report_engine.sections.temporal_scope import TemporalScopeSection
 
 CLN_001 = ReportDefinition(
     code="CLN-001",
@@ -24,6 +32,10 @@ CLN_001 = ReportDefinition(
     version="1.0",
     domain="CLINICAL",
     slug="clinical-longitudinal-report",
+    care_line="NEURO",
+    knowledge_engines=[ExecutiveSummaryEngine, CurrentStatusEngine, LongitudinalNarrativeEngine,
+        JourneyIndicatorsEngine, ClinicalInterpretationEngine, RecommendationEngine,
+        PTSExecutionEngine, AssessmentSummaryEngine, DiagnosisSummaryEngine],
     providers=[
         PatientProvider,
         TimelineProvider,
@@ -31,10 +43,11 @@ CLN_001 = ReportDefinition(
         DiagnosisProvider,
         PTSProvider,
         SessionProvider,
-        ClinicalEngineProvider,
+        NeuroClinicalEngineProvider,
+
     ],
     engines=[],
-    sections=[],
+    sections=[IdentificationSectionBuilder, TemporalScopeSection],
     renderer="PDF",
     required_parameters=[
         "subject_id",

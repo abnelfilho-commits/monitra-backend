@@ -32,6 +32,9 @@ class ReportDefinition:
     engines: List[Type[BaseReportEngine]] = field(default_factory=list)
     sections: List[Type[BaseSectionBuilder]] = field(default_factory=list)
 
+    care_line: Optional[str] = None
+    knowledge_engines: List[type] = field(default_factory=list)
+
     template: Optional[str] = None
     renderer: Optional[str] = None
     required_parameters: List[str] = field(default_factory=list)
@@ -79,6 +82,12 @@ class ReportRegistry:
             )
 
         return definition
+
+    def for_care_line(self, code):
+        definitions = [d for d in self._definitions.values() if d.care_line == code]
+        if len(definitions) != 1:
+            raise LookupError('Exactly one longitudinal report definition required per care line.')
+        return definitions[0]
 
     def exists(self, report_code: str) -> bool:
         """

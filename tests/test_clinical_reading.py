@@ -20,7 +20,7 @@ from app.services.clinical_reading import ClinicalReading, ClinicalReadingServic
 from app.services.clinical_reading.providers.cardio import read_cardio
 from app.services.clinical_reading.providers.neuro import read_neuro
 from app.services import neuro_engine
-from app.services.report_engine.providers.clinical_engine_provider import ClinicalEngineProvider
+from app.services.report_engine.providers.clinical_engine_provider import NeuroClinicalEngineProvider
 from app.services.report_engine.context import ReportContext
 
 DAY = date(2026, 1, 10)
@@ -134,9 +134,11 @@ class NeuroReadingTests(unittest.TestCase):
                     self.assertEqual(ClinicalReadingService.build_report_context(None, 10, 'neuro'), raw)
                     # Exercise the actual unchanged Report Engine provider too.
                     context = ReportContext('CLN-001', 10, 1, DAY, DAY, module='NEURO', db=object())
-                    collected = ClinicalEngineProvider().collect(context)
-                    self.assertEqual(collected.data, raw)
-                    self.assertEqual(context.official_readings['NEURO'], raw)
+                    with patch.object(ClinicalReadingService, 'get_reading', return_value=read_neuro(None, 10, NEURO)):
+                        collected = NeuroClinicalEngineProvider().collect(context)
+                    for key in raw:
+                        self.assertEqual(collected.data.get(key), raw[key])
+                    self.assertEqual(context.official_readings['NEURO'], collected.data)
 
     def test_no_cardio_report_support(self):
         with self.assertRaisesRegex(ValueError, 'Módulo clínico não suportado: CARDIO'):
@@ -201,7 +203,7 @@ class DatabaseReadingTests(unittest.TestCase):
 
     def test_cardio_resolution(self):
         self.assertTrue(CARDIO.supports('clinical_reading'))
-        self.assertEqual(CARDIO.capability_status('report'), Status.PLANNED)
+        self.assertEqual(CARDIO.capability_status('report'), Status.ACTIVE)
         self.assertEqual(CARDIO.capability_status('cockpit'), Status.ACTIVE)
         self.link(2)
         self.assertEqual(self.service.get_reading(self.db, 10).care_line.code, 'CARDIO')

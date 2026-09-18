@@ -274,13 +274,15 @@ class LegacyTests(unittest.TestCase):
         self.assertEqual(result[0]['origem'],'RESPONSAVEL')
         self.assertEqual(result[0]['id'],1)
 
-    def test_report_provider_still_receives_full_array(self):
+    def test_report_provider_requires_line_and_period(self):
         from app.services.report_engine.providers.timeline_provider import TimelineProvider
-        with patch('app.services.timeline_service.TimelineEventService.obter_eventos_paciente',return_value=[]):
-            result = TimelineProvider().collect(SimpleNamespace(db=self.fake_db(),subject_id=10))
-        self.assertEqual(result.metadata['total_events'],4)
-        self.assertEqual(len(result.data),4)
-
+        from datetime import date
+        context = SimpleNamespace(db=self.fake_db(), subject_id=10, module='NEURO',
+            period_start=date(2026,1,1), period_end=date(2026,2,1))
+        with patch.object(TimelineService, 'get_events', return_value=[]) as source:
+            result = TimelineProvider().collect(context)
+        self.assertEqual(source.call_args.args[1].requested_care_line, 'NEURO')
+        self.assertEqual(result.metadata['total_events'], 0)
 
     def test_neuro_http_facade(self):
         import asyncio

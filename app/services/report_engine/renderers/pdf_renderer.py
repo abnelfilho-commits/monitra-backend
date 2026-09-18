@@ -1,3 +1,4 @@
+from xml.sax.saxutils import escape
 """
 Renderer PDF do Report Engine.
 """
@@ -64,6 +65,7 @@ class PDFRenderer(BaseRenderer):
 
             "section": ParagraphStyle(
                 name="IntegraCareSection",
+                keepWithNext=True,
                 parent=base_styles["Heading2"],
                 fontName="Helvetica-Bold",
                 fontSize=12,
@@ -254,7 +256,7 @@ class PDFRenderer(BaseRenderer):
 
         story.append(
             Paragraph(
-                f"<b>Paciente:</b> {subject_name}",
+                f"<b>Paciente:</b> {escape(str(subject_name))}",
                 styles["metadata"],
             )
         )
@@ -1284,6 +1286,12 @@ class PDFRenderer(BaseRenderer):
                         Spacer(1, 0.35 * cm)
                     )
 
+                if component.type == "PLAIN_TEXT":
+                    for paragraph in str(component.data or '').split('\n'):
+                        if paragraph.strip():
+                            section_story.append(Paragraph(escape(paragraph), styles['body']))
+                            section_story.append(Spacer(1, 0.15 * cm))
+
                 if component.type == "TEXT":
                     content = str(
                         component.data or ""
@@ -1298,7 +1306,7 @@ class PDFRenderer(BaseRenderer):
 
                         section_story.append(
                             Paragraph(
-                                paragraph,
+                                escape(paragraph),
                                 styles["body"],
                             )
                         )
@@ -1307,12 +1315,17 @@ class PDFRenderer(BaseRenderer):
                             Spacer(1, 0.25 * cm)
                         )
                         
-            story.append(
-                KeepTogether(section_story)
-            )
+            if any(component.type == 'PLAIN_TEXT' for component in section.components):
+                story.extend(section_story)
+            else:
+                story.append(KeepTogether(section_story))
             story.append(
                 Spacer(1, 0.5 * cm)
             )
+
+        # A trailing spacer can spill onto an otherwise empty final page.
+        while story and isinstance(story[-1], Spacer):
+            story.pop()
 
         document.build(
             story,

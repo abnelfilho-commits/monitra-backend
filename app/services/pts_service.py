@@ -20,6 +20,7 @@ class PTSService:
     def get_patient_pts(
         db: Session,
         patient_id: int,
+        module_id=None,
     ) -> List[PTS]:
         """
         Recupera o histórico de PTS do paciente.
@@ -32,6 +33,7 @@ class PTSService:
             )
             .filter(
                 PTS.paciente_id == patient_id,
+                *([PTS.modulo_id == module_id] if module_id is not None else []),
             )
             .order_by(
                 PTS.data_inicio.desc(),
@@ -170,6 +172,7 @@ class PTSService:
         cls,
         db: Session,
         patient_id: int,
+        module_id=None,
     ) -> Dict[str, Any]:
         """
         Monta o contexto completo do PTS para o
@@ -179,6 +182,7 @@ class PTSService:
         patient_pts = cls.get_patient_pts(
             db=db,
             patient_id=patient_id,
+            module_id=module_id,
         )
 
         pts_list = [

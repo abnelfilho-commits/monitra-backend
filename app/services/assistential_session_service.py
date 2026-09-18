@@ -618,13 +618,23 @@ class AssistentialSessionService:
         cls,
         db: Session,
         patient_id: int,
+        module_id=None, period_start=None, period_end=None,
     ) -> Dict[str, Any]:
         """
         Monta o contexto assistencial das sessões do paciente.
         """
 
+        from sqlalchemy import func
+        from app.models.pts import PTS
+        from app.models.agenda_cuidado import AgendaCuidado
+        query = db.query(SessaoAssistencial)
+        if module_id is not None:
+            query = query.join(AgendaCuidado, AgendaCuidado.id==SessaoAssistencial.agenda_cuidado_id).join(
+                PTS, PTS.id==AgendaCuidado.pts_id).filter(PTS.modulo_id==module_id,PTS.paciente_id==patient_id)
+        if period_start is not None:
+            query = query.filter(func.coalesce(SessaoAssistencial.data_realizacao,SessaoAssistencial.data_agendada).between(period_start,period_end))
         sessions = (
-            db.query(SessaoAssistencial)
+            query
             .filter(
                 SessaoAssistencial.paciente_id == patient_id,
             )
