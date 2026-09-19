@@ -49,6 +49,7 @@ class MandatoryLineMigrationTests(unittest.TestCase):
             conn.execute(text('INSERT INTO diagnosticos VALUES (10,1)'))
         with self.assertRaises(RuntimeError):
             with self.engine.begin() as conn:
+                self.upgrade(conn, '8c01a0d1a000')
                 self.upgrade(conn, '8c01a0d1a001')
         with self.engine.connect() as conn:
             self.assertEqual(conn.execute(text('SELECT count(*) FROM diagnosticos')).scalar(), 1)
@@ -67,7 +68,7 @@ class MandatoryLineMigrationTests(unittest.TestCase):
         with self.engine.begin() as conn:
             conn.execute(text('INSERT INTO intervencoes VALUES (1,1),(2,2)'))
             conn.execute(text('INSERT INTO intervencoes_cardiometabolicas VALUES (3)'))
-            for revision in ('8c01a0d1a001', '8c01a0d1a002', '8c01a0d1a003'):
+            for revision in ('8c01a0d1a000', '8c01a0d1a001', '8c01a0d1a002', '8c01a0d1a003'):
                 self.upgrade(conn, revision)
             for table in ('diagnosticos', 'intervencoes', 'intervencoes_cardiometabolicas'):
                 column = next(c for c in inspect(conn).get_columns(table) if c['name'] == 'modulo_id')

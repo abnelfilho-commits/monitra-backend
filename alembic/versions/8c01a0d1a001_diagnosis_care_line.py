@@ -3,13 +3,12 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = '8c01a0d1a001'
-down_revision = '5a01c7e2d903'
+down_revision = '8c01a0d1a000'
 branch_labels = None
 depends_on = None
 
 
 def upgrade():
-    op.add_column('diagnosticos', sa.Column('modulo_id', sa.Integer(), nullable=True))
     if op.get_bind().execute(sa.text('SELECT count(*) FROM diagnosticos WHERE modulo_id IS NULL')).scalar():
         raise RuntimeError('Sanitize non-production diagnoses with explicit approval before upgrading.')
     op.alter_column('diagnosticos', 'modulo_id', existing_type=sa.Integer(), nullable=False)

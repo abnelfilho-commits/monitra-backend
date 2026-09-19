@@ -22,6 +22,13 @@ class RouteTests(unittest.TestCase):
         fixtures.PersistenceTests.setUp(self)
         # Generic PATCH now checks canonical attendance linkage before dispatch.
         from app.models import SessaoAssistencial
+        if self.engine.dialect.name == 'postgresql':
+            from sqlalchemy import text
+            # The adapter fixture only needs FK targets; it creates no sessions.
+            with self.engine.begin() as connection:
+                connection.execute(text('INSERT INTO usuarios VALUES (7)'))
+                for table in ('agenda_cuidados', 'profissionais'):
+                    connection.execute(text('CREATE TABLE ' + table + ' (id INTEGER PRIMARY KEY)'))
         SessaoAssistencial.__table__.create(self.engine)
     tearDown = fixtures.PersistenceTests.tearDown
     count = fixtures.PersistenceTests.count
