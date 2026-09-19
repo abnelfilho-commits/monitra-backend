@@ -80,6 +80,12 @@ class PersistenceTests(unittest.TestCase):
         else:
             self.engine = create_engine('sqlite:///:memory:', poolclass=StaticPool,
                                         connect_args={'check_same_thread':False})
+        if not url:
+            with self.engine.begin() as connection:
+                for table in ('pacientes', 'usuarios', 'responsaveis'):
+                    connection.execute(text('CREATE TABLE '+table+' (id INTEGER PRIMARY KEY)'))
+                connection.execute(text('INSERT INTO pacientes VALUES (10)'))
+                connection.execute(text('INSERT INTO responsaveis VALUES (99)'))
         for model in (ModuloClinico, PacienteModulo, FormularioModulo, CampoFormulario,
                       RegistroLongitudinal, RespostaRegistro):
             model.__table__.create(self.engine)

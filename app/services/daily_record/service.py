@@ -3,6 +3,7 @@ from app.models.modular import RegistroLongitudinal, RespostaRegistro
 from app.services.care_lines import care_line_resolver, CareOrigin
 from app.services.registros_longitudinais import persistir_registro_longitudinal, preencher_resposta
 from .models import ActorType, DailyRecordResult
+from .concurrency import lock_context
 from .exceptions import DailyRecordIdentityConflict, DailyRecordNotFound, DailyRecordError
 from .providers import PROVIDERS
 
@@ -20,6 +21,8 @@ class DailyRecordService:
 
     def _write(self, db, submission, record_id=None, commit=True):
         try:
+            lock_context(db, submission.patient_id,
+                         submission.actor.id if submission.actor.type == ActorType.RESPONSIBLE else None)
             line = self.resolver.resolve(db, submission.patient_id,
                                          submission.requested_care_line, 'daily_record')
             provider = self.providers.get(line.code)

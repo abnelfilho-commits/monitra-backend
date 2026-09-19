@@ -1,3 +1,4 @@
+from app.services.daily_record.concurrency import lock_patient
 from app.services.daily_record.adapters import is_daily, write_legacy_longitudinal
 from app.models.modular import RegistroLongitudinal
 from fastapi import APIRouter, Depends, HTTPException
@@ -66,6 +67,8 @@ def atualizar_registro(
     if record is None:
         raise HTTPException(404, 'Registro não encontrado.')
     authorized_patient(db, usuario, record.paciente_id, record.modulo_id, write=True)
+    if is_daily(db, record.formulario_id) or is_daily(db, payload.formulario_id):
+        lock_patient(db, record.paciente_id)
     existing = proteger_atendimento_canonico(db, registro_id)
     if (record.paciente_id, record.modulo_id) != (payload.paciente_id, payload.modulo_id):
         raise HTTPException(400, 'Paciente e Linha são imutáveis.')

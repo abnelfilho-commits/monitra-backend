@@ -8,6 +8,7 @@ from app.models.responsavel import Responsavel
 from app.models.responsavel_paciente import ResponsavelPaciente
 from app.models.whatsapp_conversa import WhatsAppConversa
 
+from app.services.daily_record.concurrency import lock_responsible
 from app.services.whatsapp_daily_record import authorized_lines, create_record, record_exists
 from app.services.care_lines import care_line_registry
 from app.services import whatsapp_cardio
@@ -132,7 +133,8 @@ def buscar_responsavel_por_telefone(
     if len(matches) != 1:
         return None
     # Serialize different phone spellings that resolve to the same identity.
-    return db.query(Responsavel).filter_by(id=matches[0].id, ativo=True).with_for_update().first()
+    lock_responsible(db, matches[0].id)
+    return db.query(Responsavel).filter_by(id=matches[0].id, ativo=True).populate_existing().first()
 
 
 def buscar_pacientes_vinculados(

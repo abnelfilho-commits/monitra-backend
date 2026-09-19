@@ -1,3 +1,4 @@
+from app.services.daily_record.concurrency import lock_context
 from app.services.daily_record import ActorRef, ActorType, DailyRecordSubmission
 from app.services.daily_record.adapters import call_write
 from app.services.daily_record.providers.neuro import FIELDS
@@ -192,6 +193,7 @@ def criar_registro_meu_paciente(
     db: Session = Depends(get_db),
     responsavel: Responsavel = Depends(get_responsavel_atual),
 ):
+    lock_context(db, paciente_id, responsavel.id)
     if not validar_vinculo_ativo(db, responsavel.id, paciente_id):
         raise HTTPException(
             status_code=403,
@@ -204,7 +206,7 @@ def criar_registro_meu_paciente(
             Paciente.id == paciente_id,
             Paciente.ativo == True,
         )
-        .with_for_update()
+        .populate_existing()
         .first()
     )
 

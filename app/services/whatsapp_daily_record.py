@@ -1,5 +1,6 @@
 """Authorized channel boundary shared by line-owned questionnaires."""
 from datetime import date, timedelta
+from app.services.daily_record.concurrency import lock_context
 from app.models.paciente import Paciente
 from app.models.responsavel import Responsavel
 from app.models.responsavel_paciente import ResponsavelPaciente
@@ -14,10 +15,11 @@ RESPONSIBLE_ORIGINS = ('RESPONSAVEL', 'RESPONSAVEL_APP', 'RESPONSAVEL_WHATSAPP')
 
 
 def authorized_lines(db, responsible_id, patient_id):
-    responsible = db.query(Responsavel).filter_by(id=responsible_id, ativo=True).with_for_update().first()
-    patient = db.query(Paciente).filter_by(id=patient_id, ativo=True).with_for_update().first()
+    lock_context(db, patient_id, responsible_id)
+    responsible = db.query(Responsavel).filter_by(id=responsible_id, ativo=True).populate_existing().first()
+    patient = db.query(Paciente).filter_by(id=patient_id, ativo=True).populate_existing().first()
     link = db.query(ResponsavelPaciente).filter_by(responsavel_id=responsible_id,
-        paciente_id=patient_id, ativo=True).with_for_update().first()
+        paciente_id=patient_id, ativo=True).populate_existing().with_for_update(key_share=True).first()
     if responsible is None or patient is None or link is None:
         raise ValueError('Vínculo assistencial indisponível.')
     if responsible.clinica_id is not None and responsible.clinica_id != patient.clinica_id:

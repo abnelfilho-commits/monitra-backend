@@ -1,3 +1,6 @@
+from app.models.modular import RegistroLongitudinal
+from app.services.care_lines import CareOrigin
+from ..exceptions import DuplicateDailyRecord
 from sqlalchemy import text
 from ..exceptions import DailyRecordError
 from math import isfinite
@@ -15,6 +18,17 @@ PROJECTION_FIELDS = {'glicemia_jejum', 'glicemia_pos_prandial', 'pressao_sistoli
 class CardioDailyRecordProvider:
     def prepare(self, db, line, submission, record_id=None):
         form = resolve_form(db, line)
+        if submission.origin in (CareOrigin.RESPONSAVEL_APP, CareOrigin.RESPONSAVEL_WHATSAPP):
+            query = db.query(RegistroLongitudinal.id).filter(
+                RegistroLongitudinal.paciente_id == submission.patient_id,
+                RegistroLongitudinal.modulo_id == line.module_id,
+                RegistroLongitudinal.data_registro == submission.reference_date,
+                RegistroLongitudinal.criado_por_responsavel_id == submission.actor.id,
+                RegistroLongitudinal.origem.in_(('RESPONSAVEL', 'RESPONSAVEL_APP', 'RESPONSAVEL_WHATSAPP')))
+            if record_id is not None:
+                query = query.filter(RegistroLongitudinal.id != record_id)
+            if query.first() is not None:
+                raise DuplicateDailyRecord('Você já enviou um registro cardiometabólico para esta data.')
         if set(submission.payload) - (NUMERIC | TEXT | {"observacoes"}):
             raise InvalidDailyRecordPayload('Unsupported Cardio field; no clinical alias is inferred.')
         values = dict(submission.payload)

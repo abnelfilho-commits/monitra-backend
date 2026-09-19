@@ -1,3 +1,4 @@
+from app.services.daily_record.concurrency import lock_context
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -41,13 +42,14 @@ def criar_registro_cardio_responsavel(
     db: Session = Depends(get_db),
     responsavel: Responsavel = Depends(get_responsavel_atual),
 ):
+    lock_context(db, paciente_id, responsavel.id)
     if not validar_vinculo_ativo(db, responsavel.id, paciente_id):
         raise HTTPException(status_code=403, detail="Acesso não autorizado a este paciente.")
 
     paciente = (
         db.query(Paciente)
         .filter(Paciente.id == paciente_id, Paciente.ativo == True)
-        .with_for_update()
+        .populate_existing()
         .first()
     )
 
