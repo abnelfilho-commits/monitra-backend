@@ -8,6 +8,18 @@ from ..models import ClinicalReading
 
 def read_neuro(db: Session, patient_id: int, care_line: CareLineDefinition) -> ClinicalReading:
     raw = neuro_engine.analisar_paciente(db, patient_id)
+    return from_raw(patient_id, care_line, raw)
+
+
+def read_neuro_many(db, patient_ids, care_line):
+    grouped = {pid: [] for pid in patient_ids}
+    for record in neuro_engine.obter_registros_neuro_pacientes(db, patient_ids):
+        grouped[record.paciente_id].append(record)
+    return {pid: from_raw(pid, care_line, neuro_engine.analisar_registros(records))
+            for pid, records in grouped.items()}
+
+
+def from_raw(patient_id, care_line, raw):
     axis = raw.get("eixo_dominante")
     return ClinicalReading(
         patient_id=patient_id,

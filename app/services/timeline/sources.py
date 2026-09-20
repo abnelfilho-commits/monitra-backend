@@ -57,11 +57,11 @@ def actor(namespace, identity, name=None):
     return {'namespace': namespace, 'id': identity, 'name': name}
 
 
-def daily_records(db, patient_id, registry, module_id=None, limit=None):
+def daily_records(db, patient_id, registry, module_id=None, limit=None, recent_activity=False):
     records = rows(db, '''SELECT r.paciente_id AS patient_id, r.id, r.modulo_id, r.formulario_id, r.data_registro,
         r.criado_em, r.origem, r.observacoes, r.criado_por_usuario_id, r.criado_por_responsavel_id
         FROM registros_longitudinais r JOIN formularios_modulo f ON f.id=r.formulario_id
-        WHERE r.paciente_id=:patient_id AND f.tipo='REGISTRO_DIARIO' AND f.modulo_id=r.modulo_id''', patient_id, module_id, 'r.modulo_id', limit, 'r.data_registro DESC, r.id ASC')
+        WHERE r.paciente_id=:patient_id AND f.tipo='REGISTRO_DIARIO' AND f.modulo_id=r.modulo_id''', patient_id, module_id, 'r.modulo_id', limit, 'r.criado_em DESC, r.id DESC' if recent_activity else 'r.data_registro DESC, r.id ASC')
     answers = rows(db, '''SELECT a.registro_id, c.id AS field_id, c.nome_campo,
         a.valor_texto, a.valor_numero, a.valor_booleano, a.valor_data, a.valor_hora, a.valor_json
         FROM respostas_registro a JOIN registros_longitudinais r ON r.id=a.registro_id
@@ -92,10 +92,10 @@ def daily_records(db, patient_id, registry, module_id=None, limit=None):
     return result
 
 
-def generic_interventions(db, patient_id, registry, module_id=None, limit=None):
+def generic_interventions(db, patient_id, registry, module_id=None, limit=None, recent_activity=False):
     result = []
     for r in rows(db, '''SELECT paciente_id AS patient_id, id, modulo_id, profissional_id, tipo, descricao, data_intervencao, created_at
-                        FROM intervencoes WHERE paciente_id=:patient_id''', patient_id, module_id, 'modulo_id', limit, 'DATE(COALESCE(data_intervencao, created_at)) DESC NULLS LAST, (data_intervencao IS NOT NULL) DESC, data_intervencao DESC NULLS LAST, id ASC'):
+                        FROM intervencoes WHERE paciente_id=:patient_id''', patient_id, module_id, 'modulo_id', limit, 'created_at DESC, id DESC' if recent_activity else 'DATE(COALESCE(data_intervencao, created_at)) DESC NULLS LAST, (data_intervencao IS NOT NULL) DESC, data_intervencao DESC NULLS LAST, id ASC'):
         occurrence = as_datetime(r['data_intervencao'])
         result.append(TimelineEvent(S.GENERIC_INTERVENTION, r['id'], r.get('patient_id', patient_id), registry.get(r['modulo_id']),
             A.EXPLICIT, E.INTERVENTION, 'Intervenção',
@@ -116,7 +116,7 @@ def cardio_interventions(db, patient_id, registry, module_id=None, limit=None):
             FROM intervencoes_cardiometabolicas WHERE paciente_id=:patient_id''', patient_id, module_id, 'modulo_id', limit, 'DATE(created_at) DESC NULLS LAST, id ASC')]
 
 
-def assessments(db, patient_id, registry):
+def assessments(db, patient_id, registry, module_id=None, limit=None):
     return [TimelineEvent(S.CLINICAL_ASSESSMENT, r['id'], r.get('patient_id', patient_id),
         registry.get(r['modulo_id']), A.EXPLICIT, E.ASSESSMENT, r['instrumento'],
         reference_date=as_date(r['data_registro']), temporal_precision=P.DATE if r['data_registro'] else None,
@@ -130,18 +130,21 @@ def assessments(db, patient_id, registry):
             a.classificacao, a.interpretacao, a.profissional_id, a.status, a.executado_em,
             a.created_at, r.data_registro FROM avaliacoes_clinicas a
             LEFT JOIN registros_longitudinais r ON r.id=a.registro_id AND r.paciente_id=a.paciente_id
-            WHERE a.paciente_id=:patient_id''', patient_id)]
+            WHERE a.paciente_id=:patient_id''', patient_id, module_id, 'a.modulo_id', limit, 'a.created_at DESC, a.id DESC')]
 
 
-def sessions(db, patient_id, registry):
+def sessions(db, patient_id, registry, module_id=None, limit=None, recent_activity=False):
+    extra_columns = ", s.data_agendada, at.nome AS activity_name" if recent_activity else ""
+    extra_join = "LEFT JOIN atividades_terapeuticas at ON at.id=g.atividade_id" if recent_activity else ""
     result = []
     for r in rows(db, '''SELECT s.paciente_id AS patient_id, s.id, s.data_realizacao, s.hora_fim_real, s.created_at,
-        s.numero_sessao, s.registro_longitudinal_id,
+        s.numero_sessao, s.registro_longitudinal_id {extra_columns},
         COALESCE(s.profissional_id,g.profissional_id) AS profissional_id,
         p.modulo_id, p.paciente_id AS pts_patient_id
         FROM sessoes_assistenciais s LEFT JOIN agenda_cuidados g ON g.id=s.agenda_cuidado_id
         LEFT JOIN pts p ON p.id=g.pts_id
-        WHERE s.paciente_id=:patient_id AND s.status='REALIZADA' ''', patient_id):
+        {extra_join}
+        WHERE s.paciente_id=:patient_id AND s.status='REALIZADA' '''.format(extra_columns=extra_columns, extra_join=extra_join), patient_id, module_id, 'p.modulo_id', limit, 's.data_realizacao DESC, s.numero_sessao DESC'):
         module = r['modulo_id'] if r['pts_patient_id']==r.get('patient_id', patient_id) else None
         day = as_date(r['data_realizacao'])
         clock = as_time(r['hora_fim_real']) if day else None
@@ -152,11 +155,12 @@ def sessions(db, patient_id, registry):
             temporal_precision=(P.DATETIME if clock else P.DATE) if day else None,
             created_at=as_datetime(r['created_at']), actor=actor('profissionais', r['profissional_id']),
             metadata={'module_id':module, 'session_number':r['numero_sessao'],
-                      'record_id':r['registro_longitudinal_id']}))
+                      'record_id':r['registro_longitudinal_id'],
+                      **({'scheduled_date':as_date(r['data_agendada']), 'activity_name':r['activity_name'], 'completion_time':as_time(r['hora_fim_real'])} if recent_activity else {})}))
     return result
 
 
-def diagnoses(db, patient_id, registry, module_id=None, limit=None):
+def diagnoses(db, patient_id, registry, module_id=None, limit=None, recent_activity=False):
     return [TimelineEvent(S.DIAGNOSIS, r['id'], r.get('patient_id', patient_id), registry.get(r['modulo_id']), A.EXPLICIT,
         E.DIAGNOSIS, 'Diagnóstico', reference_date=as_date(r['data_diagnostico']),
         temporal_precision=P.DATE, created_at=as_datetime(r['created_at']),
@@ -164,7 +168,7 @@ def diagnoses(db, patient_id, registry, module_id=None, limit=None):
         metadata={'cid':r['cid'], 'status':r['status']})
         for r in rows(db, '''SELECT paciente_id AS patient_id, id, modulo_id, data_diagnostico, created_at, descricao_clinica,
             medico_nome, cid, status FROM diagnosticos
-            WHERE paciente_id=:patient_id AND status <> 'CANCELADO' ''', patient_id, module_id, 'modulo_id', limit, 'data_diagnostico DESC, id ASC')]
+            WHERE paciente_id=:patient_id AND status <> 'CANCELADO' ''', patient_id, module_id, 'modulo_id', limit, 'data_diagnostico DESC, id DESC' if recent_activity else 'data_diagnostico DESC, id ASC')]
 
 
 SOURCES = (daily_records, generic_interventions, cardio_interventions, assessments, sessions, diagnoses)
