@@ -1,5 +1,4 @@
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_usuario_atual
@@ -18,32 +17,14 @@ router = APIRouter(
     
 @router.get("/profissional")
 def obter_cockpit_profissional(
+    care_line: str = Query(..., min_length=1),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(5, ge=1, le=100),
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    if usuario.perfil != "PROFISSIONAL":
-        raise HTTPException(
-            status_code=403,
-            detail="Cockpit exclusivo do profissional.",
-        )
+    return CockpitProfissionalService.get_cockpit(db, usuario, care_line, offset, limit)
 
-    prioridades = CockpitProfissionalService.obter_prioridades(
-        db=db,
-        usuario=usuario,
-        limit=5,
-    )
-
-    return {
-        "total_pacientes": prioridades["total_pacientes"],
-        "pacientes_prioritarios": prioridades["pacientes_prioritarios"],
-        "atividades_recentes":
-            CockpitProfissionalService.obter_atividades_recentes(
-                db=db,
-                usuario=usuario,
-                limit=5,
-            ),
-    }
-    
 @router.get("/gestao")
 def obter_cockpit_gestao(
     db: Session = Depends(get_db),

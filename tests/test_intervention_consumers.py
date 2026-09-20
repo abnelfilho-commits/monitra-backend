@@ -54,19 +54,18 @@ class ConsumerTests(Fixture):
 
     def test_professional_cockpit_keeps_generic_source(self):
         self.seed_interventions()
-        original=self.db.execute
-        def execute(statement,*args,**kwargs):
-            if 'FROM intervencoes' in str(statement):
-                return self.typed_execute(original)(statement,*args,**kwargs)
-            # Other capabilities are outside this characterization's fixture.
-            from unittest.mock import Mock
-            result=Mock(); result.fetchall.return_value=[]
-            return result
-        with patch.object(self.db,'execute',side_effect=execute):
-            result=CockpitProfissionalService.obter_atividades_recentes(self.db,self.user)
-        # Existing Cockpit intentionally emits only the newest event per patient.
+        from types import SimpleNamespace
+        from functools import partial
+        from app.services.care_lines import care_line_registry
+        from app.services.timeline import sources, professional_activity
+        line=care_line_registry.get('NEURO')
+        with patch.object(professional_activity, 'COLLECTORS', (partial(sources.generic_interventions, recent_activity=True),)):
+            result=professional_activity.recent_neuro_activity(
+                self.db,[SimpleNamespace(id=10,nome='Synthetic')],line,care_line_registry)
+        # Still one event per patient; Cardio's newer event must not leak.
         self.assertEqual(len(result),1)
-        self.assertEqual(result[0]['id'],3)
+        self.assertEqual(result[0]['id'],2)
+        self.assertEqual(result[0]['care_line'],'NEURO')
         self.assertEqual(result[0]['tipo_evento'],'INTERVENCAO')
 
     def test_session_keeps_five_recent_generic_without_module_filter(self):

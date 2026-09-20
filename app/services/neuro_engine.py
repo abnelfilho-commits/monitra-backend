@@ -1,6 +1,6 @@
 from statistics import mean
 from types import SimpleNamespace
-from sqlalchemy import text
+from sqlalchemy import text, bindparam
 from sqlalchemy.orm import Session
 from app.services.neuro_clinical_rules import avaliar_regras
 
@@ -123,6 +123,12 @@ def calcular_pontuacao_risco_registro(registro) -> int:
 
 
 def obter_registros_neuro_paciente(db: Session, paciente_id: int):
+    return obter_registros_neuro_pacientes(db, [paciente_id])
+
+
+def obter_registros_neuro_pacientes(db: Session, paciente_ids):
+    if not paciente_ids:
+        return []
     rows = db.execute(text("""
         SELECT
             rl.id,
@@ -173,7 +179,7 @@ def obter_registros_neuro_paciente(db: Session, paciente_id: int):
         LEFT JOIN formularios_modulo fm
             ON fm.id = rl.formulario_id
 
-        WHERE rl.paciente_id = :paciente_id
+        WHERE rl.paciente_id IN :paciente_ids
         AND rl.modulo_id = :modulo_id
         AND fm.tipo = 'REGISTRO_DIARIO'
 
@@ -186,8 +192,8 @@ def obter_registros_neuro_paciente(db: Session, paciente_id: int):
             rl.origem
 
         ORDER BY rl.data_registro DESC, rl.id DESC
-    """), {
-        "paciente_id": paciente_id,
+    """).bindparams(bindparam("paciente_ids", expanding=True)), {
+        "paciente_ids": list(paciente_ids),
         "modulo_id": MODULO_NEURO_ID,
     }).fetchall()
 
@@ -473,6 +479,11 @@ def analisar_paciente(db: Session, paciente_id: int):
         paciente_id
     )
 
+    return analisar_registros(registros)
+
+
+def analisar_registros(registros):
+    """Unchanged domain interpretation, shared by single and batch acquisition."""
     ultimo = registros[0] if registros else None
 
     pontuacao = (
