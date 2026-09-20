@@ -1,3 +1,4 @@
+from app.services.care_lines.access import authorized_patient
 from app.core.acl import is_admin
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -25,7 +26,7 @@ def obter_risco_paciente(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    paciente = db.query(Paciente).filter(Paciente.id == paciente_id).first()
+    paciente, _ = authorized_patient(db, usuario, paciente_id, "NEURO")
     if not paciente:
         raise HTTPException(status_code=404, detail="Paciente não encontrado.")
 
@@ -59,7 +60,7 @@ def obter_evolucao_clinica_paciente(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
 ):
-    paciente = db.query(Paciente).filter(Paciente.id == paciente_id).first()
+    paciente, _ = authorized_patient(db, usuario, paciente_id, "NEURO")
     if not paciente:
         raise HTTPException(status_code=404, detail="Paciente não encontrado.")
 

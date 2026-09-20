@@ -1,177 +1,64 @@
+"""One authenticated ingress for every care line. No public diagnostic bypass."""
+import hmac
+import logging
 import os
-
-from fastapi import (
-    APIRouter,
-    Depends,
-    HTTPException,
-    Query,
-    Request,
-)
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
-
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
-
 from app.database import get_db
-from app.services.whatsapp_conversation_service import (
-    processar_mensagem,
-)
+from app.services.whatsapp_ingress import authenticated_messages, process_message, deliver_reply
+from starlette.concurrency import run_in_threadpool
 
-from app.services.whatsapp_sender_service import (
-    WhatsAppSenderService,
-)
-
-router = APIRouter(
-    prefix="/whatsapp",
-    tags=["WhatsApp"],
-)
+router = APIRouter(prefix='/whatsapp', tags=['WhatsApp'])
+logger = logging.getLogger(__name__)
 
 
-class WhatsAppTesteRequest(BaseModel):
-    telefone: str
-    mensagem: str
+class WebhookAccessFilter(logging.Filter):
+    """Uvicorn access logs must not retain the GET verification token."""
+    def filter(self, record):
+        if isinstance(record.args, tuple) and len(record.args) == 5:
+            args = list(record.args)
+            if isinstance(args[2], str) and args[2].split('?', 1)[0] == '/whatsapp/webhook':
+                args[2] = '/whatsapp/webhook'
+                record.args = tuple(args)
+        return True
 
 
-@router.post("/teste")
-def testar_whatsapp(
-    payload: WhatsAppTesteRequest,
-    db: Session = Depends(get_db),
-):
-    resposta = processar_mensagem(
-        db=db,
-        telefone=payload.telefone,
-        mensagem=payload.mensagem,
-    )
+logging.getLogger('uvicorn.access').addFilter(WebhookAccessFilter())
 
-    return {
-        "resposta": resposta,
-    }
-    
-# ---------------------------------------------------------
-# WEBHOOK — VERIFICAÇÃO DA META
-# ---------------------------------------------------------
 
-@router.get("/webhook")
+@router.get('/webhook')
 def verificar_webhook(
-    hub_mode: str = Query(None, alias="hub.mode"),
-    hub_verify_token: str = Query(
-        None,
-        alias="hub.verify_token",
-    ),
-    hub_challenge: str = Query(
-        None,
-        alias="hub.challenge",
-    ),
+    hub_mode: str = Query(None, alias='hub.mode'),
+    hub_verify_token: str = Query(None, alias='hub.verify_token'),
+    hub_challenge: str = Query(None, alias='hub.challenge'),
 ):
-    verify_token = os.getenv("WHATSAPP_VERIFY_TOKEN")
-
-    if (
-        hub_mode == "subscribe"
-        and hub_verify_token == verify_token
-    ):
-        return PlainTextResponse(
-            content=hub_challenge or "",
-            status_code=200,
-        )
-
-    raise HTTPException(
-        status_code=403,
-        detail="Falha na verificação do webhook.",
-    )
+    expected = os.getenv('WHATSAPP_VERIFY_TOKEN', '')
+    if not expected.strip():
+        raise HTTPException(503, 'WhatsApp verification unavailable.')
+    if (hub_mode != 'subscribe' or not hub_verify_token or not hub_challenge
+            or not hmac.compare_digest(expected.encode(), hub_verify_token.encode())):
+        raise HTTPException(403, 'Invalid verification token.')
+    return PlainTextResponse(hub_challenge)
 
 
-# ---------------------------------------------------------
-# WEBHOOK — RECEBIMENTO DE MENSAGENS
-# ---------------------------------------------------------
+@router.post('/webhook')
+async def receber_webhook(request: Request, db: Session = Depends(get_db)):
+    # get_db only creates a Session; no query occurs before authentication/validation.
+    messages = authenticated_messages(await request.body(), request.headers.get('X-Hub-Signature-256'))
+    return await run_in_threadpool(process_validated, db, messages)
 
-@router.post("/webhook")
-def receber_webhook(
-    payload: dict,
-    db: Session = Depends(get_db),
-):
 
+def process_validated(db, messages):
     try:
-        entry = payload.get("entry", [])
-
-        if not entry:
-            return {"status": "ignored"}
-
-        changes = entry[0].get("changes", [])
-
-        if not changes:
-            return {"status": "ignored"}
-
-        value = changes[0].get("value", {})
-
-        messages = value.get("messages", [])
-
-        # A Meta também envia eventos de status:
-        # enviado, entregue, lido etc.
-        if not messages:
-            return {"status": "ignored"}
-
-        message = messages[0]
-
-        telefone = message.get("from")
-
-        message_type = message.get("type")
-
-        if message_type != "text":
-            return {
-                "status": "ignored",
-                "reason": "unsupported_message_type",
-            }
-
-        texto = (
-            message
-            .get("text", {})
-            .get("body", "")
-            .strip()
-        )
-
-        if not telefone or not texto:
-            return {"status": "ignored"}
-
-        resposta = processar_mensagem(
-            db=db,
-            telefone=telefone,
-            mensagem=texto,
-        )
-        if os.getenv("WHATSAPP_ACCESS_TOKEN"):
-            WhatsAppSenderService.enviar_texto(
-                telefone=telefone,
-                mensagem=resposta,
-            )
-        else:
-            print(
-                "[WHATSAPP] Resposta simulada:",
-                resposta,
-            )
-
-        # Ainda não enviaremos para a Meta.
-        # Neste momento estamos validando apenas
-        # entrada -> motor conversacional.
-        print(
-            "[WHATSAPP] "
-            f"De: {telefone} | "
-            f"Mensagem: {texto} | "
-            f"Resposta: {resposta}"
-        )
-
-        return {
-            "status": "processed",
-        }
-
-    except Exception as exc:
-        print(
-            "[WHATSAPP] Erro ao processar webhook:",
-            repr(exc),
-        )
-
-        # Importante:
-        # não expor detalhes internos no endpoint público.
-        return {
-            "status": "error",
-        }
+        for identity, recipient, sender, content in messages:
+            process_message(db, identity, recipient, sender, content)
+            if os.getenv('WHATSAPP_ACCESS_TOKEN'):
+                deliver_reply(db, identity, sender)
+        return {'status': 'processed' if messages else 'ignored'}
+    except HTTPException:
+        raise
+    except Exception:
+        # No exception strings/tracebacks: transports/DB exceptions can contain PHI.
+        logger.error('WhatsApp processing or delivery failed.')
+        raise HTTPException(503, 'WhatsApp processing unavailable.') from None

@@ -14,7 +14,6 @@ from .registry import (
     report_registry,
 )
 
-from .knowledge import knowledge_registry
 from .knowledge.composer import KnowledgeComposer
 
 class ReportService:
@@ -88,6 +87,11 @@ class ReportService:
             context.definition = definition
 
         self._validate_context(context)
+        from app.services.care_lines import care_line_resolver
+        context.care_line = care_line_resolver.resolve(context.db, context.subject_id, context.module, 'report')
+        context.module = context.care_line.code
+        if context.definition.care_line != context.care_line.code:
+            raise ValueError('Report definition does not match the requested care line.')
 
         for provider_class in definition.providers:
             provider = provider_class()
@@ -150,7 +154,7 @@ class ReportService:
                 }
             )
 
-        for engine_class in knowledge_registry.all():
+        for engine_class in definition.knowledge_engines:
 
             engine = engine_class()
 

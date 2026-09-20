@@ -118,7 +118,7 @@ class ResponsavelRegistroService:
                   AND modulo_id = :modulo_id
                   AND formulario_id = :formulario_id
                   AND data_registro = :data_registro
-                  AND origem = 'RESPONSAVEL'
+                  AND origem IN ('RESPONSAVEL', 'RESPONSAVEL_APP', 'RESPONSAVEL_WHATSAPP')
                 LIMIT 1
                 """
             ),

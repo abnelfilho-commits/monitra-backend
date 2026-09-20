@@ -53,8 +53,7 @@ class WhatsAppSenderService:
         if not response.ok:
             raise RuntimeError(
                 "Erro ao enviar mensagem WhatsApp: "
-                f"{response.status_code} "
-                f"{response.text}"
+                f"{response.status_code}"
             )
 
         return response.json()

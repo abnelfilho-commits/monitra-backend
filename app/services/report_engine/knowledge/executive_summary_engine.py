@@ -60,13 +60,12 @@ class ExecutiveSummaryEngine(BaseKnowledgeEngine):
         builder = NarrativeBuilder()
 
         builder.add(
-            f"Ao longo da jornada assistencial registrada, {patient_name} "
-            "manteve acompanhamento longitudinal contínuo."
+            f"Este relatório reúne os dados disponíveis de {patient_name} no contexto indicado."
         )
 
         builder.add_if(
             pts.get("pts_ativo") is not None,
-            "O Plano Terapêutico Singular permaneceu ativo."
+            "O Plano Terapêutico Singular está ativo atualmente."
         )
 
         builder.add_if(
@@ -103,7 +102,7 @@ class ExecutiveSummaryEngine(BaseKnowledgeEngine):
         builder.add_if_value(
             reading.get("tendencia"),
             lambda trend: (
-                "A tendência clínica observada é "
+                "A tendência clínica atual é "
                 f"{'estável' if trend.lower() == 'estavel' else trend.lower()}."
             ),
         )

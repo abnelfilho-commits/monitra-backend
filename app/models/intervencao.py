@@ -9,6 +9,7 @@ class Intervencao(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     paciente_id = Column(Integer, ForeignKey("pacientes.id"))
+    modulo_id = Column(Integer, ForeignKey("modulos_clinicos.id"), nullable=False)
     profissional_id = Column(Integer, ForeignKey("usuarios.id"))
 
     tipo = Column(String, nullable=False)

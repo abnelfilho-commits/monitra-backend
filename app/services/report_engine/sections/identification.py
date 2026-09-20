@@ -32,8 +32,8 @@ class IdentificationSectionBuilder(BaseSectionBuilder):
 
         section.add_component(
             ReportComponent(
-                type="SUBJECT",
-                data=subject,
+                type="PLAIN_TEXT",
+                data=f"Paciente: {subject.get('nome') or subject.get('name') or context.subject_id}. Identificador: {context.subject_id}. Linha: {context.care_line.display_name}.",
                 order=1,
             )
         )

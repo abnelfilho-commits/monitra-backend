@@ -36,6 +36,8 @@ class SessionProvider(BaseProvider):
             AssistentialSessionService.build_report_context(
                 db=context.db,
                 patient_id=context.subject_id,
+                module_id=context.care_line.module_id,
+                period_start=context.period_start, period_end=context.period_end,
             )
         )
 

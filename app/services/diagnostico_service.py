@@ -23,6 +23,7 @@ class DiagnosticoService:
     def criar(
         db: Session,
         payload: DiagnosticoCreate,
+        module_id: int,
     ) -> Diagnostico:
         paciente = (
             db.query(Paciente)
@@ -38,6 +39,7 @@ class DiagnosticoService:
 
         diagnostico = Diagnostico(
             paciente_id=payload.paciente_id,
+            modulo_id=module_id,
             tipo=payload.tipo,
             status=payload.status,
             cid=payload.cid,

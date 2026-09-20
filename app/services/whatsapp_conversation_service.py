@@ -2,42 +2,23 @@ import re
 from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import or_
 
 from app.models.responsavel import Responsavel
 from app.models.responsavel_paciente import ResponsavelPaciente
 from app.models.whatsapp_conversa import WhatsAppConversa
 
-from app.services.responsavel_registro_service import (
-    ResponsavelRegistroService,
-)
+from app.services.daily_record.concurrency import lock_responsible
+from app.services.whatsapp_daily_record import authorized_lines, create_record, record_exists
+from app.services.care_lines import care_line_registry
+from app.services import whatsapp_cardio
+from app.models.paciente import Paciente
 
-MODULO_NEURO_ID = 1
-FORMULARIO_REGISTRO_NEURO_ID = 2
-
-
-def registro_responsavel_existe_na_data(
-    db: Session,
-    paciente_id: int,
-    data_referencia: date,
-) -> bool:
-    existente = db.execute(text("""
-        SELECT id
-        FROM registros_longitudinais
-        WHERE paciente_id = :paciente_id
-          AND modulo_id = :modulo_id
-          AND formulario_id = :formulario_id
-          AND data_registro = :data_registro
-          AND origem = 'RESPONSAVEL'
-        LIMIT 1
-    """), {
-        "paciente_id": paciente_id,
-        "modulo_id": MODULO_NEURO_ID,
-        "formulario_id": FORMULARIO_REGISTRO_NEURO_ID,
-        "data_registro": data_referencia,
-    }).fetchone()
-
-    return existente is not None
+def registro_responsavel_existe_na_data(db, paciente_id, data_referencia, line_code, responsible_id):
+    line = care_line_registry.get(line_code)
+    if line is None:
+        raise ValueError('Linha de Cuidado indisponível.')
+    return record_exists(db, paciente_id, line, data_referencia, responsible_id)
 
 
 def referencia_dia(conversa: WhatsAppConversa) -> str:
@@ -45,7 +26,7 @@ def referencia_dia(conversa: WhatsAppConversa) -> str:
     return "ontem" if conversa.data_referencia == ontem else "hoje"
 
 
-def iniciar_questionario(
+def iniciar_neuro(
     db: Session,
     conversa: WhatsAppConversa,
     data_referencia: date,
@@ -53,7 +34,7 @@ def iniciar_questionario(
     conversa.data_referencia = data_referencia
     conversa.etapa_atual = "SONO"
     conversa.respostas_json = {}
-    db.commit()
+    db.flush()
 
     dia = referencia_dia(conversa)
 
@@ -66,6 +47,18 @@ def iniciar_questionario(
         "4 - Bom\n"
         "5 - Muito bom"
     )
+
+
+# Registration dispatches line-owned questionnaire behavior; ingress is shared.
+QUESTIONNAIRE_STARTERS = {'NEURO': iniciar_neuro, 'CARDIO': whatsapp_cardio.start}
+QUESTIONNAIRE_STEPS = {'CARDIO': whatsapp_cardio.step}
+
+
+def iniciar_questionario(db, conversa, data_referencia):
+    starter = QUESTIONNAIRE_STARTERS.get(conversa.care_line)
+    if starter is None:
+        raise ValueError('Questionário indisponível nesta Linha.')
+    return starter(db, conversa, data_referencia)
 
 
 def normalizar_telefone(telefone: str) -> str:
@@ -136,21 +129,12 @@ def buscar_responsavel_por_telefone(
         .all()
     )
 
-    for responsavel in responsaveis:
-        telefone_banco = normalizar_telefone(
-            responsavel.telefone
-        )
-
-        if not telefone_banco:
-            continue
-
-        if telefones_equivalentes(
-            telefone_banco,
-            telefone_normalizado,
-        ):
-            return responsavel
-
-    return None
+    matches = [item for item in responsaveis if telefones_equivalentes(item.telefone, telefone_normalizado)]
+    if len(matches) != 1:
+        return None
+    # Serialize different phone spellings that resolve to the same identity.
+    lock_responsible(db, matches[0].id)
+    return db.query(Responsavel).filter_by(id=matches[0].id, ativo=True).populate_existing().first()
 
 
 def buscar_pacientes_vinculados(
@@ -159,7 +143,11 @@ def buscar_pacientes_vinculados(
 ):
     return (
         db.query(ResponsavelPaciente)
+        .join(Paciente, Paciente.id == ResponsavelPaciente.paciente_id)
+        .join(Responsavel, Responsavel.id == ResponsavelPaciente.responsavel_id)
         .filter(
+            or_(Responsavel.clinica_id.is_(None), Responsavel.clinica_id == Paciente.clinica_id),
+            Paciente.ativo.is_(True),
             ResponsavelPaciente.responsavel_id
             == responsavel_id,
             ResponsavelPaciente.ativo.is_(True),
@@ -211,13 +199,28 @@ def criar_conversa(
     )
 
     db.add(conversa)
-    db.commit()
+    db.flush()
     db.refresh(conversa)
 
     return conversa
 
 
-def iniciar_fluxo_um_paciente(
+def iniciar_fluxo_um_paciente(db, conversa, responsavel, vinculo):
+    lines = authorized_lines(db, responsavel.id, vinculo.paciente_id)
+    conversa.paciente_id = vinculo.paciente_id
+    if not lines:
+        raise ValueError('Linha de Cuidado indisponível.')
+    if len(lines) > 1:
+        conversa.care_line = None
+        conversa.etapa_atual = 'SELECIONAR_LINHA'
+        db.flush()
+        return 'Selecione a Linha de Cuidado:\n' + '\n'.join(
+            '{} - {}'.format(line.code, line.display_name) for line in lines)
+    conversa.care_line = lines[0].code
+    return iniciar_datas(db, conversa, responsavel, vinculo)
+
+
+def iniciar_datas(
     db: Session,
     conversa: WhatsAppConversa,
     responsavel,
@@ -230,10 +233,10 @@ def iniciar_fluxo_um_paciente(
     ontem = hoje - timedelta(days=1)
 
     existe_hoje = registro_responsavel_existe_na_data(
-        db, vinculo.paciente_id, hoje
+        db, vinculo.paciente_id, hoje, conversa.care_line, responsavel.id
     )
     existe_ontem = registro_responsavel_existe_na_data(
-        db, vinculo.paciente_id, ontem
+        db, vinculo.paciente_id, ontem, conversa.care_line, responsavel.id
     )
 
     nome_responsavel = (
@@ -252,7 +255,7 @@ def iniciar_fluxo_um_paciente(
         conversa.etapa_atual = "INICIO"
         conversa.data_referencia = None
         conversa.paciente_id = None
-        db.commit()
+        db.flush()
 
         return (
             f"Olá, {nome_responsavel}! 👋\n\n"
@@ -265,7 +268,7 @@ def iniciar_fluxo_um_paciente(
     if existe_hoje and not existe_ontem:
         conversa.etapa_atual = "CONFIRMAR_ONTEM"
         conversa.data_referencia = ontem
-        db.commit()
+        db.flush()
         db.refresh(conversa)
 
         return (
@@ -280,7 +283,7 @@ def iniciar_fluxo_um_paciente(
     if not existe_hoje and not existe_ontem:
         conversa.etapa_atual = "SELECIONAR_DATA"
         conversa.data_referencia = None
-        db.commit()
+        db.flush()
         db.refresh(conversa)
 
         return (
@@ -292,7 +295,7 @@ def iniciar_fluxo_um_paciente(
 
     conversa.etapa_atual = "CONFIRMAR_INICIO"
     conversa.data_referencia = hoje
-    db.commit()
+    db.flush()
     db.refresh(conversa)
 
     return (
@@ -303,7 +306,14 @@ def iniciar_fluxo_um_paciente(
         f"2 - Agora não"
     )
 
-def processar_mensagem(
+def processar_mensagem(db, telefone, mensagem):
+    try:
+        return _processar_mensagem(db, telefone, mensagem)
+    except ValueError:
+        return 'Não foi possível validar este acompanhamento. Procure a equipe responsável.'
+
+
+def _processar_mensagem(
     db: Session,
     telefone: str,
     mensagem: str,
@@ -381,6 +391,21 @@ def processar_mensagem(
             telefone_normalizado,
         )
 
+    if conversa.paciente_id is not None and conversa.etapa_atual != "INICIO":
+        lines = authorized_lines(db, responsavel.id, conversa.paciente_id)
+        if conversa.etapa_atual == 'SELECIONAR_LINHA':
+            line = next((item for item in lines if item.code == mensagem_normalizada.upper()), None)
+            if line is None:
+                return 'Selecione a Linha de Cuidado: ' + ', '.join(item.code for item in lines)
+            conversa.care_line = line.code
+            vinculo = next(item for item in vinculos if item.paciente_id == conversa.paciente_id)
+            return iniciar_datas(db, conversa, responsavel, vinculo)
+        if conversa.care_line not in [item.code for item in lines]:
+            raise ValueError('Linha de Cuidado indisponível.')
+        step = QUESTIONNAIRE_STEPS.get(conversa.care_line)
+        if step is not None and conversa.etapa_atual.startswith('CARDIO_'):
+            return step(db, conversa, mensagem, responsavel, create_record)
+
     # -------------------------------------------------
     # 4. INÍCIO
     # -------------------------------------------------
@@ -401,7 +426,7 @@ def processar_mensagem(
         # pedir escolha.
         conversa.etapa_atual = "SELECIONAR_PACIENTE"
 
-        db.commit()
+        db.flush()
 
         linhas = [
             f"Olá, {responsavel.nome.split()[0]}! 👋",
@@ -481,13 +506,13 @@ def processar_mensagem(
         if registro_responsavel_existe_na_data(
             db,
             conversa.paciente_id,
-            data_escolhida,
+            data_escolhida, conversa.care_line, responsavel.id,
         ):
             conversa.etapa_atual = "INICIO"
             conversa.respostas_json = {}
             conversa.data_referencia = None
             conversa.paciente_id = None
-            db.commit()
+            db.flush()
 
             return (
                 "Esse acompanhamento já foi registrado. ✅\n\n"
@@ -516,7 +541,7 @@ def processar_mensagem(
             conversa.respostas_json = {}
             conversa.data_referencia = None
             conversa.paciente_id = None
-            db.commit()
+            db.flush()
 
             return (
                 "Tudo bem! 😊\n\n"
@@ -537,13 +562,13 @@ def processar_mensagem(
         if registro_responsavel_existe_na_data(
             db,
             conversa.paciente_id,
-            ontem,
+            ontem, conversa.care_line, responsavel.id,
         ):
             conversa.etapa_atual = "INICIO"
             conversa.respostas_json = {}
             conversa.data_referencia = None
             conversa.paciente_id = None
-            db.commit()
+            db.flush()
 
             return (
                 "O acompanhamento de ontem já foi registrado. ✅\n\n"
@@ -585,7 +610,7 @@ def processar_mensagem(
             conversa.etapa_atual = "INICIO"
             conversa.respostas_json = {}
 
-            db.commit()
+            db.flush()
 
             return (
                 "Tudo bem! 😊\n\n"
@@ -606,13 +631,13 @@ def processar_mensagem(
         if registro_responsavel_existe_na_data(
             db,
             conversa.paciente_id,
-            hoje,
+            hoje, conversa.care_line, responsavel.id,
         ):
             conversa.etapa_atual = "INICIO"
             conversa.respostas_json = {}
             conversa.data_referencia = None
             conversa.paciente_id = None
-            db.commit()
+            db.flush()
 
             return (
                 "O acompanhamento de hoje já foi registrado. ✅\n\n"
@@ -647,7 +672,7 @@ def processar_mensagem(
         conversa.respostas_json = respostas
         conversa.etapa_atual = "EVACUACAO"
 
-        db.commit()
+        db.flush()
 
         dia = referencia_dia(conversa)
 
@@ -676,7 +701,7 @@ def processar_mensagem(
 
         if mensagem_normalizada == "1":
             conversa.etapa_atual = "BRISTOL"
-            db.commit()
+            db.flush()
 
             dia = referencia_dia(conversa)
 
@@ -696,7 +721,7 @@ def processar_mensagem(
         conversa.respostas_json = respostas
         conversa.etapa_atual = "IRRITABILIDADE"
 
-        db.commit()
+        db.flush()
 
         dia = referencia_dia(conversa)
 
@@ -728,7 +753,7 @@ def processar_mensagem(
         conversa.respostas_json = respostas
         conversa.etapa_atual = "IRRITABILIDADE"
 
-        db.commit()
+        db.flush()
 
         dia = referencia_dia(conversa)
 
@@ -762,7 +787,7 @@ def processar_mensagem(
         conversa.respostas_json = respostas
         conversa.etapa_atual = "CRISE_SENSORIAL"
 
-        db.commit()
+        db.flush()
 
         dia = referencia_dia(conversa)
 
@@ -794,7 +819,7 @@ def processar_mensagem(
         conversa.respostas_json = respostas
         conversa.etapa_atual = "TEMPO_TELA"
 
-        db.commit()
+        db.flush()
 
         dia = referencia_dia(conversa)
 
@@ -833,7 +858,7 @@ def processar_mensagem(
         conversa.respostas_json = respostas
         conversa.etapa_atual = "SELETIVIDADE"
 
-        db.commit()
+        db.flush()
 
         dia = referencia_dia(conversa)
 
@@ -874,7 +899,7 @@ def processar_mensagem(
         conversa.respostas_json = respostas
         conversa.etapa_atual = "ALIMENTO_NOVO"
 
-        db.commit()
+        db.flush()
 
         dia = referencia_dia(conversa)
 
@@ -904,7 +929,7 @@ def processar_mensagem(
         conversa.respostas_json = respostas
         conversa.etapa_atual = "OBSERVACAO"
 
-        db.commit()
+        db.flush()
 
         return (
             "Para finalizar, aconteceu algo importante "
@@ -929,7 +954,7 @@ def processar_mensagem(
         conversa.respostas_json = respostas
         conversa.etapa_atual = "CONFIRMAR_REGISTRO"
 
-        db.commit()
+        db.flush()
 
         nome_paciente = "paciente"
 
@@ -961,7 +986,7 @@ def processar_mensagem(
             conversa.data_referencia = None
             conversa.paciente_id = None
 
-            db.commit()
+            db.flush()
 
             return (
                 "Tudo bem. 😊\n\n"
@@ -981,19 +1006,8 @@ def processar_mensagem(
         )
 
         try:
-            registro = (
-                ResponsavelRegistroService
-                .criar_registro_neuro(
-                    db=db,
-                    responsavel_id=responsavel.id,
-                    paciente_id=conversa.paciente_id,
-                    data_registro=(
-                        conversa.data_referencia
-                        or date.today()
-                    ),
-                    respostas=respostas,
-                )
-            )
+            registro = create_record(db, responsavel.id, conversa.paciente_id,
+                conversa.care_line, conversa.data_referencia, respostas)
 
         except ValueError as erro:
             return (
@@ -1020,7 +1034,7 @@ def processar_mensagem(
 
                 break
 
-        registro_id = registro.id
+        registro_id = registro.record_id
 
         # Limpar conversa para o próximo dia
         conversa.etapa_atual = "INICIO"
@@ -1028,7 +1042,7 @@ def processar_mensagem(
         conversa.data_referencia = None
         conversa.paciente_id = None
 
-        db.commit()
+        db.flush()
 
         return (
             "✅ Acompanhamento enviado com sucesso!"

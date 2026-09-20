@@ -1,68 +1,29 @@
-"""
-Provider responsável pela Leitura Clínica Oficial do paciente.
-"""
-
-from app.services.clinical_reading_service import (
-    ClinicalReadingService,
-)
-
-from ..base_provider import (
-    BaseProvider,
-    ProviderResult,
-)
-from ..context import ReportContext
+"""Institutional current reading; no historical recalculation."""
+from app.services.clinical_reading import ClinicalReadingService
+from ..base_provider import BaseProvider, ProviderResult
 
 
 class ClinicalEngineProvider(BaseProvider):
-    """
-    Consome a Leitura Clínica Oficial produzida
-    pelo Engine especializado do módulo.
+    code = 'CLINICAL_ENGINE_PROVIDER'
+    version = '2.0'
+    required = True
 
-    Não recalcula inteligência clínica.
-    """
+    def collect(self, context):
+        reading = ClinicalReadingService().get_reading(context.db, context.subject_id, context.module)
+        context.clinical_reading = reading
+        context.add_official_reading(reading.care_line.code, reading)
+        return ProviderResult(provider_code=self.code, provider_version=self.version, data=reading,
+            metadata={'scope':'CURRENT', 'reference_date': reading.reference_date})
 
-    code = "CLINICAL_ENGINE_PROVIDER"
-    version = "1.0"
-    required = False
 
-    def supports(
-        self,
-        context: ReportContext,
-    ) -> bool:
-        return bool(context.module)
-
-    def collect(
-        self,
-        context: ReportContext,
-    ) -> ProviderResult:
-
-        if context.db is None:
-            raise ValueError(
-                "ReportContext.db não informado."
-            )
-
-        if not context.module:
-            raise ValueError(
-                "ReportContext.module não informado."
-            )
-
-        reading = ClinicalReadingService.build_report_context(
-            db=context.db,
-            patient_id=context.subject_id,
-            module=context.module,
-        )
-
-        context.add_official_reading(
-            context.module.upper(),
-            reading,
-        )
-
-        return ProviderResult(
-            provider_code=self.code,
-            provider_version=self.version,
-            data=reading,
-            metadata={
-                "module": context.module.upper(),
-                "has_reading": bool(reading),
-            },
-        )
+class NeuroClinicalEngineProvider(ClinicalEngineProvider):
+    """Shape adapter for existing Neuro knowledge; values remain line-authored."""
+    def collect(self, context):
+        result = super().collect(context)
+        reading = result.data
+        legacy = {**reading.metadata, 'risco_atual': reading.risk, 'tendencia': reading.trend,
+            'resumo_clinico': reading.summary, 'momento_clinico': reading.clinical_state,
+            'alertas': reading.alerts, 'ultimo_registro': reading.reference_date}
+        context.add_official_reading(reading.care_line.code, legacy)
+        result.data = legacy
+        return result

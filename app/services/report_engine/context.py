@@ -36,6 +36,8 @@ class ReportContext:
 
     definition: Optional[Any] = None
     subject: Optional[Any] = None
+    care_line: Optional[Any] = None
+    clinical_reading: Optional[Any] = None
 
     collected_data: Dict[str, Any] = field(default_factory=dict)
     official_readings: Dict[str, Any] = field(default_factory=dict)

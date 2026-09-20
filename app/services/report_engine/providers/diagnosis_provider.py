@@ -1,50 +1,23 @@
-"""
-Provider responsável pela coleta do contexto diagnóstico.
-"""
-
+from sqlalchemy import or_, and_
+from app.models import Diagnostico
 from app.services.diagnostico_service import DiagnosticoService
-
-from ..base_provider import (
-    BaseProvider,
-    ProviderResult,
-)
-from ..context import ReportContext
+from ..base_provider import BaseProvider, ProviderResult
 
 
 class DiagnosisProvider(BaseProvider):
-    """
-    Coleta o histórico diagnóstico do paciente.
-    """
+    code = 'DIAGNOSIS_PROVIDER'
+    version = '2.0'
 
-    code = "DIAGNOSIS_PROVIDER"
-    version = "1.0"
-    required = False
-
-    def collect(
-        self,
-        context: ReportContext,
-    ) -> ProviderResult:
-
-        if context.db is None:
-            raise ValueError(
-                "ReportContext.db não informado."
-            )
-
-        diagnosis_context = DiagnosticoService.build_report_context(
-            db=context.db,
-            patient_id=context.subject_id,
-        )
-
-        return ProviderResult(
-            provider_code=self.code,
-            provider_version=self.version,
-            data=diagnosis_context,
-            metadata={
-                "total_diagnosticos": (
-                    diagnosis_context["total_diagnosticos"]
-                ),
-                "total_ativos": len(
-                    diagnosis_context["ativos"]
-                ),
-            },
-        )
+    def collect(self, context):
+        records = context.db.query(Diagnostico).filter(
+            Diagnostico.paciente_id==context.subject_id,
+            Diagnostico.modulo_id==context.care_line.module_id,
+            or_(Diagnostico.data_diagnostico.between(context.period_start,context.period_end),
+                and_(Diagnostico.status=='ATIVO',Diagnostico.data_diagnostico<context.period_start)))\
+            .order_by(Diagnostico.data_diagnostico.desc(),Diagnostico.id.desc()).all()
+        history = [{**DiagnosticoService.serializar_para_relatorio(r),
+                    'temporal_scope':'ACTIVE_BEFORE_PERIOD' if r.data_diagnostico<context.period_start else 'IN_PERIOD'} for r in records]
+        data={'historico':history,'total_diagnosticos':len(history),
+              **{key:[d for d in history if d['status']==status] for key,status in
+                 [('ativos','ATIVO'),('revisados','REVISADO'),('cancelados','CANCELADO')]}}
+        return ProviderResult(self.code,self.version,data=data)

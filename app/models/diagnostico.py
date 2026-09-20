@@ -29,6 +29,8 @@ class Diagnostico(Base):
         index=True,
     )
 
+    modulo_id = Column(Integer, ForeignKey("modulos_clinicos.id"), nullable=False)
+
     tipo = Column(
         String(30),
         nullable=False,
