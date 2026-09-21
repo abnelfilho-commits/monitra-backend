@@ -3,6 +3,7 @@
 Includes legacy raw-SQL projection columns absent from the ORM; this is a test
 fixture, not a replacement migration history or application seed.
 """
+from cardio_intervention_schema import create_cardio_intervention_table
 import os
 import importlib.util
 from datetime import date
@@ -28,10 +29,7 @@ with engine.begin() as conn:
     # Reconstruct only the known pre-Wave-1 columns for migration validation.
     conn.execute(text('ALTER TABLE diagnosticos DROP COLUMN modulo_id'))
     conn.execute(text('ALTER TABLE intervencoes DROP COLUMN modulo_id'))
-    conn.execute(text('''CREATE TABLE intervencoes_cardiometabolicas (
-        id SERIAL PRIMARY KEY, paciente_id INT NOT NULL REFERENCES pacientes(id),
-        profissional_id INT REFERENCES profissionais(id), tipo VARCHAR(100) NOT NULL,
-        descricao TEXT, prioridade VARCHAR(30), created_at TIMESTAMP DEFAULT now())'''))
+    create_cardio_intervention_table(conn, pre_line=True)
     for name, kind in {'modulo':'TEXT', 'glicemia_jejum':'NUMERIC',
             'glicemia_pos_prandial':'NUMERIC', 'pressao_sistolica':'NUMERIC',
             'pressao_diastolica':'NUMERIC', 'peso':'NUMERIC', 'atividade_fisica':'TEXT',

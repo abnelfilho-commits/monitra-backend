@@ -100,7 +100,7 @@ class SourceTests(unittest.TestCase):
             'campos_formulario':'id INTEGER, formulario_id INTEGER, nome_campo TEXT',
             'respostas_registro':'registro_id INTEGER, campo_id INTEGER, valor_texto TEXT, valor_numero NUMERIC, valor_booleano BOOLEAN, valor_data TEXT, valor_hora TEXT, valor_json TEXT',
             'intervencoes':'id INTEGER, modulo_id INTEGER, paciente_id INTEGER, profissional_id INTEGER, tipo TEXT, descricao TEXT, data_intervencao TEXT, created_at TEXT',
-            'intervencoes_cardiometabolicas':'modulo_id INTEGER, id INTEGER, paciente_id INTEGER, profissional_id INTEGER, tipo TEXT, descricao TEXT, prioridade TEXT, created_at TEXT',
+            'intervencoes_cardiometabolicas':'modulo_id INTEGER, id INTEGER, paciente_id INTEGER, tipo TEXT, descricao TEXT, prioridade TEXT, created_at TEXT',
             'avaliacoes_clinicas':'id INTEGER, paciente_id INTEGER, modulo_id INTEGER, registro_id INTEGER, instrumento TEXT, score NUMERIC, classificacao TEXT, interpretacao TEXT, profissional_id INTEGER, status TEXT, executado_em TEXT, created_at TEXT',
             'pts':'id INTEGER, modulo_id INTEGER, paciente_id INTEGER',
             'agenda_cuidados':'id INTEGER, pts_id INTEGER, profissional_id INTEGER',

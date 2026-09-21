@@ -1,4 +1,5 @@
 """Wave 5 deterministic contracts, persistence, authorization and failure tests."""
+from fixtures.cardio_intervention_schema import create_cardio_intervention_table
 import ast
 import os
 import unittest
@@ -37,10 +38,7 @@ class Fixture(unittest.TestCase):
                       ModuloClinico, PacienteModulo, ProfissionalModulo, Intervencao):
             model.__table__.create(self.engine)
         with self.engine.begin() as conn:
-            conn.execute(text('''CREATE TABLE intervencoes_cardiometabolicas (
-                id INTEGER PRIMARY KEY, paciente_id INTEGER NOT NULL, modulo_id INTEGER NOT NULL, profissional_id INTEGER,
-                tipo VARCHAR(100) NOT NULL, descricao TEXT, prioridade VARCHAR(30) DEFAULT 'moderada',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)'''))
+            create_cardio_intervention_table(conn)
         self.db = Session(self.engine)
         self.db.add_all([Clinica(id=1, nome='Synthetic'), Clinica(id=2, nome='Other')])
         self.db.add(Profissional(id=700, nome='Synthetic', clinica_id=1, ativo=True))
@@ -189,10 +187,10 @@ class PersistenceTests(Fixture):
         with self.assertRaises(InvalidInterventionPayload):
             self.cardio(payload={'profissional_id':999})
 
-    def test_cardio_uses_distinct_professional_id_and_priority(self):
+    def test_cardio_authorship_unavailable_and_priority_preserved(self):
         r=self.cardio(payload={'priority':'alta'})
         read=self.service.get(self.db,C,r.source_id,user=self.user)
-        self.assertEqual(read.actor,{'namespace':'profissionais','id':700})
+        self.assertIsNone(read.actor)
         self.assertEqual(read.metadata,{'priority':'alta'})
         self.assertEqual(read.care_line,CARDIO)
         self.assertEqual(read.care_line_association,CareLineAssociation.EXPLICIT)

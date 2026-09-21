@@ -1,4 +1,5 @@
 """Gate 3: approved operational policy, temporal BMI and isolated journey."""
+from fixtures.cardio_intervention_schema import create_cardio_intervention_table
 import os
 os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
 import unittest
@@ -112,7 +113,7 @@ class JourneyTests(unittest.TestCase):
         # Full checked-in schema, synthetic-only; no application connection used.
         Base.metadata.create_all(self.engine)
         with self.engine.begin() as c:
-            c.execute(text('CREATE TABLE intervencoes_cardiometabolicas (id INTEGER PRIMARY KEY, modulo_id INTEGER, paciente_id INTEGER, profissional_id INTEGER, tipo TEXT, descricao TEXT, prioridade TEXT, created_at TIMESTAMP)'))
+            create_cardio_intervention_table(c)
             for name,kind in {'observacoes':'TEXT','score_clinico':'INTEGER','risco':'TEXT','peso':'NUMERIC'}.items():
                 c.execute(text('ALTER TABLE registros_longitudinais ADD COLUMN '+name+' '+kind))
         self.db=Session(self.engine)
@@ -214,9 +215,12 @@ class JourneyTests(unittest.TestCase):
             self.record(origin=origin,glicemia_jejum=180)
         for mid in (1,2):
             self.db.add(Diagnostico(paciente_id=3,modulo_id=mid,descricao_clinica='Synthetic diagnosis '+str(mid),data_diagnostico=DAY,medico_nome='Synthetic'))
-        self.db.execute(text("INSERT INTO intervencoes_cardiometabolicas VALUES (1,2,3,1,'orientacao','Synthetic intervention','alta',CURRENT_TIMESTAMP)"));self.db.commit()
+        self.db.execute(text("INSERT INTO intervencoes_cardiometabolicas (id,modulo_id,paciente_id,tipo,descricao,prioridade,created_at) VALUES (1,2,3,'orientacao','Synthetic intervention','alta',CURRENT_TIMESTAMP)"));self.db.commit()
         events=patient_timeline(self.db,self.user,3)
         self.assertEqual(len(events),5)
+        intervention = next(e for e in events if e['event_type']=='INTERVENTION')
+        self.assertIsNone(intervention['actor'])
+        self.assertIsNone(intervention['data'])
         self.assertEqual({e['care_line'] for e in events},{'CARDIO'})
         self.assertEqual({e['origem'] for e in events if e['event_type']=='DAILY_RECORD'}, {'PROFISSIONAL','RESPONSAVEL_APP','RESPONSAVEL_WHATSAPP'})
         self.assertTrue(all('risco' not in e for e in events))

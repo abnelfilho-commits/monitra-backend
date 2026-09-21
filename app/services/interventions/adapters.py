@@ -56,10 +56,11 @@ class GenericAdapter:
 
 # Typed SQL projection of the existing table, not an ORM model or schema creator.
 CARDIO_TABLE = Table('intervencoes_cardiometabolicas', MetaData(),
-    Column('id', Integer, primary_key=True), Column('paciente_id', Integer),
+    Column('id', Integer, primary_key=True), Column('paciente_id', Integer, nullable=False),
     Column('modulo_id', Integer, nullable=False),
-    Column('profissional_id', Integer), Column('tipo', String(100)),
-    Column('descricao', Text), Column('prioridade', String(30)), Column('created_at', DateTime))
+    Column('tipo', String, nullable=False),
+    Column('descricao', Text), Column('prioridade', String),
+    Column('created_at', DateTime(timezone=True)))
 
 
 class CardioAdapter:
@@ -79,7 +80,7 @@ class CardioAdapter:
             raise InvalidInterventionPayload('Intervenção Cardio com linha incompatível.')
         return InterventionRecord(self.source_type, row['id'], row['paciente_id'], line,
             line.module_id, CareLineAssociation.EXPLICIT,
-            actor('profissionais', row['profissional_id']), row['tipo'], row['descricao'],
+            None, row['tipo'], row['descricao'],
             None, row['created_at'], {'priority': row['prioridade']})
 
     def create(self, db, submission, line, user, patient):
@@ -97,9 +98,11 @@ class CardioAdapter:
             professional = db.query(Profissional).filter(Profissional.id == professional_id).first()
             if professional is None or not professional.ativo or professional.clinica_id != patient.clinica_id:
                 raise InvalidInterventionPayload('Vínculo profissional incompatível ou inativo.')
+        # Authorization above does not establish persisted authorship: this table
+        # has no author column. Reads explicitly return actor=None.
         # Omit created_at: preserve the database default, not an application clock.
         row = db.execute(CARDIO_TABLE.insert().values(paciente_id=patient.id, modulo_id=line.module_id,
-            profissional_id=professional_id, tipo=submission.type,
+            tipo=submission.type,
             descricao=submission.narrative, prioridade=priority).returning(*CARDIO_TABLE.c)).mappings().one()
         db.flush()
         return row

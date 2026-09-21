@@ -1,4 +1,5 @@
 """Real PostgreSQL tests, opt-in only on the disposable Wave 5 database."""
+from fixtures.cardio_intervention_schema import create_cardio_intervention_table
 import importlib.util
 import os
 from pathlib import Path
@@ -81,12 +82,22 @@ class MigrationTests(unittest.TestCase):
         for model in (Clinica,OcupacaoProfissional,Profissional,Usuario,Paciente,ModuloClinico,PacienteModulo,Intervencao,ProfissionalModulo):
             model.__table__.create(self.engine)
         with self.engine.begin() as conn:
-            conn.execute(text('''CREATE TABLE intervencoes_cardiometabolicas (
-                id SERIAL PRIMARY KEY, paciente_id INTEGER NOT NULL REFERENCES pacientes(id),
-                modulo_id INTEGER NOT NULL REFERENCES modulos_clinicos(id),
-                profissional_id INTEGER REFERENCES profissionais(id), tipo VARCHAR(100) NOT NULL,
-                descricao TEXT, prioridade VARCHAR(30) DEFAULT 'moderada',
-                created_at TIMESTAMP DEFAULT now())'''))
+            create_cardio_intervention_table(conn)
+        inspector = inspect(self.engine)
+        columns = {c['name']: c for c in inspector.get_columns('intervencoes_cardiometabolicas')}
+        self.assertEqual(set(columns), {'id','paciente_id','tipo','descricao','prioridade','created_at','modulo_id'})
+        self.assertEqual({n for n,c in columns.items() if not c['nullable']}, {'id','paciente_id','tipo','modulo_id'})
+        self.assertTrue(columns['created_at']['type'].timezone)
+        self.assertEqual(columns['created_at']['default'], 'now()')
+        self.assertIn('nextval', columns['id']['default'])
+        for name in ('tipo','prioridade'):
+            self.assertIsNone(columns[name]['type'].length)
+            self.assertIsNone(columns[name]['default'])
+        foreign_keys = {fk['constrained_columns'][0]: fk for fk in inspector.get_foreign_keys('intervencoes_cardiometabolicas')}
+        self.assertEqual(foreign_keys['paciente_id']['options']['ondelete'], 'CASCADE')
+        self.assertEqual(foreign_keys['modulo_id']['referred_table'], 'modulos_clinicos')
+        self.assertEqual(inspector.get_pk_constraint('intervencoes_cardiometabolicas')['constrained_columns'], ['id'])
+        self.assertEqual([i['column_names'] for i in inspector.get_indexes('intervencoes_cardiometabolicas')], [['paciente_id']])
         with Session(self.engine) as db:
             db.add(Clinica(id=1,nome='Synthetic')); db.flush()
             db.add(Profissional(id=700,nome='Synthetic',clinica_id=1,ativo=True)); db.flush()
@@ -103,8 +114,13 @@ class MigrationTests(unittest.TestCase):
             cardio=service.create(db,InterventionSubmission(10,'CARDIO',ActorRef('PROFESSIONAL',50),'authored','Synthetic',payload={'priority':'alta'}),user=user)
             self.assertEqual(service.get(db,SourceType.GENERIC_INTERVENTION,generic.source_id,user=user).module_id,1)
             self.assertEqual(generic.actor,{'namespace':'usuarios','id':50})
-            self.assertEqual(cardio.actor,{'namespace':'profissionais','id':700})
+            self.assertIsNone(cardio.actor)
             self.assertIsNotNone(generic.created_at.tzinfo)
-            self.assertIsNone(cardio.created_at.tzinfo)
+            self.assertIsNotNone(cardio.created_at.tzinfo)
             self.assertIsNone(cardio.reference_datetime)
             self.assertEqual(cardio.metadata,{'priority':'alta'})
+
+            self.assertEqual(service.get(db,SourceType.CARDIO_INTERVENTION,cardio.source_id,user=user).actor, None)
+            listed = service.list_for_patient(db,10,user=user,requested_care_line='CARDIO')
+            self.assertEqual([r.source_id for r in listed], [cardio.source_id])
+            self.assertIsNone(listed[0].actor)

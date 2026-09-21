@@ -40,7 +40,6 @@ class RemediationTests(unittest.TestCase):
                 'CREATE TABLE modulos_clinicos (id INTEGER PRIMARY KEY, slug TEXT UNIQUE, ativo BOOLEAN)',
                 'CREATE TABLE paciente_modulos (id SERIAL PRIMARY KEY, paciente_id INTEGER REFERENCES pacientes(id), modulo_id INTEGER REFERENCES modulos_clinicos(id), ativo BOOLEAN, data_inicio DATE, data_fim DATE, observacao TEXT, criado_em TIMESTAMP DEFAULT now())',
                 'CREATE TABLE intervencoes (id INTEGER PRIMARY KEY, paciente_id INTEGER REFERENCES pacientes(id), descricao TEXT, data_intervencao DATE)',
-                'CREATE TABLE intervencoes_cardiometabolicas (id INTEGER PRIMARY KEY, paciente_id INTEGER REFERENCES pacientes(id), descricao TEXT)',
                 'CREATE TABLE responsaveis (id INTEGER PRIMARY KEY)',
                 'CREATE TABLE formularios_modulo (id INTEGER PRIMARY KEY, modulo_id INTEGER REFERENCES modulos_clinicos(id), tipo TEXT)',
                 'CREATE TABLE registros_longitudinais (id INTEGER PRIMARY KEY, paciente_id INTEGER REFERENCES pacientes(id), modulo_id INTEGER REFERENCES modulos_clinicos(id), formulario_id INTEGER REFERENCES formularios_modulo(id), data_registro DATE)',
@@ -50,6 +49,8 @@ class RemediationTests(unittest.TestCase):
                 "INSERT INTO modulos_clinicos VALUES (1,'neurodesenvolvimento',true),(2,'cardiometabolico',true)",
             ):
                 conn.execute(text(sql))
+            from fixtures.cardio_intervention_schema import create_cardio_intervention_table
+            create_cardio_intervention_table(conn, pre_line=True)
             # Actual historical diagnosis migration: all original columns/FK/indexes.
             module = self.scripts.get_revision('a2464f3d64fc').module
             with Operations.context(MigrationContext.configure(conn)):
@@ -74,7 +75,7 @@ class RemediationTests(unittest.TestCase):
                 'INSERT INTO pacientes SELECT generate_series(1,7)',
                 "INSERT INTO diagnosticos (id,paciente_id,descricao_clinica,data_diagnostico,medico_nome,observacoes) SELECT i,i,'Synthetic diagnosis '||i,DATE '2026-06-09','Synthetic','Preserve exactly' FROM generate_series(1,5) i",
                 "INSERT INTO intervencoes SELECT i,1,'Synthetic intervention '||i,DATE '2026-06-09' FROM generate_series(1,16) i",
-                "INSERT INTO intervencoes_cardiometabolicas VALUES (1,6,'Synthetic Cardio'),(2,7,'Synthetic Cardio')",
+                "INSERT INTO intervencoes_cardiometabolicas (id,paciente_id,tipo,descricao) VALUES (1,6,'synthetic','Synthetic Cardio'),(2,7,'synthetic','Synthetic Cardio')",
                 "INSERT INTO paciente_modulos (paciente_id,modulo_id,ativo,data_inicio,observacao) SELECT i,1,true,DATE '2026-07-01','Synthetic Neuro' FROM generate_series(1,7) i",
                 "INSERT INTO paciente_modulos (paciente_id,modulo_id,ativo) VALUES (7,2,true)",
                 "INSERT INTO formularios_modulo VALUES (3,2,'REGISTRO_DIARIO')",

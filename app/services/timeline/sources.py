@@ -110,9 +110,9 @@ def generic_interventions(db, patient_id, registry, module_id=None, limit=None, 
 def cardio_interventions(db, patient_id, registry, module_id=None, limit=None):
     return [TimelineEvent(S.CARDIO_INTERVENTION, r['id'], r.get('patient_id', patient_id), registry.get(r['modulo_id']), A.EXPLICIT,
         E.INTERVENTION, 'Intervenção', created_at=as_datetime(r['created_at']),
-        summary=r['descricao'], actor=actor('intervencoes_cardiometabolicas.profissional_id', r['profissional_id']),
+        summary=r['descricao'], actor=None,  # Authorship is not persisted by this source.
         metadata={'source_care_line':'cardiometabolico', 'type':r['tipo'], 'priority':r['prioridade']})
-        for r in rows(db, '''SELECT paciente_id AS patient_id, id, modulo_id, profissional_id, tipo, descricao, prioridade, created_at
+        for r in rows(db, '''SELECT paciente_id AS patient_id, id, modulo_id, tipo, descricao, prioridade, created_at
             FROM intervencoes_cardiometabolicas WHERE paciente_id=:patient_id''', patient_id, module_id, 'modulo_id', limit, 'DATE(created_at) DESC NULLS LAST, id ASC')]
 
 

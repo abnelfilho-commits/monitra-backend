@@ -103,6 +103,9 @@ class ReportTests(unittest.TestCase):
         self.db.commit()
         rows=self.report().collected_data['TIMELINE_PROVIDER']
         self.assertEqual(rows[0]['date_basis'],'CREATED_AT')
+        self.assertIsNone(rows[0]['actor'])
+        self.assertIn('Technical event',str(self.report().canonical_report.sections))
+        self.assertNotIn('Technical event',str(self.report('NEURO').canonical_report.sections))
         self.assertIn('sem data clínica',str(self.report().canonical_report.sections))
 
     def test_no_data_is_unavailable(self):
@@ -211,10 +214,19 @@ class ReportTests(unittest.TestCase):
         self.seed_neuro()
         self.diagnosis(1,DAY,'NEURO ONLY')
         self.diagnosis(2,DAY,'CARDIO ONLY <complemento> & texto')
+        self.db.execute(text("INSERT INTO intervencoes_cardiometabolicas(paciente_id,modulo_id,tipo,descricao,created_at) VALUES(3,2,'Synthetic','CARDIO INTERVENTION WITHOUT AUTHOR',:day)"),{'day':str(DAY)+' 12:00:00'})
+        self.db.commit()
         folder=Path(os.environ.get('GATE4_PDF_DIR') or tempfile.mkdtemp(prefix='gate4-pdf-'))
         folder.mkdir(parents=True,exist_ok=True)
         for line in ('NEURO','CARDIO'):
             c=self.report(line)
+            sections=str(c.canonical_report.sections)
+            if line=='CARDIO':
+                self.assertIn('CARDIO INTERVENTION WITHOUT AUTHOR',sections)
+                intervention=next(e for e in c.collected_data['TIMELINE_PROVIDER'] if e.get('descricao')=='CARDIO INTERVENTION WITHOUT AUTHOR')
+                self.assertIsNone(intervention['actor'])
+            else:
+                self.assertNotIn('CARDIO INTERVENTION WITHOUT AUTHOR',sections)
             output=folder/(line.lower()+'.pdf')
             ReportService().render(c,str(output))
             self.assertTrue(output.read_bytes().startswith(b'%PDF'))

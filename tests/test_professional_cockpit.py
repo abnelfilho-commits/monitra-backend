@@ -168,6 +168,15 @@ class ProfessionalCockpitTests(unittest.TestCase):
         self.assertEqual({e['id'].split(':')[0] for e in events},
             {SourceType.LONGITUDINAL_RECORD.value,SourceType.GENERIC_INTERVENTION.value,
              SourceType.CARDIO_INTERVENTION.value,SourceType.DIAGNOSIS.value})
+        specialized = next(e for e in events if e['id'].startswith(SourceType.CARDIO_INTERVENTION.value+':'))
+        self.assertIsNone(specialized['actor'])
+        # Exercise the same composition through Dashboard/analytics consumers.
+        from app.routers.cardiometabolico import dashboard_cardiometabolico, dashboard_analytics
+        dashboard = dashboard_cardiometabolico(self.db,self.user)
+        analytics = dashboard_analytics(self.db,self.user,0,20)
+        self.assertEqual(dashboard,analytics['indicadores'])
+        self.assertEqual(analytics['recent_activity'],events)
+        self.assertEqual(self.client.get('/cockpit/profissional?care_line=2&offset=0&limit=20').status_code,200)
         self.db.query(PacienteModulo).filter_by(paciente_id=3,modulo_id=2).update({'ativo':False})
         self.db.commit()
         self.assertEqual(self.get(2)['atividades_recentes'],[])
