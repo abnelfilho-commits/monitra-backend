@@ -1,3 +1,4 @@
+from ..presentation import format_date_pt_br
 """Cardio composition: factual presentation, no clinical rules or scoring."""
 from ..sections.base_section import BaseSectionBuilder
 from ..models import ReportSection, ReportComponent
@@ -18,7 +19,7 @@ def event_text(e):
     basis = 'Data clínica' if e['date_basis']=='CLINICAL_DATE' else 'Data de criação (sem data clínica)'
     actor=e.get('actor') or {}
     author=actor.get('name') or (str(actor.get('namespace'))+' #'+str(actor.get('id')) if actor else 'Não informado')
-    return f"{basis}: {e['data']}. {e['descricao']}. Origem: {shown(e['origem'])}. Autoria: {author}."
+    return f"{basis}: {format_date_pt_br(e['data'])}. {e['descricao']}. Origem: {shown(e['origem'])}. Autoria: {author}."
 
 
 class CardioSummary(BaseSectionBuilder):
@@ -32,7 +33,7 @@ class CardioStatus(BaseSectionBuilder):
     code='CURRENT_STATUS'
     def build(self,c):
         r=c.clinical_reading
-        return section(self.code,'Situação atual',3,[f'Leitura clínica atual - referência: {shown(r.reference_date)}.',
+        return section(self.code,'Situação atual',3,[f'Leitura clínica atual - referência: {format_date_pt_br(r.reference_date)}.',
             f'Risco Cardio: {shown(r.risk)}. Tendência: {shown(r.trend)}.',
             f"Score Cardio: {shown(r.metadata.get('score'))}. Protocolo Cardio: {shown(r.metadata.get('protocol'))}."])
 
@@ -43,7 +44,7 @@ class CardioDiagnoses(BaseSectionBuilder):
         rows=c.collected_data['DIAGNOSIS_PROVIDER']['historico']
         return section(self.code,'Diagnósticos Cardio',4,[
             ('Ativo atualmente, anterior ao período' if d['temporal_scope']=='ACTIVE_BEFORE_PERIOD' else 'Registrado no período')+
-            f". Data clínica: {d['data_diagnostico']}. CID: {shown(d.get('cid'))}. {d['descricao_clinica']}. Status atual: {d['status']}."
+            f". Data clínica: {format_date_pt_br(d['data_diagnostico'])}. CID: {shown(d.get('cid'))}. {d['descricao_clinica']}. Status atual: {d['status']}."
             for d in rows] or ['Nenhum diagnóstico elegível para este contexto.'])
 
 
@@ -72,7 +73,7 @@ class CardioEvolution(BaseSectionBuilder):
     code='EVOLUTION'
     def build(self,c):
         return section(self.code,'Evolução cardiometabólica',7,[
-            f"Data clínica: {r['data']}. Glicemia em jejum: {shown(r['glicemia_jejum'])}; pressão sistólica: {shown(r['pressao_sistolica'])}; "
+            f"Data clínica: {format_date_pt_br(r['data'])}. Glicemia em jejum: {shown(r['glicemia_jejum'])}; pressão sistólica: {shown(r['pressao_sistolica'])}; "
             f"diastólica: {shown(r['pressao_diastolica'])}; peso: {shown(r['peso'])}; IMC: {shown(r['imc'])}."
             for r in c.collected_data['EVOLUTION_PROVIDER']] or ['Sem medições no período.'])
 

@@ -1,3 +1,4 @@
+from ..presentation import format_date_pt_br
 from xml.sax.saxutils import escape
 """
 Renderer PDF do Report Engine.
@@ -265,7 +266,7 @@ class PDFRenderer(BaseRenderer):
             Paragraph(
                 (
                     f"<b>Data de geração:</b> "
-                    f"{report.generated_at.strftime('%d/%m/%Y')}"
+                    f"{format_date_pt_br(report.generated_at)}"
                 ),
                 styles["metadata"],
             )
@@ -890,7 +891,6 @@ class PDFRenderer(BaseRenderer):
                     
                 if component.type == "ASSESSMENT_SUMMARY":
 
-                    from datetime import datetime
 
                     data = component.data or {}
 
@@ -917,25 +917,7 @@ class PDFRenderer(BaseRenderer):
 
                         raw_date = assessment.get("date")
 
-                        formatted_date = ""
-
-                        if raw_date:
-                            try:
-                                parsed_date = datetime.fromisoformat(
-                                    raw_date.replace(
-                                        "Z",
-                                        "+00:00",
-                                    )
-                                )
-
-                                formatted_date = (
-                                    parsed_date.strftime(
-                                        "%d/%m/%Y"
-                                    )
-                                )
-
-                            except ValueError:
-                                formatted_date = raw_date
+                        formatted_date = format_date_pt_br(raw_date, "")
 
                         content = [
                             [
@@ -1073,7 +1055,6 @@ class PDFRenderer(BaseRenderer):
 
                 if component.type == "DIAGNOSIS_SUMMARY":
 
-                    from datetime import datetime
 
                     data = component.data or {}
 
@@ -1091,20 +1072,7 @@ class PDFRenderer(BaseRenderer):
                         "diagnosis_date"
                     )
 
-                    formatted_date = ""
-
-                    if raw_date:
-                        try:
-                            parsed_date = datetime.fromisoformat(
-                                raw_date
-                            )
-
-                            formatted_date = parsed_date.strftime(
-                                "%d/%m/%Y"
-                            )
-
-                        except ValueError:
-                            formatted_date = raw_date
+                    formatted_date = format_date_pt_br(raw_date, "")
 
                     physician_name = (
                         data.get("physician_name")
