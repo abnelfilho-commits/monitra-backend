@@ -7,10 +7,11 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models import (SessaoAssistencial, RegistroLongitudinal, FormularioModulo,
-                        CampoFormulario, AgendaCuidado, PTS)
+                        CampoFormulario, AgendaCuidado, PTS, PTSObjetivo, Paciente)
 from app.schemas.registros_longitudinais import RegistroLongitudinalCreate, CampoResposta
 from app.schemas.sessao_assistencial import SessaoAssistencialResponse
 from app.services.care_plan_service import CarePlanService, transaction
@@ -60,7 +61,21 @@ class SessionService:
             raise HTTPException(403, 'A Agenda Assistencial é exclusiva do profissional.')
         if not user.profissional_id:
             raise HTTPException(422, 'O usuário autenticado não está vinculado a um profissional.')
-        rows = db.query(SessaoAssistencial).filter_by(profissional_id=user.profissional_id).order_by(
+        if user.clinica_id is None:
+            raise HTTPException(403, 'Usuário sem clínica vinculada')
+        # Restrict known out-of-clinic resources before materialization. Missing
+        # ancestry still reaches context() and fails explicitly; never swallow ACL errors.
+        foreign_patient = db.query(Paciente.id).filter(
+            Paciente.id == SessaoAssistencial.paciente_id,
+            or_(Paciente.clinica_id.is_(None), Paciente.clinica_id != user.clinica_id)).exists()
+        foreign_ancestry = db.query(AgendaCuidado.id).join(
+            PTSObjetivo, PTSObjetivo.id == AgendaCuidado.objetivo_id).join(
+            PTS, PTS.id == PTSObjetivo.pts_id).join(Paciente, Paciente.id == PTS.paciente_id).filter(
+                AgendaCuidado.id == SessaoAssistencial.agenda_cuidado_id,
+                or_(Paciente.clinica_id.is_(None), Paciente.clinica_id != user.clinica_id)).exists()
+        rows = db.query(SessaoAssistencial).filter(
+            SessaoAssistencial.profissional_id == user.profissional_id,
+            ~foreign_patient, ~foreign_ancestry).order_by(
             SessaoAssistencial.data_agendada, SessaoAssistencial.hora_inicio).all()
         for row in rows:
             self.context(db, row.id, user)

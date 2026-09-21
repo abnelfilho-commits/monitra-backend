@@ -143,7 +143,8 @@ class BoundaryTests(SessionFixture):
         session=self.observation_session(); self.user.profissional_id=70
         self.assertEqual(len(self.boundary.personal_sessions(self.db,self.user)),1)
         self.user.clinica_id=2
-        with self.assertRaises(HTTPException): self.boundary.personal_sessions(self.db,self.user)
+        self.assertEqual(self.boundary.personal_sessions(self.db,self.user),[])
+        with self.assertRaises(HTTPException): self.boundary.context(self.db,session.id,self.user)
 
     def test_patient_and_objective_ancestry_mismatches(self):
         session=self.observation_session(); sid=session.id
@@ -334,7 +335,10 @@ class HttpTests(SessionFixture):
         self.user.profissional_id=70; self.user.clinica_id=2
         for method,path,payload in self.operations(session):
             status,body=self.request(method,path,payload)
-            self.assertEqual(status,403,(path,body))
+            if path == '/sessoes-assistenciais/minhas':
+                self.assertEqual((status,body),(200,[]))
+            else:
+                self.assertEqual(status,403,(path,body))
 
     def test_same_clinic_http_attendance_finalize_and_read_shapes(self):
         from app.models import Intervencao, AvaliacaoClinica

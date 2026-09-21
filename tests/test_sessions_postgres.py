@@ -124,3 +124,50 @@ class SessionPostgresTests(unittest.TestCase):
             finally:
                 holder.rollback(); holder.close()
             future.result(timeout=5)
+
+    def test_personal_list_clinic_scope_keeps_acl_and_ancestry_validation(self):
+        from app.models import Paciente
+        from app.routers.sessoes_assistenciais import listar_minhas_sessoes
+        service = SessionService()
+        self.user.profissional_id = 70
+        with Session(self.engine) as db:
+            def add_session(patient, pts_patient):
+                plan=PTS(paciente_id=pts_patient,modulo_id=1,data_inicio=fixtures.DAY)
+                db.add(plan);db.flush()
+                objective=PTSObjetivo(pts_id=plan.id,descricao='Synthetic')
+                db.add(objective);db.flush()
+                agenda=AgendaCuidado(pts_id=plan.id,objetivo_id=objective.id,atividade_id=1,ocupacao_id=1,
+                    profissional_id=70,frequencia_semanal=1,quantidade_sessoes=1,duracao_minutos=30,data_inicio=fixtures.DAY)
+                db.add(agenda);db.flush()
+                row=SessaoAssistencial(agenda_cuidado_id=agenda.id,paciente_id=patient,profissional_id=70,
+                    numero_sessao=1,data_agendada=fixtures.DAY,duracao_minutos=30,status='AGENDADA')
+                db.add(row);db.flush()
+                return row
+            # Faithful failure shape: same professional, different patient/PTS clinic.
+            foreign=add_session(30,30)
+            foreign_ancestry=add_session(10,30)
+            foreign_patient=add_session(30,10)
+            db.commit()
+            original_count=db.query(SessaoAssistencial).count()
+            result=listar_minhas_sessoes(usuario=self.user,db=db)
+            self.assertEqual([r['id'] for r in result],[self.identity])
+            for row in (foreign,foreign_ancestry,foreign_patient):
+                with self.assertRaises(HTTPException): service.context(db,row.id,self.user)
+            self.assertEqual(db.query(SessaoAssistencial).count(),original_count)
+            # Multi-Line patient is not rejected or reclassified by current linkage.
+            from app.models import PacienteModulo
+            db.add(PacienteModulo(paciente_id=10,modulo_id=2,ativo=True));db.commit()
+            self.assertEqual([r.id for r in service.personal_sessions(db,self.user)],[self.identity])
+            # Same-clinic malformed ancestry must still fail, not silently become [].
+            malformed=add_session(20,10);db.commit()
+            with self.assertRaises(HTTPException) as error: service.personal_sessions(db,self.user)
+            self.assertEqual(error.exception.status_code,409)
+            for role in ('ADMIN','ADMIN_CLINICA'):
+                self.user.perfil=role
+                with self.assertRaises(HTTPException) as error: service.personal_sessions(db,self.user)
+                self.assertEqual(error.exception.status_code,403)
+            self.user.perfil='PROFISSIONAL';self.user.profissional_id=73
+            self.assertEqual(service.personal_sessions(db,self.user),[])
+            self.user.clinica_id=None
+            with self.assertRaises(HTTPException) as error: service.personal_sessions(db,self.user)
+            self.assertEqual(error.exception.status_code,403)
