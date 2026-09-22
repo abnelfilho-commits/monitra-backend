@@ -33,8 +33,8 @@ class CardioChannelTests(unittest.TestCase):
                 self.db.add(CampoFormulario(formulario_id=module*100,nome_campo=name,label=name,tipo_campo='texto',ativo=True))
         self.db.commit()
         with self.engine.begin() as conn:
-            for name in sorted({'modulo','score_clinico','risco','protocolo','leitura_clinica','observacoes'} | (NUMERIC-{'altura'}) | TEXT):
-                kind = 'NUMERIC' if name in NUMERIC or name=='score_clinico' else 'TEXT'
+            for name, kind in {'score_clinico':'NUMERIC', 'risco':'VARCHAR', 'protocolo':'VARCHAR',
+                               'leitura_clinica':'TEXT', 'observacoes':'TEXT'}.items():
                 conn.execute(text('ALTER TABLE registros_longitudinais ADD COLUMN '+name+' '+kind))
         self.responsible = SimpleNamespace(id=9)
 
@@ -96,3 +96,21 @@ class CardioChannelTests(unittest.TestCase):
                 criar_registro_cardio_responsavel(3,RegistroCardioResponsavelCreate(data=date.today(),peso=85,observacoes='Synthetic'),self.db,self.responsible)
         self.assertEqual(self.db.query(RegistroLongitudinal).count(),0)
         self.assertEqual(self.db.query(RespostaRegistro).count(),0)
+
+    def test_app_history_reads_event_answers_and_preserves_snapshot(self):
+        from datetime import timedelta
+        from app.routers.responsavel_cardio import listar_registros_cardio_responsavel
+        old=criar_registro_cardio_responsavel(3,RegistroCardioResponsavelCreate(
+            data=date.today()-timedelta(days=1),glicemia_jejum=250,peso=140,
+            pressao_sistolica=180,pressao_diastolica=120),self.db,self.responsible)
+        criar_registro_cardio_responsavel(3,RegistroCardioResponsavelCreate(
+            data=date.today(),peso=80),self.db,self.responsible)
+        rows=listar_registros_cardio_responsavel(3,self.db,self.responsible)
+        self.assertEqual(rows[0]['peso'],80)
+        self.assertIsNone(rows[0]['glicemia_jejum'])
+        self.assertEqual(rows[1]['peso'],140)
+        self.assertEqual(rows[1]['glicemia_jejum'],250)
+        self.assertEqual(rows[1]['pressao_sistolica'],180)
+        self.assertEqual(rows[1]['pressao_diastolica'],120)
+        self.assertEqual(rows[1]['risco'],old['risco'])
+        self.assertEqual(rows[1]['leitura_clinica'],old['leitura_clinica'])

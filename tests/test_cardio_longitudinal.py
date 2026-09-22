@@ -120,7 +120,8 @@ class JourneyTests(unittest.TestCase):
         Base.metadata.create_all(self.engine)
         with self.engine.begin() as c:
             create_cardio_intervention_table(c)
-            for name,kind in {'observacoes':'TEXT','score_clinico':'INTEGER','risco':'TEXT','peso':'NUMERIC'}.items():
+            for name, kind in {'score_clinico':'NUMERIC', 'risco':'VARCHAR', 'protocolo':'VARCHAR',
+                'leitura_clinica':'TEXT', 'observacoes':'TEXT'}.items():
                 c.execute(text('ALTER TABLE registros_longitudinais ADD COLUMN '+name+' '+kind))
         self.db=Session(self.engine)
         self.db.add_all([Clinica(id=i,nome='Synthetic') for i in (1,2)])
@@ -161,7 +162,7 @@ class JourneyTests(unittest.TestCase):
 
     def test_current_batch_equals_individual_and_never_consumes_stale_columns(self):
         r=self.record(glicemia_jejum=180,pressao_sistolica=160)
-        self.db.execute(text("UPDATE registros_longitudinais SET score_clinico=0,risco='baixo',peso=200 WHERE id=:id"),{'id':r.id});self.db.commit()
+        self.db.execute(text("UPDATE registros_longitudinais SET score_clinico=0,risco='baixo' WHERE id=:id"),{'id':r.id});self.db.commit()
         service=ClinicalReadingService()
         batch=service.get_readings(self.db,[2,3,5],'CARDIO')
         for pid in (2,3,5):
@@ -169,6 +170,29 @@ class JourneyTests(unittest.TestCase):
         self.assertEqual(batch[3].risk,'alto');self.assertIsNone(batch[3].trend)
         self.assertIsNone(batch[2].risk)
         self.assertEqual(batch[3].reference_date,DAY)
+
+    def test_risk_map_uses_current_reading_and_scoped_population(self):
+        from app.services.cardio_longitudinal import risk_map
+        from app.routers.cardiometabolico import mapa_risco_cardiometabolico
+        record = self.record(glicemia_jejum=250, pressao_sistolica=180, peso=140)
+        self.db.execute(text("UPDATE registros_longitudinais SET risco='baixo',score_clinico=0 WHERE id=:id"), {'id':record.id})
+        self.db.commit()
+        with patch.object(ClinicalReadingService, 'get_readings', autospec=True,
+                          side_effect=ClinicalReadingService.get_readings) as batch:
+            result = mapa_risco_cardiometabolico(self.db, self.user)
+            self.assertEqual(batch.call_count, 1)
+        self.assertEqual(len(result),1)
+        group=result[0]
+        self.assertEqual(group['total'],3)  # Cardio 2/3/5; excludes Neuro-only and other clinic.
+        self.assertEqual((group['critico'],group['baixo'],group['indisponivel']),(1,0,2))
+        self.assertEqual(group['score_medio'],10)
+        self.assertEqual(group['pacientes_criticos'][0]['risco'],'critico')
+        self.assertIsNone(group['pacientes_criticos'][1]['risco'])
+        self.db.query(PacienteModulo).filter_by(paciente_id=3,modulo_id=2).update({'ativo':False})
+        self.db.commit()
+        group=risk_map(self.db,self.user)[0]
+        self.assertEqual(group['total'],2)
+        self.assertIsNone(group['score_medio'])
 
     def test_batch_resolution_rejects_inactive_and_planned_context(self):
         from dataclasses import replace
@@ -271,19 +295,25 @@ class JourneyTests(unittest.TestCase):
 
     def test_population_queries_constant_with_patient_count(self):
         self.record(glicemia_jejum=180)
-        def count():
+        def count(map_only=False):
             statements=[]
             def track(conn,cursor,statement,parameters,context,executemany): statements.append(statement)
             event.listen(self.engine,'before_cursor_execute',track)
-            try: result=cockpit(self.db,self.user,0,20,DAY)
+            try:
+                from app.services.cardio_longitudinal import risk_map
+                result=risk_map(self.db,self.user) if map_only else cockpit(self.db,self.user,0,20,DAY)
             finally: event.remove(self.engine,'before_cursor_execute',track)
             return len(statements),result
         small,_=count()
+        small_map,_=count(True)
         for pid in range(10,60):
             self.db.add(Paciente(id=pid,nome='Synthetic '+str(pid),clinica_id=1,ativo=True));self.db.flush()
             self.db.add(PacienteModulo(paciente_id=pid,modulo_id=2,ativo=True))
             self.record(pid=pid,glicemia_jejum=180)
         large,result=count()
+        large_map,_=count(True)
+        self.assertEqual(small_map,large_map)
+        self.assertLessEqual(large_map,10)
         self.assertEqual(small,large)
         print("Gate3 query budget:", self.engine.dialect.name, "3 patients =", small, "queries; 53 patients =", large, "queries")
         self.assertLessEqual(large,20)

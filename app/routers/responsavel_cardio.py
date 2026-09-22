@@ -127,10 +127,6 @@ def listar_registros_cardio_responsavel(
             SELECT
                 id,
                 data_registro,
-                glicemia_jejum,
-                pressao_sistolica,
-                pressao_diastolica,
-                peso,
                 score_clinico,
                 risco,
                 protocolo,
@@ -149,4 +145,9 @@ def listar_registros_cardio_responsavel(
         }
     ).mappings().all()
 
-    return [dict(r) for r in registros]
+    # Event-local measurements from canonical answers, never the patient's latest reading.
+    from app.services.cardio_evolution import evolution
+    measurements = {row['record_id']: row for row in evolution(db, [paciente_id], 2)}
+    fields = ('glicemia_jejum', 'pressao_sistolica', 'pressao_diastolica', 'peso')
+    return [dict(r, **{name: measurements.get(r['id'], {}).get(name) for name in fields})
+            for r in registros]

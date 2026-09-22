@@ -11,8 +11,6 @@ from ..exceptions import InvalidDailyRecordPayload
 NUMERIC = {'glicemia_jejum', 'glicemia_pos_prandial', 'pressao_sistolica', 'pressao_diastolica', 'peso', 'altura'}
 TEXT = {'atividade_fisica', 'sono', 'humor'}
 ENGINE_FIELDS = {'glicemia_jejum', 'pressao_sistolica', 'pressao_diastolica', 'peso'} | TEXT
-# Confirmed local compatibility columns only; never dynamic SQL from payload keys.
-PROJECTION_FIELDS = {'glicemia_jejum', 'glicemia_pos_prandial', 'pressao_sistolica', 'pressao_diastolica', 'peso'} | TEXT
 
 
 class CardioDailyRecordProvider:
@@ -45,10 +43,11 @@ class CardioDailyRecordProvider:
         usable = {key: value for key, value in values.items()
                   if key in ENGINE_FIELDS and value is not None
                   and (not isinstance(value, str) or value.strip())}
-        projection = {key: values.get(key) for key in PROJECTION_FIELDS}
+        # Structured observations live only in answers; retain event-local snapshots.
+        projection = {}
         if "observacoes" in values:
             projection["observacoes"] = values["observacoes"]
-        projection.update(modulo=line.slug, score_clinico=None, risco=None,
+        projection.update(score_clinico=None, risco=None,
                           protocolo=None, leitura_clinica=None)
         if usable:
             score = engine.calcular_score(usable)
@@ -61,9 +60,7 @@ class CardioDailyRecordProvider:
     def persist_projection(db, record_id, projection):
         if projection:
             # Projection keys are private provider output, never request SQL identifiers.
-            allowed = {'modulo', 'glicemia_jejum', 'glicemia_pos_prandial', 'pressao_sistolica',
-                       'pressao_diastolica', 'peso', 'atividade_fisica', 'sono', 'humor',
-                       'score_clinico', 'risco', 'protocolo', 'leitura_clinica', 'observacoes'}
+            allowed = {'score_clinico', 'risco', 'protocolo', 'leitura_clinica', 'observacoes'}
             if not set(projection) <= allowed:
                 raise DailyRecordError('Unsupported projection column.')
             assignments = ', '.join(key + ' = :' + key for key in sorted(projection))

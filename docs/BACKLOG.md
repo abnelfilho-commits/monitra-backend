@@ -18,18 +18,35 @@ BE = monitra-backend, HEAD be377dab8f3dc1e023f3971a2b27512a96902100; FE = fronte
 
 ## Resumo
 
-Total: 16 itens. Nenhum CONCLUÍDO sem registro de resolução próprio.
+Total: 19 itens. Nenhum CONCLUÍDO sem registro de resolução próprio.
 
-Status: ABERTO: 8; PLANEJADO: 1; EM EXECUÇÃO: 1; BLOQUEADO: 0; REVISAR: 6; CONCLUÍDO: 0.
+Status: ABERTO: 10; PLANEJADO: 1; EM EXECUÇÃO: 2; BLOQUEADO: 0; REVISAR: 6; CONCLUÍDO: 0.
 
-Prioridade: P0: 0; P1: 1; P2: 12; P3: 3.
+Prioridade: P0: 1; P1: 1; P2: 14; P3: 3.
 
-Área: Agenda/Sessões: 1; Cardio: 4; Cockpit Gestão: 1; Dados Demo: 1; Frontend compartilhado: 1; Neuro: 1; Performance: 1; Report Engine: 1; Segurança: 1; Tooling: 3; WhatsApp: 1.
+Área: Agenda/Sessões: 1; Cardio: 6; Cockpit Gestão: 1; Dados Demo: 2; Frontend compartilhado: 1; Neuro: 1; Performance: 1; Report Engine: 1; Segurança: 1; Tooling: 3; WhatsApp: 1.
 
 
 ## P0
 
-Nenhum item classificado.
+### CARDIO-005 — Alinhar projeção do Registro Diário ao contrato físico
+
+- **Área:** Cardio
+- **Tipo:** DEFEITO
+- **Status:** EM EXECUÇÃO
+- **Prioridade:** P0
+- **Origem:** Falha HML informada pelo usuário; auditoria estática em 22/09/2026, sem acesso HML/SQL.
+- **Descrição:** Falha original: projeção física de campos estruturados causava UndefinedColumn para atividade_fisica. Correção local mantém esses campos somente em respostas_registro; snapshots e observacoes preservados conforme inventário físico fornecido pelo responsável. Fixtures deixaram de criar medições duplicadas.
+- **Impacto:** POST Registro Diário Cardio retorna 500 e a transação padrão é revertida; bloqueia validação operacional E.1 e massa canônica.
+- **Evidência:** app/services/daily_record/providers/cardio.py:15,48,61; app/services/daily_record/service.py:63; alembic/versions/26e0eeea73e1_base_modular_monitra.py:68; tests/test_daily_record.py:95; tests/fixtures/cardio_gate1_runtime.py:33.
+- **Dependências:** Validação humana da correção e smoke HML posterior; contrato dos cinco campos físicos confirmado pelo responsável. DATA-002 acompanha drift; CARDIO-006 acompanha semântica histórica.
+- **Critério de conclusão:** Criação/edição institucional funcionam no schema físico comprovado; campos clínicos e altura preservados em respostas_registro; ClinicalReading/Evolução usam a mesma observação; rollback integral comprovado; fixtures não inventam colunas para satisfazer código; Neuro preservado.
+- **Pacote sugerido:** Correção delimitada do contrato de persistência Cardio.
+- **Responsável:** A definir.
+- **Data/prazo:** Identificado em 22/09/2026; prazo não definido.
+- **Consumidor adicional confirmado:** app/routers/responsavel_cardio.py:listar_registros_cardio_responsavel consultava glicemia_jejum, pressões e peso físicos. Registrado antes da convergência para respostas da mesma observação; preservar snapshots, origem e autorização do APP.
+- **Resolução:** Implementação local realizada; validação registrada em docs/cardio-005-implementation.md. EM EXECUÇÃO até aceite e validação operacional; sem commit/promoção neste pacote. Distinto de CARDIO-001 (antropometria) e CARDIO-002 (interpretações legadas).
+
 
 
 ## P1
@@ -51,6 +68,28 @@ Nenhum item classificado.
 - **Data/prazo:** Não definido; inventariado em 22/09/2026.
 - **Resolução:** Pendente; ao concluir registrar pacote, commit, data e validação.
 
+
+## Pendências registradas — CARDIO-005
+
+### DATA-002 — Reconciliação do schema físico HML × Alembic × Models
+
+- **Área:** Dados Demo
+- **Tipo:** DÍVIDA TÉCNICA
+- **Status:** ABERTO
+- **Prioridade:** P2
+- **Evidência:** Inspeção HML fornecida pelo responsável: score_clinico numeric, risco/protocolo varchar, leitura_clinica/observacoes text; nullable, sem defaults. Ausentes do model/migration modular examinados.
+- **Critério de conclusão:** Reconciliação explícita e validada do schema versionado com contrato físico; sem migration inferida no CARDIO-005.
+- **Resolução:** Pendente; não implementado neste pacote.
+
+### CARDIO-006 — Convergência futura do snapshot interpretativo longitudinal
+
+- **Área:** Cardio
+- **Tipo:** DÍVIDA TÉCNICA
+- **Status:** ABERTO
+- **Prioridade:** P2
+- **Evidência:** RegistroAdapter consome leitura_clinica/protocolo do evento; app/scripts/recalcular_scores_cardio.py reescreve snapshots; app/services/cardiometabolico.py ainda referencia medições físicas (sem chamador encontrado na aplicação). Não executar o script nem considerar ausência de chamador prova de código morto.
+- **Critério de conclusão:** Definir semântica histórica antes de convergir consumidores; não substituir evento passado por leitura atual. Inventariar usos externos dos helpers legados antes de remover dependências.
+- **Resolução:** Pendente; snapshots preservados no CARDIO-005; distinto de CARDIO-002 (IMC e interpretações paralelas).
 
 ## P2
 

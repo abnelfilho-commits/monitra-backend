@@ -92,11 +92,8 @@ class PersistenceTests(unittest.TestCase):
         with self.engine.begin() as connection:
             if url:
                 connection.execute(text('ALTER TABLE respostas_registro ALTER COLUMN valor_numero TYPE numeric'))
-            for name, kind in {'modulo':'TEXT', 'glicemia_jejum':'NUMERIC',
-                'glicemia_pos_prandial':'NUMERIC', 'pressao_sistolica':'NUMERIC',
-                'pressao_diastolica':'NUMERIC', 'peso':'NUMERIC', 'atividade_fisica':'TEXT',
-                'sono':'TEXT', 'humor':'TEXT', 'score_clinico':'INTEGER', 'risco':'TEXT',
-                'protocolo':'TEXT', 'leitura_clinica':'TEXT', 'observacoes':'TEXT'}.items():
+            for name, kind in {'score_clinico':'NUMERIC', 'risco':'VARCHAR', 'protocolo':'VARCHAR',
+                'leitura_clinica':'TEXT', 'observacoes':'TEXT'}.items():
                 connection.execute(text('ALTER TABLE registros_longitudinais ADD COLUMN '+name+' '+kind))
         self.db = Session(self.engine)
         for line in (NEURO, CARDIO):
@@ -151,6 +148,41 @@ class PersistenceTests(unittest.TestCase):
         self.assertEqual(reading.metadata['score'],0)
         self.assertEqual(reading.risk,'baixo')
         self.assertEqual(self.db.query(RespostaRegistro).count(),2)
+
+    def test_no_structured_projection_columns_and_all_answers_survive(self):
+        from sqlalchemy import inspect
+        columns = {c['name'] for c in inspect(self.engine).get_columns('registros_longitudinais')}
+        self.assertFalse(columns & (NUMERIC | TEXT | {'modulo'}))
+        values = dict(glicemia_jejum=180, glicemia_pos_prandial=210,
+                      pressao_sistolica=160, pressao_diastolica=95,
+                      peso=82, altura=1.75, atividade_fisica='baixa', sono='ruim', humor='ansioso')
+        result = self.service.create(self.db, self.submission('CARDIO', dict(values, observacoes='event note')))
+        rows = self.db.query(CampoFormulario.nome_campo, RespostaRegistro.valor_numero,
+                             RespostaRegistro.valor_texto).join(
+            RespostaRegistro, RespostaRegistro.campo_id == CampoFormulario.id).filter(
+                RespostaRegistro.registro_id == result.record_id).all()
+        actual = {name: float(number) if number is not None else value for name, number, value in rows}
+        self.assertEqual(actual, values)
+        reading = read_cardio(self.db, 10, CARDIO)
+        self.assertEqual(reading.metadata['imc'], 26.8)
+        self.assertEqual(reading.metadata['measurements']['humor'], 'ansioso')
+        before = self.db.execute(text('SELECT score_clinico,risco,protocolo,leitura_clinica FROM registros_longitudinais')).one()
+        self.assertEqual(before[1], reading.risk)
+        self.db.execute(text("UPDATE registros_longitudinais SET score_clinico=999,risco='stale',protocolo='stale',leitura_clinica='stale'"))
+        self.db.commit()
+        self.assertEqual(read_cardio(self.db, 10, CARDIO), reading)
+        # Edits refresh the event snapshot, without physical measurement columns.
+        self.service.update(self.db, result.record_id, self.submission('CARDIO', {'peso':80,'altura':2}))
+        self.assertEqual(read_cardio(self.db, 10, CARDIO).metadata['imc'],20.0)
+        self.assertEqual(self.db.execute(text('SELECT risco FROM registros_longitudinais')).scalar(),'baixo')
+
+    def test_historical_snapshot_is_not_replaced_by_latest_reading(self):
+        old = self.service.create(self.db, self.submission('CARDIO', {'glicemia_jejum':250,'peso':140}))
+        query = text('SELECT score_clinico,risco,protocolo,leitura_clinica FROM registros_longitudinais WHERE id=:id')
+        snapshot = tuple(self.db.execute(query, {'id':old.record_id}).one())
+        self.service.create(self.db, self.submission('CARDIO', {'peso':80}, day=date(2026,1,11)))
+        self.assertEqual(tuple(self.db.execute(query, {'id':old.record_id}).one()), snapshot)
+        self.assertNotEqual(snapshot[1], read_cardio(self.db,10,CARDIO).risk)
 
     def test_cardio_same_engine_and_reading(self):
         values = {'glicemia_jejum': 180, 'peso': 100, 'atividade_fisica': 'baixa', 'sono': 'ruim'}
@@ -331,8 +363,9 @@ class PersistenceTests(unittest.TestCase):
     def test_update_synchronizes_and_clears(self):
         result = self.service.create(self.db, self.submission('CARDIO', {'peso':140, 'sono':'ruim'}))
         self.service.update(self.db, result.record_id, self.submission('CARDIO', {'peso':60}))
-        row = self.db.execute(text('SELECT peso, sono, score_clinico FROM registros_longitudinais')).one()
-        self.assertEqual(tuple(row), (60, None, 0))
+        reading = read_cardio(self.db, 10, CARDIO)
+        self.assertEqual(reading.metadata['measurements'], {'peso': 60})
+        self.assertEqual(reading.metadata['score'], 0)
         self.assertEqual(self.count(), (1, 1))
         self.service.update(self.db, result.record_id, self.submission('CARDIO'))
         self.assertIsNone(self.db.execute(text('SELECT risco FROM registros_longitudinais')).scalar())
@@ -343,7 +376,7 @@ class PersistenceTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 self.service.update(self.db, result.record_id, self.submission('CARDIO', {'peso':60}))
         self.assertEqual(self.db.query(RespostaRegistro).one().valor_numero, 140)
-        self.assertEqual(self.db.execute(text('SELECT peso FROM registros_longitudinais')).scalar(), 140)
+        self.assertEqual(read_cardio(self.db, 10, CARDIO).metadata['measurements']['peso'], 140)
 
     def test_immutable_identity(self):
         result = self.service.create(self.db, self.submission())

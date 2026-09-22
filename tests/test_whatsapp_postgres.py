@@ -55,8 +55,8 @@ class WhatsAppPostgresTests(unittest.TestCase):
             for name in fields: self.db.add(CampoFormulario(formulario_id=form_id,nome_campo=name,label=name,tipo_campo='texto',ativo=True))
         self.db.commit()
         with self.engine.begin() as conn:
-            for name in sorted({'modulo','score_clinico','risco','protocolo','leitura_clinica','observacoes'} | (NUMERIC-{'altura'}) | TEXT):
-                kind='NUMERIC' if name in NUMERIC or name=='score_clinico' else 'TEXT'
+            for name, kind in {'score_clinico':'NUMERIC', 'risco':'VARCHAR', 'protocolo':'VARCHAR',
+                               'leitura_clinica':'TEXT', 'observacoes':'TEXT'}.items():
                 conn.execute(text('ALTER TABLE registros_longitudinais ADD COLUMN '+name+' '+kind))
         self.env=patch.dict(os.environ,http.ENV);self.env.start()
         self.app=FastAPI();self.app.include_router(whatsapp.router)

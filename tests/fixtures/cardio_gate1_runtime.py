@@ -1,7 +1,7 @@
 """Create synthetic UI integration data ONLY in the disposable Gate 1 database.
 
-Includes legacy raw-SQL projection columns absent from the ORM; this is a test
-fixture, not a replacement migration history or application seed.
+Includes only the five historical snapshot/narrative columns confirmed in HML.
+Structured Cardio observations are stored exclusively as answer rows.
 """
 from cardio_intervention_schema import create_cardio_intervention_table
 import os
@@ -30,11 +30,8 @@ with engine.begin() as conn:
     conn.execute(text('ALTER TABLE diagnosticos DROP COLUMN modulo_id'))
     conn.execute(text('ALTER TABLE intervencoes DROP COLUMN modulo_id'))
     create_cardio_intervention_table(conn, pre_line=True)
-    for name, kind in {'modulo':'TEXT', 'glicemia_jejum':'NUMERIC',
-            'glicemia_pos_prandial':'NUMERIC', 'pressao_sistolica':'NUMERIC',
-            'pressao_diastolica':'NUMERIC', 'peso':'NUMERIC', 'atividade_fisica':'TEXT',
-            'sono':'TEXT', 'humor':'TEXT', 'score_clinico':'INTEGER', 'risco':'TEXT',
-            'protocolo':'TEXT', 'leitura_clinica':'TEXT', 'observacoes':'TEXT'}.items():
+    for name, kind in {'score_clinico':'NUMERIC', 'risco':'VARCHAR', 'protocolo':'VARCHAR',
+                'leitura_clinica':'TEXT', 'observacoes':'TEXT'}.items():
         conn.execute(text('ALTER TABLE registros_longitudinais ADD COLUMN '+name+' '+kind))
     conn.execute(text("INSERT INTO modulos_clinicos(id,nome,slug,ativo) VALUES (1,'Neurodesenvolvimento','neurodesenvolvimento',true),(2,'Cardiometabólico','cardiometabolico',true)"))
     for revision in ('5a01c7e2d903','8c01a0d1a001','8c01a0d1a002','8c01a0d1a003'):

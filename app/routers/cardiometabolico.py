@@ -202,89 +202,11 @@ def criar_registro_diario(
 
 @router.get("/mapa-risco")
 def mapa_risco_cardiometabolico(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
-    rows = db.execute(
-        text("""
-            SELECT DISTINCT ON (p.id)
-                p.id,
-                p.nome,
-                COALESCE(c.nome, 'Clínica não informada') AS clinica,
-                rl.score_clinico,
-                rl.risco,
-                rl.protocolo
-            FROM pacientes p
-            JOIN registros_longitudinais rl
-              ON rl.paciente_id = p.id
-            LEFT JOIN clinicas c
-              ON c.id = p.clinica_id
-            WHERE rl.modulo_id = 2
-            ORDER BY p.id, rl.data_registro DESC
-        """)
-    ).fetchall()
+    return cardio_longitudinal.risk_map(db, usuario)
 
-    mapa = {}
-
-    for row in rows:
-        clinica = row.clinica or "Clínica não informada"
-        risco = row.risco or "baixo"
-        score = row.score_clinico or 0
-        
-        if clinica not in mapa:
-            mapa[clinica] = {
-                "clinica": clinica,
-                "total": 0,
-                "alto": 0,
-                "moderado": 0,
-                "baixo": 0,
-                "score_total": 0,
-                "pacientes_criticos": [],
-            }
-
-        mapa[clinica]["total"] += 1
-        mapa[clinica]["score_total"] += score
-
-        mapa[clinica]["pacientes_criticos"].append({
-            "id": row.id,
-            "nome": row.nome,
-            "score": score,
-            "risco": risco,
-            "protocolo": row.protocolo or "preventivo",
-        })
-
-        if risco == "alto":
-            mapa[clinica]["alto"] += 1
-        elif risco == "moderado":
-            mapa[clinica]["moderado"] += 1
-        else:
-            mapa[clinica]["baixo"] += 1
-
-    resultado = []
-
-    for item in mapa.values():
-        total = item["total"] or 1
-
-        criticos = sorted(
-            item["pacientes_criticos"],
-            key=lambda x: x["score"],
-            reverse=True
-        )
-
-        resultado.append({
-            "clinica": item["clinica"],
-            "total": item["total"],
-            "alto": item["alto"],
-            "moderado": item["moderado"],
-            "baixo": item["baixo"],
-            "score_medio": round(item["score_total"] / total, 1),
-            "pacientes_criticos": criticos[:3],
-        })
-
-    return sorted(
-        resultado,
-        key=lambda x: x["alto"],
-        reverse=True
-    ) 
 
 @router.post("/pacientes/{paciente_id}/intervencoes")
 def criar_intervencao(paciente_id: int, payload: IntervencaoCreate,

@@ -91,3 +91,35 @@ def cockpit(db, user, offset=0, limit=20, today=None):
             'evolution': {'com_registro': sum(p['ultima_atualizacao'] is not None for p in patients),
                           'sem_registro': sum(p['ultima_atualizacao'] is None for p in patients)},
             'capabilities': {k: v.value for k, v in CARDIO.capabilities.items()}}
+
+
+def risk_map(db, user):
+    """Current institutional readings, grouped by authorized clinic; no snapshot reads."""
+    patients = list_patients(db, user, CARDIO.code)
+    readings = ClinicalReadingService().get_readings(db, [p.id for p in patients], CARDIO.code)
+    groups = {}
+    for patient in patients:
+        reading = readings[patient.id]
+        group = groups.setdefault(patient.clinica_id, {
+            'clinica': patient.clinica.nome if patient.clinica else 'Clínica não informada',
+            'total': 0, 'critico': 0, 'alto': 0, 'moderado': 0, 'baixo': 0,
+            'indisponivel': 0, 'scores': [], 'pacientes_criticos': [],
+        })
+        group['total'] += 1
+        group[reading.risk if reading.risk is not None else 'indisponivel'] += 1
+        score = reading.metadata.get('score')
+        if score is not None:
+            group['scores'].append(score)
+        group['pacientes_criticos'].append({
+            'id': patient.id, 'nome': patient.nome, 'score': score,
+            'risco': reading.risk, 'protocolo': reading.metadata.get('protocol'),
+        })
+    result = []
+    for group in groups.values():
+        scores = group.pop('scores')
+        group['score_medio'] = round(sum(scores) / len(scores), 1) if scores else None
+        # Preserve top-three score presentation; absent scores follow available scores.
+        group['pacientes_criticos'] = sorted(group['pacientes_criticos'], key=lambda p: (
+            p['score'] is None, -(p['score'] if p['score'] is not None else 0), p['nome'], p['id']))[:3]
+        result.append(group)
+    return sorted(result, key=lambda group: (-group['alto'], group['clinica']))
