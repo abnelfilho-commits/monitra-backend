@@ -8,31 +8,33 @@ FIELDS = {'glicemia_jejum', 'pressao_sistolica', 'pressao_diastolica', 'peso', '
 
 
 def project_observation(record, answers):
-    values, labels, seen = {}, {}, set()
-    for name, label, number, text_value in answers:
+    values, seen = {}, set()
+    for name, _label, number, text_value in answers:
         if name in seen:
             values[name] = None
-            labels[name] = None
             continue
         seen.add(name)
         value = float(number) if number is not None else None
         values[name] = value if value is not None and isfinite(value) and text_value is None else None
-        labels[name] = (label or '').strip().casefold()
     weight, height = values.get('peso'), values.get('altura')
-    # Only explicit field units attest a dimensional calculation. No inferred units
-    # from magnitude, patient height, other records, or internal field names.
-    height_unit = {'altura (m)': 'm', 'altura (cm)': 'cm'}.get(labels.get('altura'))
-    eligible = (labels.get('peso') == 'peso (kg)' and height_unit is not None
-                and weight is not None and height is not None and weight > 0 and height > 0)
-    meters = height / 100 if eligible and height_unit == 'cm' else height
-    bmi = round(weight / (meters * meters), 1) if eligible else None
+    # Current Cardio contract: peso is kg, altura is meters. Labels are presentation.
+    # Never borrow height from patient demographics or another observation.
+    eligible = (weight is not None and height is not None and weight > 0 and height > 0)
+    bmi = None
+    if eligible:
+        try:
+            calculated = weight / (height * height)
+            bmi = round(calculated, 1) if isfinite(calculated) else None
+        except (OverflowError, ZeroDivisionError):
+            pass
+    eligible = bmi is not None
     return {'record_id': record.id, 'patient_id': record.paciente_id,
             'data': record.data_registro.isoformat(), 'origem': record.origem,
             **{name: values.get(name) for name in FIELDS - {'altura'}},
-            'altura': meters if eligible else None, 'imc': bmi,
+            'altura': height if height is not None and height > 0 else None, 'imc': bmi,
             'imc_availability': 'available' if eligible else 'unavailable_same_observation_units_required',
             'source': 'respostas_registro',
-            'imc_units': {'peso': 'kg', 'altura': height_unit} if eligible else None}
+            'imc_units': {'peso': 'kg', 'altura': 'm'} if eligible else None}
 
 
 def evolution(db, patient_ids, module_id, latest_only=False):

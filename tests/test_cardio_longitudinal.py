@@ -71,20 +71,26 @@ class PolicyTests(unittest.TestCase):
     def observation(self, answers):
         return project_observation(SimpleNamespace(id=1,paciente_id=1,data_registro=DAY,origem='PROFISSIONAL'), answers)
 
-    def test_bmi_same_observation_explicit_units(self):
-        for label, height in (('Altura (m)',2),('Altura (cm)',200)):
-            result=self.observation([('peso','Peso (kg)',80,None),('altura',label,height,None)])
-            self.assertEqual(result['imc'],20)
-            self.assertEqual(result['data'],DAY.isoformat())
-            self.assertEqual(result['altura'],2)
+    def test_bmi_canonical_units_and_rounding_independent_of_labels(self):
+        for weight, height, expected in ((80,2,20.0),(82,1.75,26.8),(80,1.8,24.7),(100,1.7,34.6)):
+            for label in ('Altura', 'Altura (m)', 'Altura (cm)', 'Outro texto'):
+                result=self.observation([('peso','Qualquer label',weight,None),('altura',label,height,None)])
+                self.assertEqual(result['imc'],expected)
+                self.assertEqual(result['imc_units'],{'peso':'kg','altura':'m'})
+        # No implicit conversion from centimeters, even when a label suggests it.
+        self.assertEqual(self.observation([('peso','Peso',80,None),('altura','Altura (cm)',200,None)])['imc'],0.0)
 
-    def test_bmi_missing_ambiguous_or_duplicate_evidence_unavailable(self):
-        weight=('peso','Peso (kg)',80,None)
-        height=('altura','Altura (m)',2,None)
-        for rows in ([],[weight],[height],[weight,('altura','Altura',2,None)],
-                     [weight,height,height],[weight,('altura','Altura (m)',0,None)],
-                     [('peso','Peso',80,None),height],[weight,('altura','Altura (m)',float('nan'),None)]):
-            self.assertIsNone(self.observation(rows)['imc'])
+    def test_bmi_missing_invalid_or_duplicate_evidence_unavailable(self):
+        weight=('peso','Peso',80,None)
+        height=('altura','Altura',2,None)
+        for rows in ([],[weight],[height],[weight,height,height],[weight,weight,height],
+                     [weight,('altura','Altura',0,None)], [weight,('altura','Altura',-2,None)],
+                     [weight,('altura','Altura',float('nan'),None)],
+                     [weight,('altura','Altura',float('inf'),None)],
+                     [weight,('altura','Altura',1e-300,None)],
+                     [weight,('altura','Altura',2,'invalid')]):
+            with self.subTest(rows=rows):
+                self.assertIsNone(self.observation(rows)['imc'])
 
     def test_canonical_engine_boundary_characterization(self):
         cases=[({},0,'baixo'),({'glicemia_jejum':110},1,'baixo'),
@@ -193,6 +199,14 @@ class JourneyTests(unittest.TestCase):
         self.assertEqual([r['imc'] for r in before],[20,None])
         self.db.query(Paciente).filter_by(id=3).update({'altura':1.90});self.db.commit()
         self.assertEqual(before,evolution(self.db,[3],2))
+        self.record(day=DAY+timedelta(days=1),altura=1.75)
+        self.assertEqual([r['imc'] for r in evolution(self.db,[3],2)],[20,None,None])
+        self.db.query(CampoFormulario).filter_by(formulario_id=2).update({'label':'Texto de apresentação alterado'})
+        self.db.commit()
+        self.assertEqual([r['imc'] for r in evolution(self.db,[3],2)],[20,None,None])
+        reading=ClinicalReadingService().get_readings(self.db,[3],'CARDIO')[3]
+        self.assertIsNone(reading.metadata['imc'])
+        self.assertIsNone(reading.risk)
 
     def test_no_record_membership_and_clinic_scope(self):
         result=population(self.db,self.user,DAY)

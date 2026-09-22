@@ -303,6 +303,15 @@ class DatabaseReadingTests(unittest.TestCase):
         self.assertIsNone(reading.alerts)
         self.assertEqual(reading.reference_date, date(2020, 1, 2))
 
+    def test_bmi_metadata_uses_same_observation_without_risk_change(self):
+        for values, expected in (({'peso':82,'altura':1.75},26.8),({'peso':82},None),({'altura':1.75},None),({},None)):
+            self.record(values)
+            reading=read_cardio(self.db,10,CARDIO)
+            self.assertEqual(reading.metadata['imc'],expected)
+            self.assertEqual(reading.risk,'baixo' if 'peso' in values else None)
+            self.assertNotIn('altura',reading.metadata['measurements'])
+        self.assertIsNone(reading.trend)
+
     def test_unvalidated_engine_trend_not_called(self):
         self.record({'glicemia_jejum': 250})
         with patch('app.services.cardiometabolico_engine.calcular_tendencia', side_effect=AssertionError):

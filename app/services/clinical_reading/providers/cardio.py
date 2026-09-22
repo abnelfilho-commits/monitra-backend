@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models.modular import CampoFormulario, FormularioModulo, RegistroLongitudinal, RespostaRegistro
 from app.services import cardiometabolico_engine as engine
+from app.services.cardio_evolution import project_observation
 from app.services.care_lines import CareLineDefinition
 from ..models import ClinicalReading
 
@@ -36,7 +37,7 @@ def read_cardio(db: Session, patient_id: int, care_line: CareLineDefinition) -> 
         .filter(
             RespostaRegistro.registro_id == record.id,
             CampoFormulario.formulario_id == record.formulario_id,
-            CampoFormulario.nome_campo.in_(NUMERIC_FIELDS | TEXT_FIELDS),
+            CampoFormulario.nome_campo.in_(NUMERIC_FIELDS | TEXT_FIELDS | {'altura'}),
         )
         .all()
     )
@@ -49,15 +50,21 @@ def reading_from_observation(patient_id, care_line, record, rows):
         "engine": "cardiometabolico_engine",
         "trend_availability": "unavailable_pending_clinical_validation",
     }
+    metadata.update(imc=None, imc_availability="no_record", imc_units=None)
     if record is None:
         metadata["availability"] = "no_record"
         return ClinicalReading(patient_id, care_line, None, None, None, None, metadata)
 
     metadata["record_id"] = record.id
+    observation = project_observation(record, [(name, None, number, value)
+        for name, number, value in rows if name in {'peso', 'altura'}])
+    metadata.update({key: observation[key] for key in ('imc', 'imc_availability', 'imc_units')})
     measurements: Dict[str, Any] = {}
     seen = set()
     invalid = False
     for name, number, text_value in rows:
+        if name == "altura":
+            continue  # Anthropometry never changes the domain risk inputs.
         if name in seen:
             invalid = True  # Never arbitrarily choose between duplicate answers.
         seen.add(name)
@@ -120,7 +127,7 @@ def read_cardio_many(db, patient_ids, care_line):
             .join(RegistroLongitudinal, RegistroLongitudinal.id == RespostaRegistro.registro_id)
             .filter(RespostaRegistro.registro_id.in_([r.id for r in records]),
                     CampoFormulario.formulario_id == RegistroLongitudinal.formulario_id,
-                    CampoFormulario.nome_campo.in_(NUMERIC_FIELDS | TEXT_FIELDS)).all())
+                    CampoFormulario.nome_campo.in_(NUMERIC_FIELDS | TEXT_FIELDS | {'altura'})).all())
         for row in rows:
             answers.setdefault(row[0], []).append(tuple(row[1:]))
     return {pid: reading_from_observation(pid, care_line, by_patient.get(pid),

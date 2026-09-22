@@ -143,6 +143,15 @@ class PersistenceTests(unittest.TestCase):
             self.service.create(self.db, self.submission(payload={'sono_qualidade':[]}))
         self.assertEqual(self.count(), (0, 0))
 
+    def test_cardio_anthropometry_persisted_and_read_through_contract(self):
+        result=self.service.create(self.db,self.submission('CARDIO',{'peso':82,'altura':1.75}))
+        reading=read_cardio(self.db,10,CARDIO)
+        self.assertEqual(reading.metadata['record_id'],result.record_id)
+        self.assertEqual(reading.metadata['imc'],26.8)
+        self.assertEqual(reading.metadata['score'],0)
+        self.assertEqual(reading.risk,'baixo')
+        self.assertEqual(self.db.query(RespostaRegistro).count(),2)
+
     def test_cardio_same_engine_and_reading(self):
         values = {'glicemia_jejum': 180, 'peso': 100, 'atividade_fisica': 'baixa', 'sono': 'ruim'}
         result = self.service.create(self.db, self.submission('CARDIO', values))

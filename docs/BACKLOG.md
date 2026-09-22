@@ -18,13 +18,13 @@ BE = monitra-backend, HEAD be377dab8f3dc1e023f3971a2b27512a96902100; FE = fronte
 
 ## Resumo
 
-Total: 15 itens. Nenhum CONCLUÍDO sem registro de resolução próprio.
+Total: 16 itens. Nenhum CONCLUÍDO sem registro de resolução próprio.
 
-Status: ABERTO: 7; PLANEJADO: 2; EM EXECUÇÃO: 0; BLOQUEADO: 0; REVISAR: 6; CONCLUÍDO: 0.
+Status: ABERTO: 8; PLANEJADO: 1; EM EXECUÇÃO: 1; BLOQUEADO: 0; REVISAR: 6; CONCLUÍDO: 0.
 
-Prioridade: P0: 0; P1: 1; P2: 12; P3: 2.
+Prioridade: P0: 0; P1: 1; P2: 12; P3: 3.
 
-Área: Agenda/Sessões: 1; Cardio: 4; Cockpit Gestão: 1; Dados Demo: 1; Frontend compartilhado: 1; Neuro: 1; Performance: 1; Report Engine: 1; Segurança: 1; Tooling: 2; WhatsApp: 1.
+Área: Agenda/Sessões: 1; Cardio: 4; Cockpit Gestão: 1; Dados Demo: 1; Frontend compartilhado: 1; Neuro: 1; Performance: 1; Report Engine: 1; Segurança: 1; Tooling: 3; WhatsApp: 1.
 
 
 ## P0
@@ -58,18 +58,18 @@ Nenhum item classificado.
 
 - **Área:** Cardio
 - **Tipo:** EVOLUÇÃO
-- **Status:** PLANEJADO
+- **Status:** EM EXECUÇÃO
 - **Prioridade:** P2
 - **Origem:** Decisão/achado de governança do projeto; recuperação de código/documentação conforme evidência abaixo.
-- **Descrição:** Implementar E.1: mesma observação, independência do label, captura de altura, labels explícitos e coerência cadastral. Ainda NÃO implementado.
+- **Descrição:** Implementar E.1: mesma observação, independência do label, captura de altura, labels explícitos e coerência cadastral. Implementação local E.1 realizada em 22/09/2026 no escopo cirúrgico autorizado: projeção kg/m, metadata ClinicalReading e captura profissional. Sem alteração cadastral ou metadados HML nesta etapa.
 - **Impacto:** IMC indisponível com metadados atuais.
 - **Evidência:** BE app/services/cardio_evolution.py:24; FE src/pages/cardiometabolico/RegistroDiarioCardiometabolico.jsx:331; decisão Pacote E.1
-- **Dependências:** Validação humana do design E.1
+- **Dependências:** Validação humana da implementação local; confirmar fechamento do escopo cadastral/metadados do design anterior.
 - **Critério de conclusão:** 80/2 → 20; 82/1.75 → 26.8; labels arbitrários não afetam cálculo; ausência/duplicidade seguras; cadastro não modifica histórico; risco e Neuro preservados.
 - **Pacote sugerido:** E.1 — pacote imediato
 - **Responsável:** A definir.
 - **Data/prazo:** Não definido; inventariado em 22/09/2026.
-- **Resolução:** Pendente; ao concluir registrar pacote, commit, data e validação.
+- **Resolução:** Evidência local em docs/cardio-001-e1-implementation.md. Sem commit; EM EXECUÇÃO até validação humana e encerramento explícito.
 
 ### CARDIO-002 — Convergir IMC e interpretações paralelas legadas
 
@@ -294,6 +294,23 @@ Nenhum item classificado.
 - **Responsável:** A definir.
 - **Data/prazo:** Não definido; inventariado em 22/09/2026.
 - **Resolução:** Pendente; ao concluir registrar pacote, commit, data e validação.
+
+### TECH-004 — Lint preexistente no formulário diário Cardio
+
+- **Área:** Tooling
+- **Tipo:** DÍVIDA TÉCNICA
+- **Status:** ABERTO
+- **Prioridade:** P3
+- **Origem:** Inspeção CARDIO-001 / E.1 em 22/09/2026.
+- **Descrição:** ESLint identifica react-hooks/immutability e exhaustive-deps em carregarPaciente/useEffect; mesmas ocorrências confirmadas no HEAD frontend 13123a6 por lint via stdin. Não corrigidas no pacote cirúrgico.
+- **Impacto:** Lint do arquivo permanece com 1 erro e 1 warning preexistentes.
+- **Evidência:** FE src/pages/cardiometabolico/RegistroDiarioCardiometabolico.jsx:43 no HEAD; docs/cardio-001-e1-implementation.md.
+- **Dependências:** Revisão isolada de lifecycle do formulário.
+- **Critério de conclusão:** Ocorrências eliminadas sem requests duplicados, perda de contexto ou regressão de submissão.
+- **Pacote sugerido:** Higiene de hooks do formulário Cardio.
+- **Responsável:** A definir.
+- **Data/prazo:** Não definido; inventariado em 22/09/2026.
+- **Resolução:** Pendente.
 
 ## Reconciliação: não reabrir automaticamente
 
