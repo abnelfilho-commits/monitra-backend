@@ -32,7 +32,7 @@ class ModelContractTests(unittest.TestCase):
         from app.database import Base
         configure_mappers()
         for name, table in Base.metadata.tables.items():
-            if name == "capacidade_instalada":
+            if name in {"capacidade_instalada", "instituicoes", "instituicao_papeis", "paciente_instituicoes", "profissional_instituicoes", "paciente_profissionais"}:
                 continue  # Explicit transitional model; never bootstrap it.
             physical = {c["column_name"]: c for c in CONTRACT["tables"][name]["columns"]}
             for col in table.c:
@@ -58,7 +58,7 @@ class ModelContractTests(unittest.TestCase):
         self.assertNotIn("planejamento_atividades", CONTRACT["tables"])
 
     def test_separate_single_heads(self):
-        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["m0_baseline_v1"])
+        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["g1_institucional_v1"])
         historical = Config(str(ROOT / "alembic.ini"))
         historical.set_main_option("script_location", str(ROOT / "alembic"))
         self.assertEqual(ScriptDirectory.from_config(historical).get_heads(), ["8c01a0d1a004"])
@@ -79,7 +79,7 @@ class BaselinePostgresTests(unittest.TestCase):
             conn.execute(text('CREATE DATABASE "{}"'.format(cls.database)))
         cls.engine = create_engine(url.set(database=cls.database))
         with cls.engine.begin() as conn:
-            command.upgrade(config(conn), "head")
+            command.upgrade(config(conn), "m0_baseline_v1")
 
     @classmethod
     def tearDownClass(cls):
@@ -135,7 +135,7 @@ class BaselinePostgresTests(unittest.TestCase):
         with self.engine.connect() as conn:
             inspector = inspect(conn)
             for name, table in Base.metadata.tables.items():
-                if name == "capacidade_instalada":
+                if name in {"capacidade_instalada", "instituicoes", "instituicao_papeis", "paciente_instituicoes", "profissional_instituicoes", "paciente_profissionais"}:
                     continue
                 with self.subTest(table=name):
                     actual = {(tuple(f["constrained_columns"]), f["referred_table"], tuple(f["referred_columns"]), f["options"].get("ondelete", "NO ACTION")) for f in inspector.get_foreign_keys(name)}
@@ -161,7 +161,7 @@ class BaselinePostgresTests(unittest.TestCase):
 
     def test_second_upgrade_preserves_schema(self):
         with self.engine.begin() as conn:
-            command.upgrade(config(conn), "head")
+            command.upgrade(config(conn), "m0_baseline_v1")
         self.test_bootstrap_catalogue_columns_defaults_and_constraints()
 
     def test_refuse_existing_nonempty_database(self):
@@ -171,7 +171,7 @@ class BaselinePostgresTests(unittest.TestCase):
             try:
                 conn.execute(text("DELETE FROM alembic_version"))
                 with self.assertRaisesRegex(RuntimeError, "not empty"):
-                    command.upgrade(config(conn), "head")
+                    command.upgrade(config(conn), "m0_baseline_v1")
             finally:
                 tx.rollback()
 

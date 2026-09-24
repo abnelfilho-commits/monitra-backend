@@ -32,3 +32,5 @@ from app.models.sessao_assistencial import SessaoAssistencial
 from app.models.diagnostico import Diagnostico
 from .whatsapp_conversa import WhatsAppConversa
 from .whatsapp_mensagem import WhatsAppMensagem
+
+from .institucional import Instituicao, InstituicaoPapel, PacienteInstituicao, ProfissionalInstituicao, PacienteProfissional
