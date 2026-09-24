@@ -1,4 +1,5 @@
 from app.models.profissional_modulo import ProfissionalModulo
+from .pessoa import Pessoa
 from .usuario import Usuario
 from .clinica import Clinica
 from .profissional import Profissional

@@ -14,7 +14,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 from alembic.config import Config
-from app.models import Clinica, OcupacaoProfissional, Profissional, Usuario, Paciente, Intervencao, ProfissionalModulo
+from app.models import Pessoa, Clinica, OcupacaoProfissional, Profissional, Usuario, Paciente, Intervencao, ProfissionalModulo
 from app.models.modular import ModuloClinico, PacienteModulo
 from app.services.interventions import InterventionService, InterventionSubmission
 from app.services.interventions.models import ActorRef, SourceType
@@ -79,7 +79,7 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(scripts.get_revision('5a01c7e2d903').down_revision,'fb27d5139e1e')
 
     def test_postgres_adapters_defaults_and_namespaces(self):
-        for model in (Clinica,OcupacaoProfissional,Profissional,Usuario,Paciente,ModuloClinico,PacienteModulo,Intervencao,ProfissionalModulo):
+        for model in (Pessoa,Clinica,OcupacaoProfissional,Profissional,Usuario,Paciente,ModuloClinico,PacienteModulo,Intervencao,ProfissionalModulo):
             model.__table__.create(self.engine)
         with self.engine.begin() as conn:
             create_cardio_intervention_table(conn)

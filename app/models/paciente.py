@@ -17,6 +17,7 @@ class Paciente(Base):
     __tablename__ = "pacientes"
 
     id = Column(Integer, primary_key=True, index=True)
+    pessoa_id = Column(Integer, ForeignKey("pessoas.id", ondelete="RESTRICT"), nullable=True, index=True)
     nome = Column(String, nullable=False)
     data_nascimento = Column(Date, nullable=True)
     genero = Column(String, nullable=True)

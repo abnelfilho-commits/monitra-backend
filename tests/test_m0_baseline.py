@@ -32,10 +32,12 @@ class ModelContractTests(unittest.TestCase):
         from app.database import Base
         configure_mappers()
         for name, table in Base.metadata.tables.items():
-            if name in {"capacidade_instalada", "instituicoes", "instituicao_papeis", "paciente_instituicoes", "profissional_instituicoes", "paciente_profissionais"}:
+            if name in {"capacidade_instalada", "pessoas", "instituicoes", "instituicao_papeis", "paciente_instituicoes", "profissional_instituicoes", "paciente_profissionais"}:
                 continue  # Explicit transitional model; never bootstrap it.
             physical = {c["column_name"]: c for c in CONTRACT["tables"][name]["columns"]}
             for col in table.c:
+                if name in {"pacientes", "profissionais", "usuarios", "responsaveis"} and col.name == "pessoa_id":
+                    continue  # G2.A.2 addition, verified on the current canonical head.
                 with self.subTest(table=name, column=col.name):
                     self.assertIn(col.name, physical)
                     actual_type = str(col.type.compile(dialect=dialect())).lower().replace("varchar", "character varying").replace(", ", ",")
@@ -58,7 +60,7 @@ class ModelContractTests(unittest.TestCase):
         self.assertNotIn("planejamento_atividades", CONTRACT["tables"])
 
     def test_separate_single_heads(self):
-        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["g1_institucional_v1"])
+        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["g2a2_pessoas_v1"])
         historical = Config(str(ROOT / "alembic.ini"))
         historical.set_main_option("script_location", str(ROOT / "alembic"))
         self.assertEqual(ScriptDirectory.from_config(historical).get_heads(), ["8c01a0d1a004"])
@@ -135,20 +137,22 @@ class BaselinePostgresTests(unittest.TestCase):
         with self.engine.connect() as conn:
             inspector = inspect(conn)
             for name, table in Base.metadata.tables.items():
-                if name in {"capacidade_instalada", "instituicoes", "instituicao_papeis", "paciente_instituicoes", "profissional_instituicoes", "paciente_profissionais"}:
+                if name in {"capacidade_instalada", "pessoas", "instituicoes", "instituicao_papeis", "paciente_instituicoes", "profissional_instituicoes", "paciente_profissionais"}:
                     continue
                 with self.subTest(table=name):
                     actual = {(tuple(f["constrained_columns"]), f["referred_table"], tuple(f["referred_columns"]), f["options"].get("ondelete", "NO ACTION")) for f in inspector.get_foreign_keys(name)}
-                    expected = {(tuple(c.name for c in f.columns), f.elements[0].column.table.name, tuple(e.column.name for e in f.elements), f.ondelete or "NO ACTION") for f in table.foreign_key_constraints}
+                    expected = {(tuple(c.name for c in f.columns), f.elements[0].column.table.name, tuple(e.column.name for e in f.elements), f.ondelete or "NO ACTION") for f in table.foreign_key_constraints if f.elements[0].column.table.name != "pessoas"}
                     self.assertEqual(actual, expected)
                     actual_unique = {tuple(u["column_names"]) for u in inspector.get_unique_constraints(name)}
                     expected_unique = {tuple(c.name for c in u.columns) for u in table.constraints if isinstance(u, UniqueConstraint)}
                     self.assertEqual(actual_unique, expected_unique)
                     actual_indexes = {(i["name"], tuple(i["column_names"]), i["unique"]) for i in inspector.get_indexes(name) if not i.get("duplicates_constraint")}
-                    expected_indexes = {(i.name, tuple(c.name for c in i.columns), i.unique) for i in table.indexes}
+                    expected_indexes = {(i.name, tuple(c.name for c in i.columns), i.unique) for i in table.indexes if tuple(c.name for c in i.columns) != ("pessoa_id",)}
                     self.assertEqual(actual_indexes, expected_indexes)
                     physical = {c["column_name"]: c for c in CONTRACT["tables"][name]["columns"]}
                     for column in table.c:
+                        if column.name == "pessoa_id" and name in {"pacientes", "profissionais", "usuarios", "responsaveis"}:
+                            continue  # Not part of frozen M0.
                         expected_default = physical[column.name]["default_expression"]
                         if expected_default and expected_default.startswith("nextval("):
                             continue  # SERIAL/autoincrement, verified separately.
@@ -183,6 +187,9 @@ class BaselinePostgresTests(unittest.TestCase):
         from app.schemas.registro import RegistroDiarioCreate
         with self.engine.connect() as conn:
             tx = conn.begin()
+            # Current ORM includes nullable G2.A.2 fields; keep the M0 catalogue
+            # frozen and roll this test-only schema upgrade back with the rows.
+            command.upgrade(config(conn), "g2a2_pessoas_v1")
             session = Session(conn, join_transaction_mode="create_savepoint")
             try:
                 professional = Profissional(nome="M0 synthetic")

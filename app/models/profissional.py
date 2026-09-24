@@ -10,6 +10,7 @@ class Profissional(Base):
     __tablename__ = "profissionais"
 
     id = Column(Integer, primary_key=True, index=True)
+    pessoa_id = Column(Integer, ForeignKey("pessoas.id", ondelete="RESTRICT"), nullable=True, index=True)
     nome = Column(String, nullable=False)
     email = Column(String, nullable=True, unique=False)
     especialidade = Column(String, nullable=True)
