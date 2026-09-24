@@ -39,7 +39,10 @@ from app.routers import diagnosticos
 
 from app.routers import whatsapp
 
+from app.routers.identidades import router as identidades_router
+
 app = FastAPI(title="Integra Care API")
+app.include_router(identidades_router)
 
 origins = [
     "https://care.meyio.com.br",

@@ -1,3 +1,4 @@
+from sqlalchemy import UniqueConstraint
 from sqlalchemy import (
     Column, 
     Integer, 
@@ -15,6 +16,7 @@ from app.database import Base
 
 class Paciente(Base):
     __tablename__ = "pacientes"
+    __table_args__ = (UniqueConstraint("pessoa_id", name="uq_pacientes_pessoa_id"),)
 
     id = Column(Integer, primary_key=True, index=True)
     pessoa_id = Column(Integer, ForeignKey("pessoas.id", ondelete="RESTRICT"), nullable=True, index=True)

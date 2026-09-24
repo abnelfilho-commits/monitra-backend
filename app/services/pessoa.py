@@ -4,7 +4,7 @@ No router, automatic association, deduplication, or legacy synchronization.
 """
 from datetime import datetime, timezone
 from app.models.pessoa import Pessoa
-from app.schemas.pessoa import PessoaCreate
+from app.schemas.pessoa import PessoaCreate, PessoaDados
 
 
 class PessoaService:
@@ -20,12 +20,12 @@ class PessoaService:
     @staticmethod
     def update(db, identity, changes):
         allowed = set(PessoaCreate.model_fields)
-        if not isinstance(changes, dict) or set(changes) - allowed:
+        if not isinstance(changes, dict) or set(changes) - allowed or "cpf" in changes:
             raise ValueError("Campos de Pessoa inválidos")
         row = db.query(Pessoa).filter(Pessoa.id == identity).with_for_update().one()
         data = {field: getattr(row, field) for field in allowed}
         data.update(changes)
-        validated = PessoaCreate.model_validate(data)
+        validated = PessoaDados.model_validate(data)
         for field, value in validated.model_dump().items():
             setattr(row, field, value)
         row.atualizado_em = max(row.criado_em, datetime.now(timezone.utc))

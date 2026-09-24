@@ -26,7 +26,7 @@ def normalize_cpf(value):
     return digits
 
 
-class PessoaCreate(BaseModel):
+class PessoaDados(BaseModel):
     model_config = ConfigDict(extra="forbid")
     nome_completo: StrictStr
     nome_social: Optional[StrictStr] = None
@@ -63,7 +63,18 @@ class PessoaCreate(BaseModel):
         return value
 
 
-class PessoaOut(PessoaCreate):
+class PessoaCreate(PessoaDados):
+    cpf: StrictStr
+
+    @field_validator("cpf")
+    @classmethod
+    def required_cpf(cls, value):
+        if value is None:
+            raise ValueError("CPF obrigatório para nova Pessoa")
+        return value
+
+
+class PessoaOut(PessoaDados):
     model_config = ConfigDict(from_attributes=True, extra="forbid")
     id: int
     criado_em: datetime

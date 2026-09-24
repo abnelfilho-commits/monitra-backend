@@ -1,3 +1,4 @@
+from .identidade_operacao import IdentidadeOperacao
 from app.models.profissional_modulo import ProfissionalModulo
 from .pessoa import Pessoa
 from .usuario import Usuario

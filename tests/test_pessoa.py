@@ -40,7 +40,7 @@ class PessoaContractTests(unittest.TestCase):
                 normalize_cpf(value)
 
     def test_names_optional_contacts_and_no_gender_conversion(self):
-        p = PessoaCreate(nome_completo='  Nome Sintético  ', nome_social=' ', sexo=None,
+        p = PessoaCreate(cpf=VALID_CPF, nome_completo='  Nome Sintético  ', nome_social=' ', sexo=None,
                          email='  Synthetic@example.org  ', telefone='  +55 (00) 1234  ')
         self.assertEqual(p.nome_completo, 'Nome Sintético')
         self.assertIsNone(p.nome_social)
@@ -51,11 +51,11 @@ class PessoaContractTests(unittest.TestCase):
                        {'telefone': 'x'*33}, {'genero': 'X'}, {'pessoa_id': 1}, {'clinica_id': 1},
                        {'data_nascimento': date.today()+timedelta(days=1)}):
             with self.subTest(values=values), self.assertRaises(ValidationError):
-                PessoaCreate(**dict({'nome_completo': 'Synthetic'}, **values))
+                PessoaCreate(**dict({'nome_completo': 'Synthetic', 'cpf': VALID_CPF}, **values))
 
     def test_canonical_head_and_direct_parent(self):
         scripts = ScriptDirectory.from_config(config())
-        self.assertEqual(scripts.get_heads(), ['g2a2_pessoas_v1'])
+        self.assertEqual(scripts.get_heads(), ['g2a3_identidade_v1'])
         self.assertEqual(scripts.get_revision('g2a2_pessoas_v1').down_revision, 'g1_institucional_v1')
 
 
@@ -110,6 +110,16 @@ class PessoaPostgresTests(unittest.TestCase):
         if self.tx.is_active:
             self.tx.rollback()
         self.c.close()
+
+    def create_person(self, payload):
+        payload = dict(payload)
+        if 'cpf' not in payload:
+            base = f"{self.db.query(Pessoa).count()+100:09d}"
+            for length in (9, 10):
+                rest = sum(int(n)*w for n,w in zip(base, range(length+1,1,-1))) % 11
+                base += str(0 if rest < 2 else 11-rest)
+            payload['cpf'] = base
+        return self.service.create(self.db, payload)
 
     def rejected(self, sql, params=None):
         with self.assertRaises((IntegrityError, DataError)):
@@ -186,8 +196,9 @@ class PessoaPostgresTests(unittest.TestCase):
             self.assertEqual(orm_fk.target_fullname,'pessoas.id'); self.assertEqual(orm_fk.ondelete,'RESTRICT')
 
     def test_identity_null_cpf_and_duplicate_contact_allowed(self):
-        first=self.service.create(self.db,dict(nome_completo='Synthetic',email='same@example.org',telefone='same'))
-        second=self.service.create(self.db,dict(nome_completo='Synthetic',email='same@example.org',telefone='same'))
+        first=Pessoa(nome_completo='Synthetic',email='same@example.org',telefone='same')
+        second=Pessoa(nome_completo='Synthetic',email='same@example.org',telefone='same')
+        self.db.add_all([first,second]); self.db.flush()
         self.assertNotEqual(first.id,second.id)
         self.assertIsNone(first.cpf); self.assertIsNone(second.cpf)
         self.assertTrue(first.ativo)
@@ -196,10 +207,10 @@ class PessoaPostgresTests(unittest.TestCase):
         self.c.execute(text("INSERT INTO pessoas(id,nome_completo) VALUES(90000,'Explicit identity allowed')"))
 
     def test_duplicate_cpf_rejected_even_inactive_without_matching(self):
-        self.service.create(self.db,dict(nome_completo='Synthetic',cpf=VALID_CPF,ativo=False))
+        self.create_person(dict(nome_completo='Synthetic',cpf=VALID_CPF,ativo=False))
         with self.assertRaises(IntegrityError):
             with self.db.begin_nested():
-                self.service.create(self.db,dict(nome_completo='Other',cpf='529.982.247-25'))
+                self.create_person(dict(nome_completo='Other',cpf='529.982.247-25'))
         self.assertEqual(self.db.query(Pessoa).count(),1)
 
     def test_database_structural_guards(self):
@@ -217,7 +228,7 @@ class PessoaPostgresTests(unittest.TestCase):
 
     def test_cardinality_and_restrict_for_all_four_domains(self):
         for model in (Paciente,Profissional,Usuario,Responsavel):
-            person=self.service.create(self.db,dict(nome_completo='Synthetic'))
+            person=self.create_person(dict(nome_completo='Synthetic'))
             for n in range(2):
                 args=dict(nome='Synthetic',pessoa_id=person.id)
                 if model in (Usuario,Responsavel): args.update(email=f'{model.__tablename__}{n}@example.invalid',senha_hash='unused')
@@ -228,13 +239,13 @@ class PessoaPostgresTests(unittest.TestCase):
             self.rejected(f'UPDATE {model.__tablename__} SET pessoa_id=-1')
 
     def test_service_update_and_transaction_owned_by_caller(self):
-        row=self.service.create(self.db,dict(nome_completo='Synthetic'))
+        row=self.create_person(dict(nome_completo='Synthetic'))
         identity=row.id
-        self.service.update(self.db,identity,{'nome_social':' Chosen ', 'cpf':'529.982.247-25'})
-        self.assertEqual(row.nome_social,'Chosen'); self.assertEqual(row.cpf,VALID_CPF)
+        self.service.update(self.db,identity,{'nome_social':' Chosen '})
+        self.assertEqual(row.nome_social,'Chosen'); self.assertIsNotNone(row.cpf)
         self.assertGreaterEqual(row.atualizado_em,row.criado_em)
         with self.assertRaises(ValueError): self.service.update(self.db,identity,{'clinica_id':1})
-        with self.assertRaises(ValidationError): self.service.update(self.db,identity,{'cpf':'123'})
+        with self.assertRaises(ValueError): self.service.update(self.db,identity,{'cpf':'123'})
         self.db.close(); self.tx.rollback()
         with self.engine.connect() as c:
             self.assertEqual(c.execute(text('SELECT count(*) FROM pessoas WHERE id=:id'),{'id':identity}).scalar(),0)
@@ -242,7 +253,7 @@ class PessoaPostgresTests(unittest.TestCase):
     def test_person_association_never_grants_access_or_changes_legacy(self):
         from app.models import Clinica, ModuloClinico, ProfissionalModulo
         one=Clinica(nome='One'); two=Clinica(nome='Two'); self.db.add_all([one,two]); self.db.flush()
-        person=self.service.create(self.db,dict(nome_completo='Canonical',ativo=False))
+        person=self.create_person(dict(nome_completo='Canonical',ativo=False))
         professional=Profissional(nome='Legacy professional',clinica_id=one.id,ativo=True,pessoa_id=person.id)
         patient=Paciente(nome='Legacy patient',genero='legacy',clinica_id=two.id,ativo=True,pessoa_id=person.id)
         self.db.add_all([professional,patient]); self.db.flush()
@@ -266,14 +277,14 @@ class PessoaPostgresTests(unittest.TestCase):
         self.assertEqual(self.c.execute(text('SELECT count(*) FROM pessoas')).scalar(),0)
 
     def test_downgrade_blocks_person_even_without_links(self):
-        self.service.create(self.db,dict(nome_completo='Synthetic'))
+        self.create_person(dict(nome_completo='Synthetic'))
         with self.assertRaisesRegex(RuntimeError,'existem Pessoas'):
             command.downgrade(config(self.c),'g1_institucional_v1')
         self.assertEqual(self.c.execute(text('SELECT version_num FROM alembic_version')).scalar(),'g2a2_pessoas_v1')
         self.assertEqual(self.db.query(Pessoa).count(),1)
 
     def test_downgrade_blocks_linked_person(self):
-        p=self.service.create(self.db,dict(nome_completo='Synthetic'))
+        p=self.create_person(dict(nome_completo='Synthetic'))
         self.db.add(Paciente(nome='Synthetic',pessoa_id=p.id));self.db.flush()
         with self.assertRaisesRegex(RuntimeError,'downgrade bloqueado'):
             command.downgrade(config(self.c),'g1_institucional_v1')

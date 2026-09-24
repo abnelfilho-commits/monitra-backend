@@ -1,9 +1,11 @@
+from sqlalchemy import UniqueConstraint
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from app.database import Base
 
 class Usuario(Base):
     __tablename__ = "usuarios"
+    __table_args__ = (UniqueConstraint("pessoa_id", name="uq_usuarios_pessoa_id"),)
 
     id = Column(Integer, primary_key=True, index=True)
     pessoa_id = Column(Integer, ForeignKey("pessoas.id", ondelete="RESTRICT"), nullable=True, index=True)
