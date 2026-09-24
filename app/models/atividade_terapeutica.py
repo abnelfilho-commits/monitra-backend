@@ -1,3 +1,4 @@
+from sqlalchemy import text, UniqueConstraint
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -8,11 +9,11 @@ from app.database import Base
 class AtividadeTerapeutica(Base):
     __tablename__ = "atividades_terapeuticas"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     nome = Column(String(200), nullable=False)
     descricao = Column(Text, nullable=True)
     duracao_minutos = Column(Integer, nullable=True)
-    ativo = Column(Boolean, default=True)
+    ativo = Column(Boolean, default=True, server_default=text('true'))
     created_at = Column(DateTime, server_default=func.now())
 
     modulo_id = Column(Integer, ForeignKey("modulos_clinicos.id"), nullable=True)
@@ -27,9 +28,9 @@ class AtividadeTerapeutica(Base):
 class OcupacaoProfissional(Base):
     __tablename__ = "ocupacoes_profissionais"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     nome = Column(String(100), nullable=False)
-    ativo = Column(Boolean, default=True)
+    ativo = Column(Boolean, default=True, server_default=text('true'))
 
     atividades = relationship(
         "AtividadeOcupacao",
@@ -40,8 +41,9 @@ class OcupacaoProfissional(Base):
 
 class AtividadeOcupacao(Base):
     __tablename__ = "atividade_ocupacao"
+    __table_args__ = (UniqueConstraint("atividade_id", "ocupacao_id", name="uq_atividade_ocupacao"),)
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
 
     atividade_id = Column(
         Integer,

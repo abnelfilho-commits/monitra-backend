@@ -1,3 +1,4 @@
+from sqlalchemy import text, Index
 from sqlalchemy import Column, Integer, String, Text, Numeric, DateTime, JSON
 from sqlalchemy.sql import func
 
@@ -6,8 +7,14 @@ from app.database import Base
 
 class AvaliacaoClinica(Base):
     __tablename__ = "avaliacoes_clinicas"
+    __table_args__ = (
+        Index("idx_avaliacoes_registro", "registro_id"),
+        Index("idx_avaliacoes_paciente", "paciente_id"),
+        Index("idx_avaliacoes_modulo", "modulo_id"),
+        Index("idx_avaliacoes_instrumento", "instrumento"),
+    )
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
 
     registro_id = Column(Integer, nullable=False)
     paciente_id = Column(Integer, nullable=False)
@@ -30,7 +37,7 @@ class AvaliacaoClinica(Base):
     engine_version = Column(String(20), nullable=True)
     profissional_id = Column(Integer, nullable=True)
 
-    status = Column(String(30), nullable=False, default="CONCLUIDA")
+    status = Column(String(30), nullable=False, default="CONCLUIDA", server_default=text("'CONCLUIDA'"))
 
     executado_em = Column(DateTime, nullable=False, server_default=func.now())
     created_at = Column(DateTime, nullable=False, server_default=func.now())

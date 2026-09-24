@@ -1,3 +1,4 @@
+from sqlalchemy import text
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -14,7 +15,7 @@ class Responsavel(Base):
     senha_hash = Column(String, nullable=False)
     telefone = Column(String, nullable=True)
 
-    ativo = Column(Boolean, default=True, nullable=False)
+    ativo = Column(Boolean, default=True, nullable=False, server_default=text('true'))
 
     clinica_id = Column(
         Integer,

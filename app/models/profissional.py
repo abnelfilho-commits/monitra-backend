@@ -1,3 +1,4 @@
+from sqlalchemy import text
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -13,7 +14,7 @@ class Profissional(Base):
     email = Column(String, nullable=True, unique=False)
     especialidade = Column(String, nullable=True)
 
-    clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False)
+    clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=True, index=True)
 
     ocupacao_id = Column(
         Integer,
@@ -21,7 +22,7 @@ class Profissional(Base):
         nullable=True,
     )
 
-    ativo = Column(Boolean, default=True)
+    ativo = Column(Boolean, default=True, server_default=text('true'))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     clinica = relationship("Clinica", back_populates="profissionais")
@@ -31,4 +32,8 @@ class Profissional(Base):
         foreign_keys=[ocupacao_id],
     )
 
-    pacientes = relationship("Paciente", back_populates="profissional")
+    # Legado transitório, consistente com o join explícito de Paciente.
+    pacientes = relationship(
+        "Paciente", back_populates="profissional",
+        primaryjoin="Profissional.id == foreign(Paciente.profissional_id)",
+    )

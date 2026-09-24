@@ -1,0 +1,2937 @@
+{
+  "revision": "m0_baseline_v1",
+  "historical_revision": "8c01a0d1a004",
+  "tables": {
+    "agenda_cuidados": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('agenda_cuidados_id_seq'::regclass)"
+        },
+        {
+          "column_name": "pts_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "objetivo_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "atividade_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "ocupacao_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "frequencia_semanal",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "duracao_minutos",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "data_inicio",
+          "formatted_type": "date",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "data_fim",
+          "formatted_type": "date",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "status",
+          "formatted_type": "character varying(30)",
+          "nullable": false,
+          "default_expression": "'PLANEJADO'::character varying"
+        },
+        {
+          "column_name": "observacoes",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "created_at",
+          "formatted_type": "timestamp without time zone",
+          "nullable": true,
+          "default_expression": "now()"
+        },
+        {
+          "column_name": "status_execucao",
+          "formatted_type": "character varying(30)",
+          "nullable": true,
+          "default_expression": "'PLANEJADO'::character varying"
+        },
+        {
+          "column_name": "data_realizacao",
+          "formatted_type": "date",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "observacao_execucao",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "quantidade_sessoes",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "profissional_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "agenda_cuidados_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "agenda_cuidados_atividade_id_fkey",
+          "definition": "FOREIGN KEY (atividade_id) REFERENCES atividades_terapeuticas(id)"
+        },
+        {
+          "constraint_name": "agenda_cuidados_objetivo_id_fkey",
+          "definition": "FOREIGN KEY (objetivo_id) REFERENCES pts_objetivos(id)"
+        },
+        {
+          "constraint_name": "agenda_cuidados_ocupacao_id_fkey",
+          "definition": "FOREIGN KEY (ocupacao_id) REFERENCES ocupacoes_profissionais(id)"
+        },
+        {
+          "constraint_name": "agenda_cuidados_profissional_id_fkey",
+          "definition": "FOREIGN KEY (profissional_id) REFERENCES profissionais(id)"
+        },
+        {
+          "constraint_name": "agenda_cuidados_pts_id_fkey",
+          "definition": "FOREIGN KEY (pts_id) REFERENCES pts(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "index_name": "ix_agenda_cuidados_profissional_id",
+          "definition": "CREATE INDEX ix_agenda_cuidados_profissional_id ON public.agenda_cuidados USING btree (profissional_id)"
+        }
+      ]
+    },
+    "atividade_ocupacao": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('atividade_ocupacao_id_seq'::regclass)"
+        },
+        {
+          "column_name": "atividade_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "ocupacao_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "atividade_ocupacao_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "constraint_name": "uq_atividade_ocupacao",
+          "definition": "UNIQUE (atividade_id, ocupacao_id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "atividade_ocupacao_atividade_id_fkey",
+          "definition": "FOREIGN KEY (atividade_id) REFERENCES atividades_terapeuticas(id) ON DELETE CASCADE"
+        },
+        {
+          "constraint_name": "atividade_ocupacao_ocupacao_id_fkey",
+          "definition": "FOREIGN KEY (ocupacao_id) REFERENCES ocupacoes_profissionais(id) ON DELETE CASCADE"
+        }
+      ],
+      "indexes": []
+    },
+    "atividades_terapeuticas": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('atividades_terapeuticas_id_seq'::regclass)"
+        },
+        {
+          "column_name": "nome",
+          "formatted_type": "character varying(200)",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "descricao",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "duracao_minutos",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "ativo",
+          "formatted_type": "boolean",
+          "nullable": true,
+          "default_expression": "true"
+        },
+        {
+          "column_name": "created_at",
+          "formatted_type": "timestamp without time zone",
+          "nullable": true,
+          "default_expression": "now()"
+        },
+        {
+          "column_name": "modulo_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "atividades_terapeuticas_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "atividades_terapeuticas_modulo_id_fkey",
+          "definition": "FOREIGN KEY (modulo_id) REFERENCES modulos_clinicos(id)"
+        }
+      ],
+      "indexes": []
+    },
+    "avaliacoes_clinicas": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('avaliacoes_clinicas_id_seq'::regclass)"
+        },
+        {
+          "column_name": "registro_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "paciente_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "modulo_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "formulario_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "instrumento",
+          "formatted_type": "character varying(50)",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "versao",
+          "formatted_type": "character varying(20)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "score",
+          "formatted_type": "numeric(10,2)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "score_texto",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "classificacao",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "classificacao_codigo",
+          "formatted_type": "character varying(50)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "conduta",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "interpretacao",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "resultado",
+          "formatted_type": "json",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "engine_version",
+          "formatted_type": "character varying(20)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "profissional_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "status",
+          "formatted_type": "character varying(30)",
+          "nullable": false,
+          "default_expression": "'CONCLUIDA'::character varying"
+        },
+        {
+          "column_name": "executado_em",
+          "formatted_type": "timestamp without time zone",
+          "nullable": false,
+          "default_expression": "now()"
+        },
+        {
+          "column_name": "created_at",
+          "formatted_type": "timestamp without time zone",
+          "nullable": false,
+          "default_expression": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "avaliacoes_clinicas_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "index_name": "idx_avaliacoes_instrumento",
+          "definition": "CREATE INDEX idx_avaliacoes_instrumento ON public.avaliacoes_clinicas USING btree (instrumento)"
+        },
+        {
+          "index_name": "idx_avaliacoes_modulo",
+          "definition": "CREATE INDEX idx_avaliacoes_modulo ON public.avaliacoes_clinicas USING btree (modulo_id)"
+        },
+        {
+          "index_name": "idx_avaliacoes_paciente",
+          "definition": "CREATE INDEX idx_avaliacoes_paciente ON public.avaliacoes_clinicas USING btree (paciente_id)"
+        },
+        {
+          "index_name": "idx_avaliacoes_registro",
+          "definition": "CREATE INDEX idx_avaliacoes_registro ON public.avaliacoes_clinicas USING btree (registro_id)"
+        }
+      ]
+    },
+    "avaliacoes_modulo": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('avaliacoes_modulo_id_seq'::regclass)"
+        },
+        {
+          "column_name": "paciente_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "modulo_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "data_avaliacao",
+          "formatted_type": "date",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "eixo_dominante",
+          "formatted_type": "character varying(150)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "eixos_secundarios",
+          "formatted_type": "json",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "nivel_atividade",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "sustentacao_clinica",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "fatores_observados",
+          "formatted_type": "json",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "biomarcadores_alterados",
+          "formatted_type": "json",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "riscos_observados",
+          "formatted_type": "json",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "tendencia",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "impacto_funcional",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "autonomia",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "resposta_intervencoes",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "status_validacao",
+          "formatted_type": "character varying(100)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "score_interno",
+          "formatted_type": "numeric(8,2)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "detalhes_internos",
+          "formatted_type": "json",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "criado_em",
+          "formatted_type": "timestamp without time zone",
+          "nullable": true,
+          "default_expression": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "avaliacoes_modulo_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "avaliacoes_modulo_modulo_id_fkey",
+          "definition": "FOREIGN KEY (modulo_id) REFERENCES modulos_clinicos(id)"
+        },
+        {
+          "constraint_name": "avaliacoes_modulo_paciente_id_fkey",
+          "definition": "FOREIGN KEY (paciente_id) REFERENCES pacientes(id)"
+        }
+      ],
+      "indexes": []
+    },
+    "campos_formulario": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('campos_formulario_id_seq'::regclass)"
+        },
+        {
+          "column_name": "formulario_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "nome_campo",
+          "formatted_type": "character varying(100)",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "label",
+          "formatted_type": "character varying(200)",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "tipo_campo",
+          "formatted_type": "character varying(50)",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "obrigatorio",
+          "formatted_type": "boolean",
+          "nullable": true,
+          "default_expression": "false"
+        },
+        {
+          "column_name": "ordem",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": "0"
+        },
+        {
+          "column_name": "opcoes",
+          "formatted_type": "json",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "regra_exibicao",
+          "formatted_type": "json",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "ativo",
+          "formatted_type": "boolean",
+          "nullable": true,
+          "default_expression": "true"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "campos_formulario_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "campos_formulario_formulario_id_fkey",
+          "definition": "FOREIGN KEY (formulario_id) REFERENCES formularios_modulo(id)"
+        }
+      ],
+      "indexes": []
+    },
+    "clinicas": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('clinicas_id_seq'::regclass)"
+        },
+        {
+          "column_name": "nome",
+          "formatted_type": "character varying",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "cnpj",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "email",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "telefone",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "ativa",
+          "formatted_type": "boolean",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "created_at",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "default_expression": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "clinicas_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "index_name": "ix_clinicas_id",
+          "definition": "CREATE INDEX ix_clinicas_id ON public.clinicas USING btree (id)"
+        }
+      ]
+    },
+    "diagnosticos": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('diagnosticos_id_seq'::regclass)"
+        },
+        {
+          "column_name": "paciente_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "tipo",
+          "formatted_type": "character varying(30)",
+          "nullable": false,
+          "default_expression": "'DIAGNOSTICO'::character varying"
+        },
+        {
+          "column_name": "status",
+          "formatted_type": "character varying(30)",
+          "nullable": false,
+          "default_expression": "'ATIVO'::character varying"
+        },
+        {
+          "column_name": "cid",
+          "formatted_type": "character varying(20)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "descricao_clinica",
+          "formatted_type": "text",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "data_diagnostico",
+          "formatted_type": "date",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "medico_nome",
+          "formatted_type": "character varying(200)",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "medico_especialidade",
+          "formatted_type": "character varying(150)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "medico_crm",
+          "formatted_type": "character varying(50)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "medico_cpf",
+          "formatted_type": "character varying(20)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "observacoes",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "created_at",
+          "formatted_type": "timestamp without time zone",
+          "nullable": false,
+          "default_expression": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "formatted_type": "timestamp without time zone",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "modulo_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "diagnosticos_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "diagnosticos_paciente_id_fkey",
+          "definition": "FOREIGN KEY (paciente_id) REFERENCES pacientes(id)"
+        },
+        {
+          "constraint_name": "fk_diagnosticos_modulo_id",
+          "definition": "FOREIGN KEY (modulo_id) REFERENCES modulos_clinicos(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "index_name": "ix_diagnosticos_cid",
+          "definition": "CREATE INDEX ix_diagnosticos_cid ON public.diagnosticos USING btree (cid)"
+        },
+        {
+          "index_name": "ix_diagnosticos_data_diagnostico",
+          "definition": "CREATE INDEX ix_diagnosticos_data_diagnostico ON public.diagnosticos USING btree (data_diagnostico)"
+        },
+        {
+          "index_name": "ix_diagnosticos_id",
+          "definition": "CREATE INDEX ix_diagnosticos_id ON public.diagnosticos USING btree (id)"
+        },
+        {
+          "index_name": "ix_diagnosticos_paciente_id",
+          "definition": "CREATE INDEX ix_diagnosticos_paciente_id ON public.diagnosticos USING btree (paciente_id)"
+        },
+        {
+          "index_name": "ix_diagnosticos_paciente_modulo",
+          "definition": "CREATE INDEX ix_diagnosticos_paciente_modulo ON public.diagnosticos USING btree (paciente_id, modulo_id)"
+        }
+      ]
+    },
+    "formularios_modulo": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('formularios_modulo_id_seq'::regclass)"
+        },
+        {
+          "column_name": "modulo_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "nome",
+          "formatted_type": "character varying(150)",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "tipo",
+          "formatted_type": "character varying(50)",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "ativo",
+          "formatted_type": "boolean",
+          "nullable": true,
+          "default_expression": "true"
+        },
+        {
+          "column_name": "criado_em",
+          "formatted_type": "timestamp without time zone",
+          "nullable": true,
+          "default_expression": "now()"
+        },
+        {
+          "column_name": "codigo",
+          "formatted_type": "character varying(50)",
+          "nullable": true,
+          "default_expression": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "formularios_modulo_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "formularios_modulo_modulo_id_fkey",
+          "definition": "FOREIGN KEY (modulo_id) REFERENCES modulos_clinicos(id)"
+        }
+      ],
+      "indexes": []
+    },
+    "intervencoes": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('intervencoes_id_seq'::regclass)"
+        },
+        {
+          "column_name": "paciente_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "profissional_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "tipo",
+          "formatted_type": "character varying",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "descricao",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "data_intervencao",
+          "formatted_type": "timestamp without time zone",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "created_at",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "default_expression": "now()"
+        },
+        {
+          "column_name": "modulo_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "intervencoes_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "fk_intervencoes_modulo_id",
+          "definition": "FOREIGN KEY (modulo_id) REFERENCES modulos_clinicos(id)"
+        },
+        {
+          "constraint_name": "intervencoes_paciente_id_fkey",
+          "definition": "FOREIGN KEY (paciente_id) REFERENCES pacientes(id)"
+        },
+        {
+          "constraint_name": "intervencoes_profissional_id_fkey",
+          "definition": "FOREIGN KEY (profissional_id) REFERENCES usuarios(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "index_name": "ix_intervencoes_id",
+          "definition": "CREATE INDEX ix_intervencoes_id ON public.intervencoes USING btree (id)"
+        }
+      ]
+    },
+    "intervencoes_cardiometabolicas": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('intervencoes_cardiometabolicas_id_seq'::regclass)"
+        },
+        {
+          "column_name": "paciente_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "tipo",
+          "formatted_type": "character varying",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "descricao",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "prioridade",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "created_at",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "default_expression": "now()"
+        },
+        {
+          "column_name": "modulo_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "intervencoes_cardiometabolicas_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "fk_cardio_intervencoes_modulo",
+          "definition": "FOREIGN KEY (modulo_id) REFERENCES modulos_clinicos(id)"
+        },
+        {
+          "constraint_name": "intervencoes_cardiometabolicas_paciente_id_fkey",
+          "definition": "FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE"
+        }
+      ],
+      "indexes": [
+        {
+          "index_name": "ix_intervencoes_cardio_paciente_id",
+          "definition": "CREATE INDEX ix_intervencoes_cardio_paciente_id ON public.intervencoes_cardiometabolicas USING btree (paciente_id)"
+        }
+      ]
+    },
+    "modulos_clinicos": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('modulos_clinicos_id_seq'::regclass)"
+        },
+        {
+          "column_name": "nome",
+          "formatted_type": "character varying(150)",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "slug",
+          "formatted_type": "character varying(100)",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "descricao",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "ativo",
+          "formatted_type": "boolean",
+          "nullable": true,
+          "default_expression": "true"
+        },
+        {
+          "column_name": "criado_em",
+          "formatted_type": "timestamp without time zone",
+          "nullable": true,
+          "default_expression": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "modulos_clinicos_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "constraint_name": "modulos_clinicos_slug_key",
+          "definition": "UNIQUE (slug)"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": []
+    },
+    "ocupacoes_profissionais": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('ocupacoes_profissionais_id_seq'::regclass)"
+        },
+        {
+          "column_name": "nome",
+          "formatted_type": "character varying(100)",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "ativo",
+          "formatted_type": "boolean",
+          "nullable": true,
+          "default_expression": "true"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "ocupacoes_profissionais_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": []
+    },
+    "paciente_condicoes_clinicas": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('paciente_condicoes_clinicas_id_seq'::regclass)"
+        },
+        {
+          "column_name": "paciente_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "modulo_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "condicao",
+          "formatted_type": "character varying(100)",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "ativo",
+          "formatted_type": "boolean",
+          "nullable": true,
+          "default_expression": "true"
+        },
+        {
+          "column_name": "criado_em",
+          "formatted_type": "timestamp without time zone",
+          "nullable": true,
+          "default_expression": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "paciente_condicoes_clinicas_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "paciente_condicoes_clinicas_modulo_id_fkey",
+          "definition": "FOREIGN KEY (modulo_id) REFERENCES modulos_clinicos(id)"
+        },
+        {
+          "constraint_name": "paciente_condicoes_clinicas_paciente_id_fkey",
+          "definition": "FOREIGN KEY (paciente_id) REFERENCES pacientes(id)"
+        }
+      ],
+      "indexes": []
+    },
+    "paciente_modulos": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('paciente_modulos_id_seq'::regclass)"
+        },
+        {
+          "column_name": "paciente_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "modulo_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "ativo",
+          "formatted_type": "boolean",
+          "nullable": true,
+          "default_expression": "true"
+        },
+        {
+          "column_name": "data_inicio",
+          "formatted_type": "date",
+          "nullable": true,
+          "default_expression": "CURRENT_DATE"
+        },
+        {
+          "column_name": "data_fim",
+          "formatted_type": "date",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "observacao",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "criado_em",
+          "formatted_type": "timestamp without time zone",
+          "nullable": true,
+          "default_expression": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "paciente_modulos_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "paciente_modulos_modulo_id_fkey",
+          "definition": "FOREIGN KEY (modulo_id) REFERENCES modulos_clinicos(id)"
+        },
+        {
+          "constraint_name": "paciente_modulos_paciente_id_fkey",
+          "definition": "FOREIGN KEY (paciente_id) REFERENCES pacientes(id)"
+        }
+      ],
+      "indexes": []
+    },
+    "pacientes": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('pacientes_id_seq'::regclass)"
+        },
+        {
+          "column_name": "nome",
+          "formatted_type": "character varying",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "data_nascimento",
+          "formatted_type": "date",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "genero",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "responsavel_nome",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "responsavel_email",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "clinica_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "ativo",
+          "formatted_type": "boolean",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "created_at",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "default_expression": "now()"
+        },
+        {
+          "column_name": "profissional_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "altura",
+          "formatted_type": "numeric(4,2)",
+          "nullable": true,
+          "default_expression": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "pacientes_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "pacientes_clinica_id_fkey",
+          "definition": "FOREIGN KEY (clinica_id) REFERENCES clinicas(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "index_name": "ix_pacientes_id",
+          "definition": "CREATE INDEX ix_pacientes_id ON public.pacientes USING btree (id)"
+        }
+      ]
+    },
+    "profissionais": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('profissionais_id_seq'::regclass)"
+        },
+        {
+          "column_name": "nome",
+          "formatted_type": "character varying",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "email",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "especialidade",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "clinica_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "ativo",
+          "formatted_type": "boolean",
+          "nullable": true,
+          "default_expression": "true"
+        },
+        {
+          "column_name": "created_at",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "default_expression": "now()"
+        },
+        {
+          "column_name": "ocupacao_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "profissionais_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "fk_profissionais_ocupacao_id",
+          "definition": "FOREIGN KEY (ocupacao_id) REFERENCES ocupacoes_profissionais(id)"
+        },
+        {
+          "constraint_name": "profissionais_clinica_id_fkey",
+          "definition": "FOREIGN KEY (clinica_id) REFERENCES clinicas(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "index_name": "ix_profissionais_clinica_id",
+          "definition": "CREATE INDEX ix_profissionais_clinica_id ON public.profissionais USING btree (clinica_id)"
+        },
+        {
+          "index_name": "ix_profissionais_id",
+          "definition": "CREATE INDEX ix_profissionais_id ON public.profissionais USING btree (id)"
+        }
+      ]
+    },
+    "profissional_modulos": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('profissional_modulos_id_seq'::regclass)"
+        },
+        {
+          "column_name": "profissional_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "modulo_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "criado_em",
+          "formatted_type": "timestamp without time zone",
+          "nullable": true,
+          "default_expression": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "profissional_modulos_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "constraint_name": "profissional_modulos_profissional_id_modulo_id_key",
+          "definition": "UNIQUE (profissional_id, modulo_id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "profissional_modulos_modulo_id_fkey",
+          "definition": "FOREIGN KEY (modulo_id) REFERENCES modulos_clinicos(id) ON DELETE CASCADE"
+        },
+        {
+          "constraint_name": "profissional_modulos_profissional_id_fkey",
+          "definition": "FOREIGN KEY (profissional_id) REFERENCES profissionais(id) ON DELETE CASCADE"
+        }
+      ],
+      "indexes": []
+    },
+    "pts": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('pts_id_seq'::regclass)"
+        },
+        {
+          "column_name": "paciente_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "modulo_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "data_inicio",
+          "formatted_type": "date",
+          "nullable": false,
+          "default_expression": "CURRENT_DATE"
+        },
+        {
+          "column_name": "data_fim",
+          "formatted_type": "date",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "status",
+          "formatted_type": "character varying(30)",
+          "nullable": false,
+          "default_expression": "'ATIVO'::character varying"
+        },
+        {
+          "column_name": "objetivo_geral",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "observacoes",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "criado_por_usuario_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "created_at",
+          "formatted_type": "timestamp without time zone",
+          "nullable": true,
+          "default_expression": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "formatted_type": "timestamp without time zone",
+          "nullable": true,
+          "default_expression": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "pts_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "pts_criado_por_usuario_id_fkey",
+          "definition": "FOREIGN KEY (criado_por_usuario_id) REFERENCES usuarios(id)"
+        },
+        {
+          "constraint_name": "pts_modulo_id_fkey",
+          "definition": "FOREIGN KEY (modulo_id) REFERENCES modulos_clinicos(id)"
+        },
+        {
+          "constraint_name": "pts_paciente_id_fkey",
+          "definition": "FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE"
+        }
+      ],
+      "indexes": []
+    },
+    "pts_objetivos": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('pts_objetivos_id_seq'::regclass)"
+        },
+        {
+          "column_name": "pts_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "descricao",
+          "formatted_type": "text",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "prioridade",
+          "formatted_type": "character varying(30)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "status",
+          "formatted_type": "character varying(30)",
+          "nullable": false,
+          "default_expression": "'ABERTO'::character varying"
+        },
+        {
+          "column_name": "created_at",
+          "formatted_type": "timestamp without time zone",
+          "nullable": true,
+          "default_expression": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "formatted_type": "timestamp without time zone",
+          "nullable": true,
+          "default_expression": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "pts_objetivos_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "pts_objetivos_pts_id_fkey",
+          "definition": "FOREIGN KEY (pts_id) REFERENCES pts(id) ON DELETE CASCADE"
+        }
+      ],
+      "indexes": []
+    },
+    "registros_diarios": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('registros_diarios_id_seq'::regclass)"
+        },
+        {
+          "column_name": "paciente_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "data",
+          "formatted_type": "date",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "sono_qualidade",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "evacuacao",
+          "formatted_type": "boolean",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "consistencia_fezes",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "irritabilidade",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "crise_sensorial",
+          "formatted_type": "boolean",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "observacao",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "created_at",
+          "formatted_type": "timestamp with time zone",
+          "nullable": false,
+          "default_expression": "now()"
+        },
+        {
+          "column_name": "origem",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "responsavel_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "criado_por_tipo",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "criado_por_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "alimentacao",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "registros_diarios_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "constraint_name": "uq_registro_paciente_data",
+          "definition": "UNIQUE (paciente_id, data)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "fk_registros_diarios_responsavel_id",
+          "definition": "FOREIGN KEY (responsavel_id) REFERENCES responsaveis(id)"
+        },
+        {
+          "constraint_name": "registros_diarios_paciente_id_fkey",
+          "definition": "FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE"
+        }
+      ],
+      "indexes": [
+        {
+          "index_name": "ix_registros_diarios_data",
+          "definition": "CREATE INDEX ix_registros_diarios_data ON public.registros_diarios USING btree (data)"
+        },
+        {
+          "index_name": "ix_registros_diarios_id",
+          "definition": "CREATE INDEX ix_registros_diarios_id ON public.registros_diarios USING btree (id)"
+        },
+        {
+          "index_name": "ix_registros_diarios_origem",
+          "definition": "CREATE INDEX ix_registros_diarios_origem ON public.registros_diarios USING btree (origem)"
+        },
+        {
+          "index_name": "ix_registros_diarios_paciente_id",
+          "definition": "CREATE INDEX ix_registros_diarios_paciente_id ON public.registros_diarios USING btree (paciente_id)"
+        },
+        {
+          "index_name": "ix_registros_diarios_responsavel_id",
+          "definition": "CREATE INDEX ix_registros_diarios_responsavel_id ON public.registros_diarios USING btree (responsavel_id)"
+        }
+      ]
+    },
+    "registros_longitudinais": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('registros_longitudinais_id_seq'::regclass)"
+        },
+        {
+          "column_name": "paciente_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "modulo_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "formulario_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "origem",
+          "formatted_type": "character varying(50)",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "data_registro",
+          "formatted_type": "date",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "criado_por_usuario_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "criado_por_responsavel_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "criado_em",
+          "formatted_type": "timestamp without time zone",
+          "nullable": true,
+          "default_expression": "now()"
+        },
+        {
+          "column_name": "score_clinico",
+          "formatted_type": "numeric",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "risco",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "protocolo",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "leitura_clinica",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "glicemia_jejum",
+          "formatted_type": "numeric",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "glicemia_pos_prandial",
+          "formatted_type": "numeric",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "pressao_sistolica",
+          "formatted_type": "numeric",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "pressao_diastolica",
+          "formatted_type": "numeric",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "peso",
+          "formatted_type": "numeric",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "sono",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "humor",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "modulo",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "observacoes",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "registros_longitudinais_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "registros_longitudinais_criado_por_responsavel_id_fkey",
+          "definition": "FOREIGN KEY (criado_por_responsavel_id) REFERENCES responsaveis(id)"
+        },
+        {
+          "constraint_name": "registros_longitudinais_criado_por_usuario_id_fkey",
+          "definition": "FOREIGN KEY (criado_por_usuario_id) REFERENCES usuarios(id)"
+        },
+        {
+          "constraint_name": "registros_longitudinais_formulario_id_fkey",
+          "definition": "FOREIGN KEY (formulario_id) REFERENCES formularios_modulo(id)"
+        },
+        {
+          "constraint_name": "registros_longitudinais_modulo_id_fkey",
+          "definition": "FOREIGN KEY (modulo_id) REFERENCES modulos_clinicos(id)"
+        },
+        {
+          "constraint_name": "registros_longitudinais_paciente_id_fkey",
+          "definition": "FOREIGN KEY (paciente_id) REFERENCES pacientes(id)"
+        }
+      ],
+      "indexes": []
+    },
+    "responsaveis": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('responsaveis_id_seq'::regclass)"
+        },
+        {
+          "column_name": "nome",
+          "formatted_type": "character varying",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "email",
+          "formatted_type": "character varying",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "senha_hash",
+          "formatted_type": "character varying",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "telefone",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "ativo",
+          "formatted_type": "boolean",
+          "nullable": false,
+          "default_expression": "true"
+        },
+        {
+          "column_name": "created_at",
+          "formatted_type": "timestamp with time zone",
+          "nullable": false,
+          "default_expression": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "clinica_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "responsaveis_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "fk_responsaveis_clinica_id",
+          "definition": "FOREIGN KEY (clinica_id) REFERENCES clinicas(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "index_name": "ix_responsaveis_clinica_id",
+          "definition": "CREATE INDEX ix_responsaveis_clinica_id ON public.responsaveis USING btree (clinica_id)"
+        },
+        {
+          "index_name": "ix_responsaveis_email",
+          "definition": "CREATE UNIQUE INDEX ix_responsaveis_email ON public.responsaveis USING btree (email)"
+        },
+        {
+          "index_name": "ix_responsaveis_id",
+          "definition": "CREATE INDEX ix_responsaveis_id ON public.responsaveis USING btree (id)"
+        }
+      ]
+    },
+    "responsavel_paciente": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('responsavel_paciente_id_seq'::regclass)"
+        },
+        {
+          "column_name": "responsavel_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "paciente_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "parentesco",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "principal",
+          "formatted_type": "boolean",
+          "nullable": false,
+          "default_expression": "false"
+        },
+        {
+          "column_name": "ativo",
+          "formatted_type": "boolean",
+          "nullable": false,
+          "default_expression": "true"
+        },
+        {
+          "column_name": "created_at",
+          "formatted_type": "timestamp with time zone",
+          "nullable": false,
+          "default_expression": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "responsavel_paciente_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "constraint_name": "uq_responsavel_paciente",
+          "definition": "UNIQUE (responsavel_id, paciente_id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "responsavel_paciente_paciente_id_fkey",
+          "definition": "FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE"
+        },
+        {
+          "constraint_name": "responsavel_paciente_responsavel_id_fkey",
+          "definition": "FOREIGN KEY (responsavel_id) REFERENCES responsaveis(id) ON DELETE CASCADE"
+        }
+      ],
+      "indexes": [
+        {
+          "index_name": "ix_responsavel_paciente_id",
+          "definition": "CREATE INDEX ix_responsavel_paciente_id ON public.responsavel_paciente USING btree (id)"
+        },
+        {
+          "index_name": "ix_responsavel_paciente_paciente_id",
+          "definition": "CREATE INDEX ix_responsavel_paciente_paciente_id ON public.responsavel_paciente USING btree (paciente_id)"
+        },
+        {
+          "index_name": "ix_responsavel_paciente_responsavel_id",
+          "definition": "CREATE INDEX ix_responsavel_paciente_responsavel_id ON public.responsavel_paciente USING btree (responsavel_id)"
+        }
+      ]
+    },
+    "respostas_registro": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('respostas_registro_id_seq'::regclass)"
+        },
+        {
+          "column_name": "registro_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "campo_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "valor_texto",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "valor_numero",
+          "formatted_type": "numeric(12,2)",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "valor_booleano",
+          "formatted_type": "boolean",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "valor_data",
+          "formatted_type": "date",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "valor_hora",
+          "formatted_type": "time without time zone",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "valor_json",
+          "formatted_type": "json",
+          "nullable": true,
+          "default_expression": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "respostas_registro_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "respostas_registro_campo_id_fkey",
+          "definition": "FOREIGN KEY (campo_id) REFERENCES campos_formulario(id)"
+        },
+        {
+          "constraint_name": "respostas_registro_registro_id_fkey",
+          "definition": "FOREIGN KEY (registro_id) REFERENCES registros_longitudinais(id)"
+        }
+      ],
+      "indexes": []
+    },
+    "sessoes_assistenciais": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('sessoes_assistenciais_id_seq'::regclass)"
+        },
+        {
+          "column_name": "agenda_cuidado_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "paciente_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "profissional_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "numero_sessao",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "data_agendada",
+          "formatted_type": "date",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "hora_inicio",
+          "formatted_type": "time without time zone",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "hora_fim",
+          "formatted_type": "time without time zone",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "duracao_minutos",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "status",
+          "formatted_type": "character varying(30)",
+          "nullable": false,
+          "default_expression": "'AGENDADA'::character varying"
+        },
+        {
+          "column_name": "data_realizacao",
+          "formatted_type": "date",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "hora_inicio_real",
+          "formatted_type": "time without time zone",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "hora_fim_real",
+          "formatted_type": "time without time zone",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "observacoes",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "motivo_falta",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "motivo_cancelamento",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "motivo_reagendamento",
+          "formatted_type": "text",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "sessao_origem_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "registro_longitudinal_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "created_at",
+          "formatted_type": "timestamp without time zone",
+          "nullable": false,
+          "default_expression": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "formatted_type": "timestamp without time zone",
+          "nullable": false,
+          "default_expression": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "sessoes_assistenciais_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "constraint_name": "uq_sessao_agenda_numero",
+          "definition": "UNIQUE (agenda_cuidado_id, numero_sessao)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "sessoes_assistenciais_agenda_cuidado_id_fkey",
+          "definition": "FOREIGN KEY (agenda_cuidado_id) REFERENCES agenda_cuidados(id)"
+        },
+        {
+          "constraint_name": "sessoes_assistenciais_paciente_id_fkey",
+          "definition": "FOREIGN KEY (paciente_id) REFERENCES pacientes(id)"
+        },
+        {
+          "constraint_name": "sessoes_assistenciais_profissional_id_fkey",
+          "definition": "FOREIGN KEY (profissional_id) REFERENCES profissionais(id)"
+        },
+        {
+          "constraint_name": "sessoes_assistenciais_registro_longitudinal_id_fkey",
+          "definition": "FOREIGN KEY (registro_longitudinal_id) REFERENCES registros_longitudinais(id)"
+        },
+        {
+          "constraint_name": "sessoes_assistenciais_sessao_origem_id_fkey",
+          "definition": "FOREIGN KEY (sessao_origem_id) REFERENCES sessoes_assistenciais(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "index_name": "ix_sessoes_assistenciais_agenda_cuidado_id",
+          "definition": "CREATE INDEX ix_sessoes_assistenciais_agenda_cuidado_id ON public.sessoes_assistenciais USING btree (agenda_cuidado_id)"
+        },
+        {
+          "index_name": "ix_sessoes_assistenciais_data_agendada",
+          "definition": "CREATE INDEX ix_sessoes_assistenciais_data_agendada ON public.sessoes_assistenciais USING btree (data_agendada)"
+        },
+        {
+          "index_name": "ix_sessoes_assistenciais_paciente_id",
+          "definition": "CREATE INDEX ix_sessoes_assistenciais_paciente_id ON public.sessoes_assistenciais USING btree (paciente_id)"
+        },
+        {
+          "index_name": "ix_sessoes_assistenciais_profissional_id",
+          "definition": "CREATE INDEX ix_sessoes_assistenciais_profissional_id ON public.sessoes_assistenciais USING btree (profissional_id)"
+        },
+        {
+          "index_name": "ix_sessoes_assistenciais_status",
+          "definition": "CREATE INDEX ix_sessoes_assistenciais_status ON public.sessoes_assistenciais USING btree (status)"
+        }
+      ]
+    },
+    "usuarios": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('usuarios_id_seq'::regclass)"
+        },
+        {
+          "column_name": "nome",
+          "formatted_type": "character varying",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "email",
+          "formatted_type": "character varying",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "senha_hash",
+          "formatted_type": "character varying",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "perfil",
+          "formatted_type": "character varying",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "clinica_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "ativo",
+          "formatted_type": "boolean",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "profissional_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "usuarios_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "constraint_name": "usuarios_email_key",
+          "definition": "UNIQUE (email)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "fk_usuarios_profissional",
+          "definition": "FOREIGN KEY (profissional_id) REFERENCES profissionais(id) ON DELETE SET NULL"
+        },
+        {
+          "constraint_name": "usuarios_clinica_id_fkey",
+          "definition": "FOREIGN KEY (clinica_id) REFERENCES clinicas(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "index_name": "ix_usuarios_id",
+          "definition": "CREATE INDEX ix_usuarios_id ON public.usuarios USING btree (id)"
+        }
+      ]
+    },
+    "vinculos": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('vinculos_id_seq'::regclass)"
+        },
+        {
+          "column_name": "paciente_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "profissional_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "created_at",
+          "formatted_type": "timestamp with time zone",
+          "nullable": true,
+          "default_expression": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "vinculos_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "vinculos_paciente_id_fkey",
+          "definition": "FOREIGN KEY (paciente_id) REFERENCES pacientes(id)"
+        },
+        {
+          "constraint_name": "vinculos_profissional_id_fkey",
+          "definition": "FOREIGN KEY (profissional_id) REFERENCES usuarios(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "index_name": "ix_vinculos_id",
+          "definition": "CREATE INDEX ix_vinculos_id ON public.vinculos USING btree (id)"
+        }
+      ]
+    },
+    "whatsapp_conversas": {
+      "columns": [
+        {
+          "column_name": "id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": "nextval('whatsapp_conversas_id_seq'::regclass)"
+        },
+        {
+          "column_name": "responsavel_id",
+          "formatted_type": "integer",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "paciente_id",
+          "formatted_type": "integer",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "telefone",
+          "formatted_type": "character varying(30)",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "etapa_atual",
+          "formatted_type": "character varying(50)",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "data_referencia",
+          "formatted_type": "date",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "respostas_json",
+          "formatted_type": "json",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "created_at",
+          "formatted_type": "timestamp without time zone",
+          "nullable": false,
+          "default_expression": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "formatted_type": "timestamp without time zone",
+          "nullable": false,
+          "default_expression": "now()"
+        },
+        {
+          "column_name": "care_line",
+          "formatted_type": "character varying(32)",
+          "nullable": true,
+          "default_expression": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "whatsapp_conversas_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "constraint_name": "whatsapp_conversas_paciente_id_fkey",
+          "definition": "FOREIGN KEY (paciente_id) REFERENCES pacientes(id)"
+        },
+        {
+          "constraint_name": "whatsapp_conversas_responsavel_id_fkey",
+          "definition": "FOREIGN KEY (responsavel_id) REFERENCES responsaveis(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "index_name": "ix_whatsapp_conversas_paciente_id",
+          "definition": "CREATE INDEX ix_whatsapp_conversas_paciente_id ON public.whatsapp_conversas USING btree (paciente_id)"
+        },
+        {
+          "index_name": "ix_whatsapp_conversas_responsavel_id",
+          "definition": "CREATE INDEX ix_whatsapp_conversas_responsavel_id ON public.whatsapp_conversas USING btree (responsavel_id)"
+        },
+        {
+          "index_name": "ix_whatsapp_conversas_telefone",
+          "definition": "CREATE INDEX ix_whatsapp_conversas_telefone ON public.whatsapp_conversas USING btree (telefone)"
+        }
+      ]
+    },
+    "whatsapp_mensagens": {
+      "columns": [
+        {
+          "column_name": "message_id",
+          "formatted_type": "character varying(512)",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "phone_number_id",
+          "formatted_type": "character varying(128)",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "fingerprint",
+          "formatted_type": "character varying(64)",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "resposta",
+          "formatted_type": "text",
+          "nullable": false,
+          "default_expression": null
+        },
+        {
+          "column_name": "enviado_em",
+          "formatted_type": "timestamp without time zone",
+          "nullable": true,
+          "default_expression": null
+        },
+        {
+          "column_name": "criado_em",
+          "formatted_type": "timestamp without time zone",
+          "nullable": false,
+          "default_expression": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "whatsapp_mensagens_pkey",
+          "definition": "PRIMARY KEY (message_id)"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": []
+    }
+  },
+  "sequences": [
+    {
+      "sequence_name": "agenda_cuidados_id_seq",
+      "owner_table": "agenda_cuidados",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "atividade_ocupacao_id_seq",
+      "owner_table": "atividade_ocupacao",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "atividades_terapeuticas_id_seq",
+      "owner_table": "atividades_terapeuticas",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "avaliacoes_clinicas_id_seq",
+      "owner_table": "avaliacoes_clinicas",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "avaliacoes_modulo_id_seq",
+      "owner_table": "avaliacoes_modulo",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "campos_formulario_id_seq",
+      "owner_table": "campos_formulario",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "clinicas_id_seq",
+      "owner_table": "clinicas",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "diagnosticos_id_seq",
+      "owner_table": "diagnosticos",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "formularios_modulo_id_seq",
+      "owner_table": "formularios_modulo",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "intervencoes_cardiometabolicas_id_seq",
+      "owner_table": "intervencoes_cardiometabolicas",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "intervencoes_id_seq",
+      "owner_table": "intervencoes",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "modulos_clinicos_id_seq",
+      "owner_table": "modulos_clinicos",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "ocupacoes_profissionais_id_seq",
+      "owner_table": "ocupacoes_profissionais",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "paciente_condicoes_clinicas_id_seq",
+      "owner_table": "paciente_condicoes_clinicas",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "paciente_modulos_id_seq",
+      "owner_table": "paciente_modulos",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "pacientes_id_seq",
+      "owner_table": "pacientes",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "profissionais_id_seq",
+      "owner_table": "profissionais",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "profissional_modulos_id_seq",
+      "owner_table": "profissional_modulos",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "pts_id_seq",
+      "owner_table": "pts",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "pts_objetivos_id_seq",
+      "owner_table": "pts_objetivos",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "registros_diarios_id_seq",
+      "owner_table": "registros_diarios",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "registros_longitudinais_id_seq",
+      "owner_table": "registros_longitudinais",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "responsaveis_id_seq",
+      "owner_table": "responsaveis",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "responsavel_paciente_id_seq",
+      "owner_table": "responsavel_paciente",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "respostas_registro_id_seq",
+      "owner_table": "respostas_registro",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "sessoes_assistenciais_id_seq",
+      "owner_table": "sessoes_assistenciais",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "usuarios_id_seq",
+      "owner_table": "usuarios",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "vinculos_id_seq",
+      "owner_table": "vinculos",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    },
+    {
+      "sequence_name": "whatsapp_conversas_id_seq",
+      "owner_table": "whatsapp_conversas",
+      "owner_column": "id",
+      "data_type": "integer",
+      "start_value": 1,
+      "increment_by": 1,
+      "min_value": 1,
+      "max_value": 2147483647,
+      "cache_size": 1,
+      "cycle": false
+    }
+  ],
+  "views": [
+    {
+      "name": "vw_dimensionamento_ocupacao",
+      "definition": " SELECT p.modulo_id,\n    ac.ocupacao_id,\n    op.nome AS ocupacao_nome,\n    count(*) AS total_planejamentos,\n    sum(ac.frequencia_semanal * ac.duracao_minutos) AS minutos_semanais,\n    round(sum(ac.frequencia_semanal * ac.duracao_minutos)::numeric / 60.0, 2) AS horas_semanais,\n    round(sum(ac.frequencia_semanal * ac.duracao_minutos)::numeric / 60.0 * 4.33, 2) AS horas_mensais,\n    round(sum(ac.frequencia_semanal * ac.duracao_minutos)::numeric / 60.0 * 52::numeric, 2) AS horas_anuais\n   FROM agenda_cuidados ac\n     JOIN pts p ON p.id = ac.pts_id\n     JOIN ocupacoes_profissionais op ON op.id = ac.ocupacao_id\n  WHERE ac.status::text = 'PLANEJADO'::text\n  GROUP BY p.modulo_id, ac.ocupacao_id, op.nome;"
+    },
+    {
+      "name": "vw_demanda_capacidade",
+      "definition": " SELECT modulo_id,\n    ocupacao_id,\n    ocupacao_nome,\n    horas_anuais AS demanda_horas_ano,\n    0::numeric AS capacidade_horas_ano,\n    0::numeric - horas_anuais AS saldo_horas,\n    0::numeric AS percentual_utilizacao\n   FROM vw_dimensionamento_ocupacao d;"
+    }
+  ],
+  "provenance": {
+    "physical_metadata": "TC-02 HML structural inventory supplied by operator; no clinical rows. Collection ran after reconnection with transaction_read_only=off.",
+    "whatsapp_mensagens": "Columns from historical revision 8c01a0d1a004; relation existence confirmed in inventory, detailed columns not collected. Revalidate before HML adoption.",
+    "excluded_views": [
+      "vw_dimensionamento_equipe",
+      "vw_timeline_paciente"
+    ],
+    "excluded_model_table": [
+      "capacidade_instalada"
+    ]
+  }
+}

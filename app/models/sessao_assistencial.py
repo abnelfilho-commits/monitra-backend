@@ -37,7 +37,6 @@ class SessaoAssistencial(Base):
     id = Column(
         Integer,
         primary_key=True,
-        index=True,
     )
 
     agenda_cuidado_id = Column(

@@ -12,7 +12,7 @@ class Usuario(Base):
     perfil = Column(String, default="PROFISSIONAL")
 
     clinica_id = Column(Integer, ForeignKey("clinicas.id"))
-    profissional_id = Column(Integer, ForeignKey("profissionais.id"), nullable=True)
+    profissional_id = Column(Integer, ForeignKey("profissionais.id", ondelete="SET NULL"), nullable=True)
 
     clinica = relationship("Clinica")
     profissional = relationship("Profissional")

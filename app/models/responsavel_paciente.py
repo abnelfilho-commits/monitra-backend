@@ -1,3 +1,4 @@
+from sqlalchemy import text
 from sqlalchemy import Column, Integer, Boolean, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -29,8 +30,8 @@ class ResponsavelPaciente(Base):
     )
 
     parentesco = Column(String, nullable=True)
-    principal = Column(Boolean, default=False, nullable=False)
-    ativo = Column(Boolean, default=True, nullable=False)
+    principal = Column(Boolean, default=False, nullable=False, server_default=text('false'))
+    ativo = Column(Boolean, default=True, nullable=False, server_default=text('true'))
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

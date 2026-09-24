@@ -1,3 +1,4 @@
+from sqlalchemy import text
 from sqlalchemy import (
     Column,
     Integer,
@@ -25,7 +26,6 @@ class AgendaCuidado(Base):
     id = Column(
         Integer,
         primary_key=True,
-        index=True,
     )
 
     pts_id = Column(
@@ -88,6 +88,7 @@ class AgendaCuidado(Base):
         String(30),
         nullable=False,
         default="PLANEJADO",
+        server_default=text("'PLANEJADO'"),
     )
 
     observacoes = Column(
@@ -100,6 +101,7 @@ class AgendaCuidado(Base):
     status_execucao = Column(
         String(30),
         default="PLANEJADO",
+        server_default=text("'PLANEJADO'"),
     )
 
     data_realizacao = Column(

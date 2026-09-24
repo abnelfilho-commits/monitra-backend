@@ -93,7 +93,7 @@ class PersistenceTests(unittest.TestCase):
             if url:
                 connection.execute(text('ALTER TABLE respostas_registro ALTER COLUMN valor_numero TYPE numeric'))
             for name, kind in {'score_clinico':'NUMERIC', 'risco':'VARCHAR', 'protocolo':'VARCHAR',
-                'leitura_clinica':'TEXT', 'observacoes':'TEXT'}.items():
+                'leitura_clinica':'TEXT'}.items():
                 connection.execute(text('ALTER TABLE registros_longitudinais ADD COLUMN '+name+' '+kind))
         self.db = Session(self.engine)
         for line in (NEURO, CARDIO):

@@ -27,10 +27,14 @@ class Paciente(Base):
     responsavel_email = Column(String, nullable=True)
 
     clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=True)
-    profissional_id = Column(Integer, ForeignKey("profissionais.id"), nullable=True)
+    profissional_id = Column(Integer, nullable=True)
 
     clinica = relationship("Clinica", back_populates="pacientes")
-    profissional = relationship("Profissional", back_populates="pacientes")
+    # Legado transitório: join ORM preservado, sem FK física/canônica.
+    profissional = relationship(
+        "Profissional", back_populates="pacientes",
+        primaryjoin="foreign(Paciente.profissional_id) == Profissional.id",
+    )
 
     diagnosticos = relationship(
         "Diagnostico",

@@ -18,7 +18,6 @@ class WhatsAppConversa(Base):
     id = Column(
         Integer,
         primary_key=True,
-        index=True,
     )
 
     responsavel_id = Column(

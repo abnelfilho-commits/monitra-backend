@@ -31,7 +31,7 @@ with engine.begin() as conn:
     conn.execute(text('ALTER TABLE intervencoes DROP COLUMN modulo_id'))
     create_cardio_intervention_table(conn, pre_line=True)
     for name, kind in {'score_clinico':'NUMERIC', 'risco':'VARCHAR', 'protocolo':'VARCHAR',
-                'leitura_clinica':'TEXT', 'observacoes':'TEXT'}.items():
+                'leitura_clinica':'TEXT'}.items():
         conn.execute(text('ALTER TABLE registros_longitudinais ADD COLUMN '+name+' '+kind))
     conn.execute(text("INSERT INTO modulos_clinicos(id,nome,slug,ativo) VALUES (1,'Neurodesenvolvimento','neurodesenvolvimento',true),(2,'Cardiometabólico','cardiometabolico',true)"))
     for revision in ('5a01c7e2d903','8c01a0d1a001','8c01a0d1a002','8c01a0d1a003'):

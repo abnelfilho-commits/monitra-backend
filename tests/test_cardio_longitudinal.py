@@ -121,7 +121,7 @@ class JourneyTests(unittest.TestCase):
         with self.engine.begin() as c:
             create_cardio_intervention_table(c)
             for name, kind in {'score_clinico':'NUMERIC', 'risco':'VARCHAR', 'protocolo':'VARCHAR',
-                'leitura_clinica':'TEXT', 'observacoes':'TEXT'}.items():
+                'leitura_clinica':'TEXT'}.items():
                 c.execute(text('ALTER TABLE registros_longitudinais ADD COLUMN '+name+' '+kind))
         self.db=Session(self.engine)
         self.db.add_all([Clinica(id=i,nome='Synthetic') for i in (1,2)])

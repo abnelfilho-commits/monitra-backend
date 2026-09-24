@@ -56,7 +56,7 @@ class WhatsAppPostgresTests(unittest.TestCase):
         self.db.commit()
         with self.engine.begin() as conn:
             for name, kind in {'score_clinico':'NUMERIC', 'risco':'VARCHAR', 'protocolo':'VARCHAR',
-                               'leitura_clinica':'TEXT', 'observacoes':'TEXT'}.items():
+                               'leitura_clinica':'TEXT'}.items():
                 conn.execute(text('ALTER TABLE registros_longitudinais ADD COLUMN '+name+' '+kind))
         self.env=patch.dict(os.environ,http.ENV);self.env.start()
         self.app=FastAPI();self.app.include_router(whatsapp.router)

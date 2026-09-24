@@ -1,3 +1,4 @@
+from sqlalchemy import text
 from sqlalchemy import Column, Integer, String, Text, Boolean, Date, DateTime, ForeignKey, Numeric, Time, JSON
 from sqlalchemy.sql import func
 from app.database import Base
@@ -6,22 +7,22 @@ from app.database import Base
 class ModuloClinico(Base):
     __tablename__ = "modulos_clinicos"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     nome = Column(String(150), nullable=False)
     slug = Column(String(100), unique=True, nullable=False)
     descricao = Column(Text, nullable=True)
-    ativo = Column(Boolean, default=True)
+    ativo = Column(Boolean, default=True, server_default=text('true'))
     criado_em = Column(DateTime, server_default=func.now())
 
 
 class PacienteModulo(Base):
     __tablename__ = "paciente_modulos"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     paciente_id = Column(Integer, ForeignKey("pacientes.id"), nullable=False)
     modulo_id = Column(Integer, ForeignKey("modulos_clinicos.id"), nullable=False)
-    ativo = Column(Boolean, default=True)
-    data_inicio = Column(Date, nullable=True)
+    ativo = Column(Boolean, default=True, server_default=text('true'))
+    data_inicio = Column(Date, nullable=True, server_default=text('CURRENT_DATE'))
     data_fim = Column(Date, nullable=True)
     observacao = Column(Text, nullable=True)
     criado_em = Column(DateTime, server_default=func.now())
@@ -30,44 +31,44 @@ class PacienteModulo(Base):
 class PacienteCondicaoClinica(Base):
     __tablename__ = "paciente_condicoes_clinicas"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     paciente_id = Column(Integer, ForeignKey("pacientes.id"), nullable=False)
     modulo_id = Column(Integer, ForeignKey("modulos_clinicos.id"), nullable=True)
     condicao = Column(String(100), nullable=False)
-    ativo = Column(Boolean, default=True)
+    ativo = Column(Boolean, default=True, server_default=text('true'))
     criado_em = Column(DateTime, server_default=func.now())
 
 
 class FormularioModulo(Base):
     __tablename__ = "formularios_modulo"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     modulo_id = Column(Integer, ForeignKey("modulos_clinicos.id"), nullable=False)
     nome = Column(String(150), nullable=False)
     tipo = Column(String(50), nullable=False)
-    ativo = Column(Boolean, default=True)
+    ativo = Column(Boolean, default=True, server_default=text('true'))
     criado_em = Column(DateTime, server_default=func.now())
-    codigo = Column(String(100), nullable=True)
+    codigo = Column(String(50), nullable=True)
 
 class CampoFormulario(Base):
     __tablename__ = "campos_formulario"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     formulario_id = Column(Integer, ForeignKey("formularios_modulo.id"), nullable=False)
     nome_campo = Column(String(100), nullable=False)
     label = Column(String(200), nullable=False)
     tipo_campo = Column(String(50), nullable=False)
-    obrigatorio = Column(Boolean, default=False)
-    ordem = Column(Integer, default=0)
+    obrigatorio = Column(Boolean, default=False, server_default=text('false'))
+    ordem = Column(Integer, default=0, server_default=text('0'))
     opcoes = Column(JSON, nullable=True)
     regra_exibicao = Column(JSON, nullable=True)
-    ativo = Column(Boolean, default=True)
+    ativo = Column(Boolean, default=True, server_default=text('true'))
 
 
 class RegistroLongitudinal(Base):
     __tablename__ = "registros_longitudinais"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     paciente_id = Column(Integer, ForeignKey("pacientes.id"), nullable=False)
     modulo_id = Column(Integer, ForeignKey("modulos_clinicos.id"), nullable=False)
     formulario_id = Column(Integer, ForeignKey("formularios_modulo.id"), nullable=False)
@@ -76,12 +77,13 @@ class RegistroLongitudinal(Base):
     criado_por_usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
     criado_por_responsavel_id = Column(Integer, ForeignKey("responsaveis.id"), nullable=True)
     criado_em = Column(DateTime, server_default=func.now())
+    observacoes = Column(Text, nullable=True)
 
 
 class RespostaRegistro(Base):
     __tablename__ = "respostas_registro"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     registro_id = Column(Integer, ForeignKey("registros_longitudinais.id"), nullable=False)
     campo_id = Column(Integer, ForeignKey("campos_formulario.id"), nullable=False)
     valor_texto = Column(Text, nullable=True)
@@ -95,7 +97,7 @@ class RespostaRegistro(Base):
 class AvaliacaoModulo(Base):
     __tablename__ = "avaliacoes_modulo"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     paciente_id = Column(Integer, ForeignKey("pacientes.id"), nullable=False)
     modulo_id = Column(Integer, ForeignKey("modulos_clinicos.id"), nullable=False)
     data_avaliacao = Column(Date, nullable=False)

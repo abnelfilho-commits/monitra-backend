@@ -4,6 +4,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    Index,
     String,
     Text,
     func,
@@ -15,6 +16,7 @@ from app.database import Base
 
 class Diagnostico(Base):
     __tablename__ = "diagnosticos"
+    __table_args__ = (Index("ix_diagnosticos_paciente_modulo", "paciente_id", "modulo_id"),)
 
     id = Column(
         Integer,
