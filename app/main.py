@@ -42,7 +42,10 @@ from app.routers import whatsapp
 from app.routers.identidades import router as identidades_router
 from app.routers.vinculos_institucionais import router as vinculos_institucionais_router
 
+from app.routers.autorizacoes_institucionais import router as autorizacoes_institucionais_router
+
 app = FastAPI(title="Integra Care API")
+app.include_router(autorizacoes_institucionais_router)
 app.include_router(identidades_router)
 app.include_router(vinculos_institucionais_router)
 

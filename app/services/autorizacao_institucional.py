@@ -111,3 +111,20 @@ class AutorizacaoInstitucionalService:
             raise AutorizacaoInstitucionalErro('INSTITUTIONAL_ACCESS_DENIED')
         return AutorizacaoConfirmada(usuario_id=user.id, instituicao_id=instituicao_id,
                                     admin_global=False, perfil_institucional=row.perfil_institucional)
+
+    def get(self, db, usuario_id, instituicao_id, *, actor_id):
+        actor = self._usuario(db, actor_id)
+        if not actor.ativo or actor.perfil != 'ADMIN':
+            raise AutorizacaoInstitucionalErro('ADMIN_REQUIRED')
+        self._context(db, usuario_id, instituicao_id, require_active=False)
+        row = db.query(Acesso).filter_by(usuario_id=usuario_id, instituicao_id=instituicao_id).populate_existing().first()
+        if row is None:
+            raise AutorizacaoInstitucionalErro('ACCESS_NOT_FOUND')
+        return row
+
+    def list(self, db, *, instituicao_id, actor_id):
+        actor = self._usuario(db, actor_id)
+        if not actor.ativo or actor.perfil != 'ADMIN':
+            raise AutorizacaoInstitucionalErro('ADMIN_REQUIRED')
+        self._context(db, actor_id, instituicao_id, require_active=False)
+        return db.query(Acesso).filter_by(instituicao_id=instituicao_id).order_by(Acesso.id).populate_existing().all()

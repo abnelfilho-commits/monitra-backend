@@ -23,3 +23,12 @@ class AutorizacaoConfirmada(BaseModel):
     instituicao_id: int
     admin_global: bool
     perfil_institucional: Optional[PerfilInstitucional] = None
+
+
+class AcessoResponse(BaseModel):
+    model_config = {'from_attributes': True}
+    id: PositiveInt
+    usuario_id: PositiveInt
+    instituicao_id: PositiveInt
+    perfil_institucional: PerfilInstitucional
+    ativo: StrictBool
