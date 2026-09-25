@@ -206,7 +206,7 @@ class InstitutionalPostgresTests(unittest.TestCase):
     def test_empty_and_incremental_catalogues_identical(self):
         def catalogue(engine):
             with engine.connect() as c:
-                self.assertEqual(c.execute(text('SELECT version_num FROM alembic_version')).scalar(),'g2b1_institucional_v1')
+                self.assertEqual(c.execute(text('SELECT version_num FROM alembic_version')).scalar(),'g2c1_autorizacao_v1')
                 columns=c.execute(text("SELECT c.relname,a.attname,format_type(a.atttypid,a.atttypmod),a.attnotnull,pg_get_expr(d.adbin,d.adrelid) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid LEFT JOIN pg_attrdef d ON d.adrelid=c.oid AND d.adnum=a.attnum WHERE n.nspname='public' AND c.relkind='r' AND a.attnum>0 AND NOT a.attisdropped ORDER BY 1,2")).all()
                 constraints=c.execute(text("SELECT conrelid::regclass::text,conname,pg_get_constraintdef(oid) FROM pg_constraint WHERE connamespace='public'::regnamespace ORDER BY 1,2")).all()
                 indexes=c.execute(text("SELECT tablename,indexname,indexdef FROM pg_indexes WHERE schemaname='public' ORDER BY 1,2")).all()
