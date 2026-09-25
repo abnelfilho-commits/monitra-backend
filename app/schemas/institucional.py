@@ -1,6 +1,6 @@
 """Domain input contracts; no implicit permission or legacy synchronization."""
 import re
-from datetime import date
+from datetime import date, datetime
 from typing import Optional, Literal
 from pydantic import BaseModel, validator, root_validator
 
@@ -72,4 +72,61 @@ class ProfissionalInstituicaoCreate(TemporalCreate):
 class PacienteProfissionalCreate(TemporalCreate):
     paciente_id: int
     paciente_instituicao_id: int
+    profissional_instituicao_id: int
+
+
+# HTTP transport only: domain CREATE contracts above remain unchanged.
+class MotivoInstitucional(BaseModel):
+    model_config = {'extra': 'forbid'}
+    motivo: str
+
+    @validator('motivo')
+    def required_reason(cls, value):
+        if not value.strip():
+            raise ValueError('Motivo obrigatório')
+        return value
+
+
+class PacienteInstituicaoRequest(PacienteInstituicaoCreate, MotivoInstitucional):
+    pass
+
+
+class ProfissionalInstituicaoRequest(ProfissionalInstituicaoCreate, MotivoInstitucional):
+    pass
+
+
+class PacienteProfissionalRequest(PacienteProfissionalCreate, MotivoInstitucional):
+    pass
+
+
+class CloseInstitucionalRequest(MotivoInstitucional):
+    data_fim: date
+
+
+class VinculoInstitucionalResponse(BaseModel):
+    model_config = {'from_attributes': True}
+    id: int
+    data_inicio: date
+    data_fim: Optional[date]
+    ativo: bool
+    criado_em: datetime
+    atualizado_em: datetime
+
+
+class PacienteInstituicaoResponse(VinculoInstitucionalResponse):
+    paciente_id: int
+    instituicao_id: int
+    tipo_vinculo: str
+    identificador_externo: Optional[str]
+
+
+class ProfissionalInstituicaoResponse(VinculoInstitucionalResponse):
+    profissional_id: int
+    instituicao_id: int
+    ocupacao_id: int
+
+
+class PacienteProfissionalResponse(VinculoInstitucionalResponse):
+    paciente_id: int
+    paciente_instituicao_id: Optional[int]
     profissional_instituicao_id: int
