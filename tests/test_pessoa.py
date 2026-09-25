@@ -55,7 +55,7 @@ class PessoaContractTests(unittest.TestCase):
 
     def test_canonical_head_and_direct_parent(self):
         scripts = ScriptDirectory.from_config(config())
-        self.assertEqual(scripts.get_heads(), ['g2c1_autorizacao_v1'])
+        self.assertEqual(scripts.get_heads(), ['f1_economia_v1'])
         self.assertEqual(scripts.get_revision('g2b1_institucional_v1').down_revision, 'g2a3_identidade_v1')
         self.assertEqual(scripts.get_revision('g2a2_pessoas_v1').down_revision, 'g1_institucional_v1')
 
