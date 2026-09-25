@@ -66,3 +66,110 @@ class PacienteContratoCreate(Periodo):
 class MapeamentoCreate(Command):
     agenda_cuidado_id: PositiveInt
     servico_id: PositiveInt
+
+
+# Gate B: in-memory contracts only; no persistence or access grant.
+class PreviewRequest(Command):
+    paciente_id: PositiveInt
+    contrato_id: PositiveInt
+    instituicao_id: PositiveInt
+    data_inicio: date
+    data_fim: date
+
+    @model_validator(mode='after')
+    def horizon(self):
+        if self.data_fim < self.data_inicio:
+            raise ValueError('data_fim must be >= data_inicio')
+        return self
+
+
+PendingCode = Literal[
+    'NO_CONTRACT', 'NO_ECONOMIC_SERVICE_MAPPING',
+    'INCOMPATIBLE_ECONOMIC_SERVICE_MAPPING',
+    'NO_APPLICABLE_PRICE_TABLE_VERSION', 'NO_PRICE',
+]
+
+
+class PreviewValue(BaseModel):
+    model_config = {'extra': 'forbid', 'frozen': True}
+
+
+class PreviewItem(PreviewValue):
+    sessao_id: int
+    agenda_id: int
+    pts_id: int
+    objetivo_id: int
+    atividade_id: int
+    ocupacao_id: int
+    profissional_id: Optional[int]
+    data_economica: date
+    quantidade: Literal[1] = 1
+    duracao_minutos: int
+    mapeamento_id: Optional[int] = None
+    servico_id: Optional[int] = None
+    servico_codigo: Optional[str] = None
+    tabela_id: Optional[int] = None
+    versao_id: Optional[int] = None
+    versao_numero: Optional[int] = None
+    vigente_desde: Optional[date] = None
+    preco_id: Optional[int] = None
+    codigo_externo: Optional[str] = None
+    moeda: Literal['BRL'] = 'BRL'
+    estado: Literal['CALCULADO', 'PENDENTE']
+    pendencia: Optional[PendingCode] = None
+    preco_unitario: Optional[Decimal] = None
+    subtotal: Optional[Decimal] = None
+
+    @model_validator(mode='after')
+    def monetary_state(self):
+        if self.estado == 'PENDENTE':
+            if self.pendencia is None or self.preco_unitario is not None or self.subtotal is not None:
+                raise ValueError('Pending items require a reason and null monetary values')
+        elif (self.pendencia is not None or self.preco_unitario is None or self.subtotal is None
+              or any(x is None for x in (self.servico_id, self.tabela_id, self.versao_id, self.preco_id))):
+            raise ValueError('Calculated items require complete economic provenance')
+        return self
+
+
+class PreviewTotal(PreviewValue):
+    quantidade_considerada: int
+    quantidade_precificada: int
+    quantidade_pendente: int
+    subtotal_precificado: Optional[Decimal]
+
+
+class ServiceTotal(PreviewTotal):
+    servico_id: int
+
+
+class MonthTotal(PreviewTotal):
+    mes: str
+
+
+class PreviewCoverage(PreviewValue):
+    sessoes_elegiveis: int
+    sessoes_mapeadas: int
+    sessoes_precificadas: int
+    sessoes_pendentes: int
+    agendas_sem_sessoes_elegiveis: tuple[int, ...]
+    aplicabilidade: Literal['APLICAVEL', 'N/A']
+
+
+class PreviewPending(PreviewValue):
+    sessao_id: int
+    codigo: PendingCode
+
+
+class PreviewResponse(PreviewValue):
+    paciente_id: int
+    contrato_id: int
+    instituicao_id: int
+    data_inicio: date
+    data_fim: date
+    moeda: Literal['BRL'] = 'BRL'
+    itens: tuple[PreviewItem, ...]
+    totais_por_servico: tuple[ServiceTotal, ...]
+    totais_por_mes: tuple[MonthTotal, ...]
+    subtotal_precificado: Optional[Decimal]
+    cobertura: PreviewCoverage
+    pendencias: tuple[PreviewPending, ...]

@@ -118,3 +118,132 @@ Valores de saída não são inferidos. Não há nova autorização/compartilhame
 Os guards pressupõem privilégios normais de escrita; um proprietário capaz
 de desabilitar triggers/alterar schema está fora desse contrato de aplicação.
 Nenhum acesso HML/PROD, commit, push, merge ou deploy nesta entrega.
+
+## F1.2.B — Preview canônico Neuro (MVP estrito)
+
+STATUS: F1_2_B_LOCAL_PASS.
+
+Baseline de implementação: `b1162ddf883fe6cc6769724ba1c9c9c35b9fc72c`,
+HEAD/origin/homolog confirmados antes das alterações. Esta seção corresponde
+à autorização posterior do Gate B; os limites do checkpoint Gate A acima
+permanecem como registro daquela entrega.
+
+### Fronteira aprovada
+
+Preço-base exclusivamente, uma tabela por edição contratual. Regras combináveis,
+pacotes e múltiplas tabelas permanecem evoluções posteriores explícitas, sem
+representação ou interpretação artificial neste preview. Nenhuma migration,
+router, UI, PDF, snapshot persistido ou ampliação a Cardio/Saúde Mental.
+
+`FinancialProjectionService.preview(session, payload)` recebe explicitamente:
+`paciente_id`, `contrato_id`, `instituicao_id`, `data_inicio`, `data_fim`.
+IDs positivos, datas obrigatórias e intervalo inclusivo válido. Nenhum ator
+é aceito no payload. Autorizar o acesso clínico ao paciente e o contexto
+institucional/econômico é responsabilidade prévia e separada do chamador.
+Selecionar contrato, instituição ou PacienteContrato não concede acesso.
+
+O chamador deve fornecer uma Session limpa, dedicada, em transação PostgreSQL
+REPEATABLE READ READ ONLY. O serviço recusa sessão suja, READ COMMITTED ou
+transação de escrita. Não inicia transação de escrita, não faz flush/commit/
+rollback e não altera a transação do chamador. A saída é materializada antes
+de o chamador encerrar seu snapshot. Não há escrita sequer de auditoria neste gate.
+
+### Fontes e responsabilidades
+
+- `neuro_reader.py`: lê PTS explicitamente Neuro, objetivos, agendas e sessões
+  persistidas AGENDADA/CONFIRMADA no horizonte. Retorna DTOs sem dinheiro.
+- `projection.py`: contrato explícito publicado, instituição ativa/pagadora,
+  tabela BRL do mesmo proprietário, PacienteContrato vigente, mapeamento
+  explícito, compatibilidade de ocupação e duração, versão e preço.
+- `calculator.py`: matemática Decimal pura, sem banco/PTS, quantização em
+  centavos ROUND_HALF_UP e somas determinísticas independentes da precisão
+  Decimal ambiente. Rejeita float, valores negativos/não finitos e quantidade
+  não inteira/positiva.
+
+A unidade quantitativa é uma sessão persistida, quantidade 1. `data_agendada`
+é a data econômica real do modelo. Frequência semanal e quantidade sugerida
+não geram sessões extras. Não chama SchedulingEngine nem SchedulingService.
+Não soma cronograma sugerido com o confirmado. Status/datas do PTS ou agenda
+não são reinterpretados como cancelamento de uma sessão persistida elegível.
+O status e a data da própria sessão determinam sua elegibilidade neste MVP.
+Profissional ausente permanece ausente: não é inferido da agenda.
+
+Ancestralidade inconsistente ou paciente inexistente recusam a chamada com erro
+de validação, sem fabricar item econômico ou novo código de pendência. PTS sem
+Linha e PTS de outras Linhas não são inferidos como Neuro.
+Agendas Neuro com período sobreposto ao horizonte, mas sem sessões elegíveis,
+são evidenciadas por ID como lacunas sem quantidade ou valor inventados.
+
+### Resolução e pendências
+
+Para cada sessão, contrato e vínculo PacienteContrato devem abranger a data
+(início/fim inclusivos). Não depende de PacienteInstituicao. Outra instituição,
+contrato inexistente/rascunho ou falta de vigência/vínculo resulta em NO_CONTRACT.
+Não resolve preços de contrato alheio ao contexto informado.
+
+Mapeamento unívoco da agenda; serviço ativo INDIVIDUAL/SESSAO, com ocupação da
+agenda e duração compatível tanto com a agenda quanto com a sessão. Nenhuma
+inferência por descrição, nome ou ocupação aproximada.
+
+Seleciona maior vigente_desde <= data econômica entre versões PUBLISHED da
+tabela selecionada. Busca o preço exatamente nessa versão; ausência nunca faz
+fallback para versão anterior. Versões DRAFT são ignoradas. Mudança de preço é
+resolvida sessão a sessão, inclusive no primeiro dia da nova vigência.
+
+Precedência de diagnóstico (uma pendência principal por item):
+
+1. NO_CONTRACT;
+2. NO_ECONOMIC_SERVICE_MAPPING;
+3. INCOMPATIBLE_ECONOMIC_SERVICE_MAPPING;
+4. NO_APPLICABLE_PRICE_TABLE_VERSION;
+5. NO_PRICE.
+
+Mapeamentos são contados independentemente de a resolução posterior ser viável.
+Somente CALCULADO possui preço_unitario/subtotal; PENDENTE exige razão e valores
+monetários null. Preço explicitamente zero é CALCULADO com 0.00.
+
+### Resposta e reprodutibilidade
+
+Resposta imutável em memória com itens ordenados por data/id, totais por
+serviço e mês-calendário, subtotal_precificado e cobertura absoluta:
+
+- sessoes_elegiveis;
+- sessoes_mapeadas (mapeamento explícito presente, mesmo se incompatível);
+- sessoes_precificadas;
+- sessoes_pendentes;
+- agendas_sem_sessoes_elegiveis;
+- aplicabilidade APLICAVEL/N/A.
+
+Cada item preserva IDs da sessão, agenda, PTS, objetivo, atividade, ocupação,
+profissional quando persistido, mapeamento, serviço/código, tabela, versão/número/
+vigência e preço/código externo, além de data, duração, quantidade e BRL.
+Contrato, instituição, paciente e horizonte constam no envelope.
+
+Não há total de custo completo quando existem pendências: apenas soma dos itens
+precificados. Sem itens precificados, subtotal_precificado é null (inclusive
+preview vazio); zero só decorre de preço efetivamente conhecido. Totais por
+serviço incluem itens com serviço explicitamente mapeado; itens sem mapeamento
+continuam nos itens e nos totais mensais/cobertura, sem serviço fictício.
+
+Horizonte anual soma os itens efetivos; nunca mês × 12. Meses vazios não recebem
+valores artificiais. Cobertura vazia é N/A, sem percentual que esconda lacunas.
+A transação consistente impede misturar mapeamentos/configurações concorrentes.
+Repetição no mesmo estado produz a mesma saída. Um preview posterior pode mudar
+quando o planejamento/configuração mudar: este gate não emite documento nem
+persiste snapshot histórico.
+
+### Validação Gate B
+
+25 testes novos (3 de matemática/contrato e 22 PostgreSQL), incluindo bases,
+múltiplos serviços/sessões, vigência/contrato rascunho, fronteiras de preço,
+ausências/zero, incompatibilidade, isolamento, ano bissexto/virada de ano,
+subtotal parcial, leitura concorrente consistente e snapshot de todas as tabelas
+antes/depois para comprovar ausência de escrita. Erro estrutural não produz
+preview parcial. Sem commit implícito e sem geração de sessão.
+
+F1 A+B: 51 PASS em PostgreSQL 18 descartável. Suíte completa: 557 PASS,
+zero skips, em 59,193 segundos; regressões F1.2.A/G2/PTS/Agenda/Sessões PASS.
+427 arquivos protegidos byte a byte intactos, incluindo todas as migrations.
+git diff --check incluindo arquivos novos PASS; staging vazio.
+Nenhum teste ou artefato operacional HML foi preparado. Nenhuma migration,
+commit, push ou acesso HML/PROD foi realizado.
