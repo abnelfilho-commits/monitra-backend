@@ -36,3 +36,4 @@ from .whatsapp_conversa import WhatsAppConversa
 from .whatsapp_mensagem import WhatsAppMensagem
 
 from .institucional import Instituicao, InstituicaoPapel, PacienteInstituicao, ProfissionalInstituicao, PacienteProfissional
+from .institucional_operacao import InstitucionalOperacao

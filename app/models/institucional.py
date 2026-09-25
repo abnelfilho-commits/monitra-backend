@@ -71,5 +71,7 @@ class ProfissionalInstituicao(Temporal, Base):
 class PacienteProfissional(Temporal, Base):
     __tablename__ = 'paciente_profissionais'
     paciente_id = Column(Integer, ForeignKey('pacientes.id', ondelete='RESTRICT'), nullable=False, index=True)
+    # Nullable only to preserve historical rows; mandatory for canonical CREATE.
+    paciente_instituicao_id = Column(Integer, ForeignKey('paciente_instituicoes.id', ondelete='RESTRICT', name='fk_paciente_profissionais_paciente_instituicao'), nullable=True, index=True)
     profissional_instituicao_id = Column(Integer, ForeignKey('profissional_instituicoes.id', ondelete='RESTRICT'), nullable=False, index=True)
     __table_args__ = temporal_constraints('paciente_profissional', ('paciente_id', 'profissional_instituicao_id'))

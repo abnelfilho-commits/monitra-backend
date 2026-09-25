@@ -53,6 +53,7 @@ class InstitutionalPostgresTests(unittest.TestCase):
     def setUp(self):
         self.conn=self.engine.connect(); self.tx=self.conn.begin(); self.db=Session(self.conn)
         self.s=InstitucionalService()
+        self.actor=self.db.execute(text("INSERT INTO usuarios(nome,email,senha_hash,perfil,ativo) VALUES ('Synthetic admin','g1@synthetic.invalid','test','ADMIN',true) RETURNING id")).scalar()
         self.p=self.db.execute(text("INSERT INTO pacientes(nome,ativo) VALUES ('Sintético',true) RETURNING id")).scalar()
         self.pr=self.db.execute(text("INSERT INTO profissionais(nome,ativo) VALUES ('Sintético',true) RETURNING id")).scalar()
         self.oc=self.db.execute(text("INSERT INTO ocupacoes_profissionais(nome) VALUES ('Ocupação sintética') RETURNING id")).scalar()
@@ -67,7 +68,10 @@ class InstitutionalPostgresTests(unittest.TestCase):
         return self.s.create(self.db,Instituicao,dict(razao_social=name,tipo_instituicao='CLINICA',**extra))
 
     def link(self,model,**extra):
-        return self.s.create(self.db,model,dict(data_inicio=date(2026,1,1),**extra))
+        # Historical G1 fixtures deliberately preserve NULL patient context.
+        # Exercise frozen physical constraints, not canonical G2.B.1 CREATE.
+        row=model(data_inicio=date(2026,1,1),**extra)
+        self.db.add(row); self.db.flush(); return row
 
     def rejected(self,fn):
         with self.assertRaises((IntegrityError,ValueError)):
@@ -93,9 +97,9 @@ class InstitutionalPostgresTests(unittest.TestCase):
         self.assertIsNone(a.identificador_externo)
         self.rejected(lambda:self.link(PacienteInstituicao,**args))
         self.rejected(lambda:self.link(PacienteInstituicao,data_fim=date(2025,1,1),**args))
-        self.s.close(self.db,PacienteInstituicao,a.id,date(2026,2,1))
-        self.rejected(lambda:self.s.create(self.db,PacienteInstituicao,dict(args,data_inicio=date(2026,2,1))))
-        self.s.create(self.db,PacienteInstituicao,dict(args,data_inicio=date(2026,2,2)))
+        self.s.close(self.db,PacienteInstituicao,a.id,date(2026,2,1),actor_id=self.actor,motivo="Test")
+        self.rejected(lambda:self.s.create(self.db,PacienteInstituicao,dict(args,data_inicio=date(2026,2,1)),actor_id=self.actor,motivo="Test"))
+        self.s.create(self.db,PacienteInstituicao,dict(args,data_inicio=date(2026,2,2)),actor_id=self.actor,motivo="Test")
         self.assertEqual(self.s.effective(self.db,PacienteInstituicao,date(2026,1,1)).filter_by(paciente_id=self.p).count(),2)
         self.assertEqual(self.s.effective(self.db,PacienteInstituicao,date(2025,1,1)).filter_by(paciente_id=self.p).count(),0)
         self.assertTrue(self.db.execute(text('SELECT ativo FROM pacientes WHERE id=:id'),dict(id=self.p)).scalar())
@@ -110,9 +114,9 @@ class InstitutionalPostgresTests(unittest.TestCase):
         team=self.link(PacienteProfissional,paciente_id=self.p,profissional_instituicao_id=a.id)
         self.link(PacienteProfissional,paciente_id=self.p,profissional_instituicao_id=b.id)
         self.rejected(lambda:self.link(PacienteProfissional,paciente_id=self.p,profissional_instituicao_id=a.id))
-        self.s.close(self.db,PacienteProfissional,team.id,date(2026,2,1))
-        self.s.close(self.db,ProfissionalInstituicao,a.id,date(2026,2,1))
-        self.s.create(self.db,ProfissionalInstituicao,dict(args,data_inicio=date(2026,2,2)))
+        self.s.close(self.db,PacienteProfissional,team.id,date(2026,2,1),actor_id=self.actor,motivo="Test")
+        self.s.close(self.db,ProfissionalInstituicao,a.id,date(2026,2,1),actor_id=self.actor,motivo="Test")
+        self.s.create(self.db,ProfissionalInstituicao,dict(args,data_inicio=date(2026,2,2)),actor_id=self.actor,motivo="Test")
         self.assertTrue(self.db.execute(text('SELECT ativo FROM profissionais WHERE id=:id'),dict(id=self.pr)).scalar())
         self.assertEqual(self.db.execute(text('SELECT count(*) FROM sessoes_assistenciais')).scalar(),0)
 
@@ -189,8 +193,9 @@ class InstitutionalPostgresTests(unittest.TestCase):
             try:
                 with Session(self.engine) as db, db.begin():
                     barrier.wait(timeout=5)
-                    self.s.create(db,PacienteInstituicao,dict(paciente_id=patient,instituicao_id=institution,
+                    db.add(PacienteInstituicao(paciente_id=patient,instituicao_id=institution,
                         tipo_vinculo='OUTRO',data_inicio=date(2026,1,1)))
+                    db.flush()
                 return 'ok'
             except IntegrityError:
                 return 'duplicate'
@@ -201,7 +206,7 @@ class InstitutionalPostgresTests(unittest.TestCase):
     def test_empty_and_incremental_catalogues_identical(self):
         def catalogue(engine):
             with engine.connect() as c:
-                self.assertEqual(c.execute(text('SELECT version_num FROM alembic_version')).scalar(),'g2a3_identidade_v1')
+                self.assertEqual(c.execute(text('SELECT version_num FROM alembic_version')).scalar(),'g2b1_institucional_v1')
                 columns=c.execute(text("SELECT c.relname,a.attname,format_type(a.atttypid,a.atttypmod),a.attnotnull,pg_get_expr(d.adbin,d.adrelid) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid LEFT JOIN pg_attrdef d ON d.adrelid=c.oid AND d.adnum=a.attnum WHERE n.nspname='public' AND c.relkind='r' AND a.attnum>0 AND NOT a.attisdropped ORDER BY 1,2")).all()
                 constraints=c.execute(text("SELECT conrelid::regclass::text,conname,pg_get_constraintdef(oid) FROM pg_constraint WHERE connamespace='public'::regnamespace ORDER BY 1,2")).all()
                 indexes=c.execute(text("SELECT tablename,indexname,indexdef FROM pg_indexes WHERE schemaname='public' ORDER BY 1,2")).all()

@@ -32,7 +32,7 @@ class ModelContractTests(unittest.TestCase):
         from app.database import Base
         configure_mappers()
         for name, table in Base.metadata.tables.items():
-            if name in {"capacidade_instalada", "identidade_operacoes", "pessoas", "instituicoes", "instituicao_papeis", "paciente_instituicoes", "profissional_instituicoes", "paciente_profissionais"}:
+            if name in {"capacidade_instalada", "institucional_operacoes", "identidade_operacoes", "pessoas", "instituicoes", "instituicao_papeis", "paciente_instituicoes", "profissional_instituicoes", "paciente_profissionais"}:
                 continue  # Explicit transitional model; never bootstrap it.
             physical = {c["column_name"]: c for c in CONTRACT["tables"][name]["columns"]}
             for col in table.c:
@@ -60,7 +60,7 @@ class ModelContractTests(unittest.TestCase):
         self.assertNotIn("planejamento_atividades", CONTRACT["tables"])
 
     def test_separate_single_heads(self):
-        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["g2a3_identidade_v1"])
+        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["g2b1_institucional_v1"])
         historical = Config(str(ROOT / "alembic.ini"))
         historical.set_main_option("script_location", str(ROOT / "alembic"))
         self.assertEqual(ScriptDirectory.from_config(historical).get_heads(), ["8c01a0d1a004"])
@@ -137,7 +137,7 @@ class BaselinePostgresTests(unittest.TestCase):
         with self.engine.connect() as conn:
             inspector = inspect(conn)
             for name, table in Base.metadata.tables.items():
-                if name in {"capacidade_instalada", "identidade_operacoes", "pessoas", "instituicoes", "instituicao_papeis", "paciente_instituicoes", "profissional_instituicoes", "paciente_profissionais"}:
+                if name in {"capacidade_instalada", "institucional_operacoes", "identidade_operacoes", "pessoas", "instituicoes", "instituicao_papeis", "paciente_instituicoes", "profissional_instituicoes", "paciente_profissionais"}:
                     continue
                 with self.subTest(table=name):
                     actual = {(tuple(f["constrained_columns"]), f["referred_table"], tuple(f["referred_columns"]), f["options"].get("ondelete", "NO ACTION")) for f in inspector.get_foreign_keys(name)}

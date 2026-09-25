@@ -44,9 +44,10 @@ class PapelCreate(BaseModel):
 
 
 class TemporalCreate(BaseModel):
+    model_config = {'extra': 'forbid'}
     data_inicio: date
     data_fim: Optional[date] = None
-    ativo: bool = True
+    ativo: Literal[True] = True
 
     @root_validator(skip_on_failure=True)
     def period(cls, values):
@@ -70,4 +71,5 @@ class ProfissionalInstituicaoCreate(TemporalCreate):
 
 class PacienteProfissionalCreate(TemporalCreate):
     paciente_id: int
+    paciente_instituicao_id: int
     profissional_instituicao_id: int
