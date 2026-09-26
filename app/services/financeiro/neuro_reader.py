@@ -1,7 +1,4 @@
 """Read persisted Neuro sessions only. No scheduling, money or clinical writes."""
-from dataclasses import dataclass
-from datetime import date
-from typing import Optional
 
 from sqlalchemy import or_, select
 from app.models.agenda_cuidado import AgendaCuidado as Agenda
@@ -11,28 +8,20 @@ from app.models.sessao_assistencial import SessaoAssistencial as Sessao
 from app.services.care_lines.registry import NEURO
 
 
-@dataclass(frozen=True)
-class PlannedSession:
-    sessao_id: int
-    agenda_id: int
-    pts_id: int
-    objetivo_id: int
-    atividade_id: int
-    ocupacao_id: int
-    profissional_id: Optional[int]
-    data_economica: date
-    duracao_minutos: int
-    duracao_agenda: int
-
-
-@dataclass(frozen=True)
-class NeuroPlan:
-    sessions: tuple[PlannedSession, ...]
-    agendas_without_sessions: tuple[int, ...]
+from app.services.financeiro.contracts import PlannedSession, NeuroPlan
 
 
 def read_neuro(db, request):
-    if db.scalar(select(Paciente.id).where(Paciente.id == request.paciente_id)) is None:
+    return read_neuro_batch(db, (request.paciente_id,), request)[request.paciente_id]
+
+
+def read_neuro_batch(db, patient_ids, request):
+    patient_ids = tuple(sorted(set(patient_ids)))
+    if not patient_ids:
+        return {}
+
+    found = set(db.scalars(select(Paciente.id).where(Paciente.id.in_(patient_ids))))
+    if found != set(patient_ids):
         raise ValueError('Paciente inexistente')
     # Select scalars, not cached ORM entities. The caller supplies a consistent snapshot.
     statement = (
@@ -46,17 +35,17 @@ def read_neuro(db, request):
         .join(PTS, Agenda.pts_id == PTS.id)
         .outerjoin(PTSObjetivo, Agenda.objetivo_id == PTSObjetivo.id)
         .where(PTS.modulo_id == NEURO.module_id,
-               or_(PTS.paciente_id == request.paciente_id, Sessao.paciente_id == request.paciente_id),
+               or_(PTS.paciente_id.in_(patient_ids), Sessao.paciente_id.in_(patient_ids)),
                Sessao.status.in_(('AGENDADA', 'CONFIRMADA')),
                Sessao.data_agendada.between(request.data_inicio, request.data_fim))
         .order_by(Sessao.data_agendada, Sessao.id)
     )
-    sessions = []
+    sessions = {pid: [] for pid in patient_ids}
     for row in db.execute(statement).mappings():
-        if (row['paciente_id'] != request.paciente_id or row['pts_paciente_id'] != request.paciente_id
+        if (row['paciente_id'] != row['pts_paciente_id'] or row['paciente_id'] not in sessions
                 or row['objetivo_pts_id'] != row['pts_id']):
             raise ValueError('Ancestralidade assistencial inconsistente; preview recusado')
-        sessions.append(PlannedSession(
+        sessions[row['paciente_id']].append(PlannedSession(
             sessao_id=row['id'], agenda_id=row['agenda_id'], pts_id=row['pts_id'],
             objetivo_id=row['objetivo_id'], atividade_id=row['atividade_id'],
             ocupacao_id=row['ocupacao_id'], profissional_id=row['profissional_id'],
@@ -64,14 +53,18 @@ def read_neuro(db, request):
             duracao_agenda=row['duracao_agenda']))
     # Gap evidence is bounded by agenda dates. It never generates financial quantity.
     agendas = db.execute(
-        select(Agenda.id, Agenda.pts_id, PTSObjetivo.pts_id.label('objetivo_pts_id'))
+        select(Agenda.id, Agenda.pts_id, PTS.paciente_id, PTSObjetivo.pts_id.label('objetivo_pts_id'))
         .join(PTS, Agenda.pts_id == PTS.id)
         .outerjoin(PTSObjetivo, Agenda.objetivo_id == PTSObjetivo.id)
-        .where(PTS.paciente_id == request.paciente_id, PTS.modulo_id == NEURO.module_id,
+        .where(PTS.paciente_id.in_(patient_ids), PTS.modulo_id == NEURO.module_id,
                Agenda.data_inicio <= request.data_fim,
                or_(Agenda.data_fim.is_(None), Agenda.data_fim >= request.data_inicio))
         .order_by(Agenda.id)).all()
     if any(row.pts_id != row.objetivo_pts_id for row in agendas):
         raise ValueError('Ancestralidade assistencial inconsistente; preview recusado')
-    considered = {s.agenda_id for s in sessions}
-    return NeuroPlan(tuple(sessions), tuple(row.id for row in agendas if row.id not in considered))
+    considered = {s.agenda_id for values in sessions.values() for s in values}
+    gaps = {pid: [] for pid in patient_ids}
+    for row in agendas:
+        if row.id not in considered:
+            gaps[row.paciente_id].append(row.id)
+    return {pid: NeuroPlan(tuple(sessions[pid]), tuple(gaps[pid])) for pid in patient_ids}

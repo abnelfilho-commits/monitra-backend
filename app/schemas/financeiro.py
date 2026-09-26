@@ -173,3 +173,98 @@ class PreviewResponse(PreviewValue):
     subtotal_precificado: Optional[Decimal]
     cobertura: PreviewCoverage
     pendencias: tuple[PreviewPending, ...]
+
+
+# Gate C: each result is one immutable, non-persisted execution.
+class InstitutionalPreviewRequest(Command):
+    instituicao_id: PositiveInt
+    contrato_id: PositiveInt
+    modulo_id: PositiveInt
+    data_inicio: date
+    data_fim: date
+
+    @model_validator(mode='after')
+    def horizon(self):
+        if self.data_fim < self.data_inicio:
+            raise ValueError('data_fim must be >= data_inicio')
+        return self
+
+
+class LinkEvidence(PreviewValue):
+    id: int
+    inicio: date
+    fim: Optional[date]
+
+
+class ResolutionEvidence(PreviewValue):
+    contrato_inicio: date
+    contrato_fim: Optional[date]
+    vinculos: tuple[LinkEvidence, ...]
+    duracao_agenda: int
+    servico_ativo: Optional[bool] = None
+    servico_unidade: Optional[str] = None
+    servico_tipo_atendimento: Optional[str] = None
+    servico_ocupacao_id: Optional[int] = None
+    servico_duracao_minutos: Optional[int] = None
+
+
+class InstitutionalItem(PreviewValue):
+    instituicao_id: int
+    contrato_id: int
+    modulo_id: int
+    paciente_id: int
+    item: PreviewItem
+    evidencia: ResolutionEvidence
+
+
+class PatientTotal(PreviewTotal):
+    paciente_id: int
+    agendas_sem_sessoes_elegiveis: tuple[int, ...]
+
+
+class PendingTotal(PreviewTotal):
+    codigo: PendingCode
+
+
+class InstitutionalSummary(PreviewTotal):
+    pacientes_economicos: int
+    pacientes_com_sessoes: int
+    pacientes_com_itens_precificados: int
+    pacientes_somente_pendentes: int
+    pacientes_sem_sessoes: int
+    sessoes_mapeadas: int
+    cobertura_percentual: Optional[Decimal]
+    completude: Literal['SEM_SESSOES', 'COM_PENDENCIAS', 'PRECIFICADO']
+
+
+class InstitutionalPreviewResult(PreviewValue):
+    instituicao_id: int
+    contrato_id: int
+    modulo_id: int
+    data_inicio: date
+    data_fim: date
+    moeda: Literal['BRL'] = 'BRL'
+    resumo: InstitutionalSummary
+    pacientes: tuple[PatientTotal, ...]
+    totais_por_mes: tuple[MonthTotal, ...]
+    totais_por_servico: tuple[ServiceTotal, ...]
+    pendencias: tuple[PendingTotal, ...]
+    detalhes: tuple[InstitutionalItem, ...]
+
+    def executive(self):
+        """No individual items in the executive envelope; no database access."""
+        return self.model_dump(exclude={'detalhes'})
+
+    def drill_down(self, *, paciente_id=None, modulo_id=None, mes=None,
+                   servico_id=None, contrato_id=None, tabela_id=None,
+                   versao_id=None, pendencia=None):
+        """Select only from this execution. IDs cannot reconstruct a past preview."""
+        return tuple(d for d in self.detalhes
+                     if (paciente_id is None or d.paciente_id == paciente_id)
+                     and (modulo_id is None or d.modulo_id == modulo_id)
+                     and (contrato_id is None or d.contrato_id == contrato_id)
+                     and (mes is None or d.item.data_economica.strftime('%Y-%m') == mes)
+                     and (servico_id is None or d.item.servico_id == servico_id)
+                     and (tabela_id is None or d.item.tabela_id == tabela_id)
+                     and (versao_id is None or d.item.versao_id == versao_id)
+                     and (pendencia is None or d.item.pendencia == pendencia))
