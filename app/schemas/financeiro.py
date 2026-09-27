@@ -268,3 +268,22 @@ class InstitutionalPreviewResult(PreviewValue):
                      and (tabela_id is None or d.item.tabela_id == tabela_id)
                      and (versao_id is None or d.item.versao_id == versao_id)
                      and (pendencia is None or d.item.pendencia == pendencia))
+
+
+class InstitutionalContextInstitution(PreviewValue):
+    id: int
+    nome: str
+
+
+class InstitutionalContextContract(PreviewValue):
+    id: int
+    instituicao_id: int
+    codigo: str
+    edicao: int
+    inicio: date
+    fim: Optional[date]
+
+
+class InstitutionalContextResult(PreviewValue):
+    instituicoes: tuple[InstitutionalContextInstitution, ...]
+    contratos: tuple[InstitutionalContextContract, ...]
