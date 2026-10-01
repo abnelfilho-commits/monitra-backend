@@ -21,6 +21,7 @@ def normalize_cnpj(value):
 
 
 class InstituicaoCreate(BaseModel):
+    model_config = {'extra': 'forbid'}
     razao_social: str
     nome_fantasia: Optional[str] = None
     cnpj: Optional[str] = None
@@ -35,6 +36,42 @@ class InstituicaoCreate(BaseModel):
         if not value.strip():
             raise ValueError('Denominação institucional obrigatória')
         return value.strip()
+
+
+class InstituicaoUpdate(BaseModel):
+    model_config = {'extra': 'forbid'}
+    razao_social: Optional[str] = None
+    nome_fantasia: Optional[str] = None
+    cnpj: Optional[str] = None
+    tipo_instituicao: Optional[Literal['CLINICA','UNIDADE_SAUDE','OPERADORA_SAUDE','GOVERNO_SECRETARIA','EMPRESA','INSTITUTO_ASSOCIACAO','OUTRO']] = None
+    instituicao_pai_id: Optional[int] = None
+
+    _cnpj = validator('cnpj', allow_reuse=True)(normalize_cnpj)
+
+    @validator('razao_social')
+    def official_name(cls, value):
+        if value is None:
+            raise ValueError('Razão social não pode ser nula')
+        return InstituicaoCreate.official_name(value)
+
+    @validator('tipo_instituicao')
+    def required_type(cls, value):
+        if value is None:
+            raise ValueError('Tipo institucional não pode ser nulo')
+        return value
+
+
+class InstituicaoResponse(BaseModel):
+    model_config = {'from_attributes': True}
+    id: int
+    razao_social: str
+    nome_fantasia: Optional[str]
+    cnpj: Optional[str]
+    tipo_instituicao: str
+    instituicao_pai_id: Optional[int]
+    ativo: bool
+    criado_em: datetime
+    atualizado_em: datetime
 
 
 class PapelCreate(BaseModel):

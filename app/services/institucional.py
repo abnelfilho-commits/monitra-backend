@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from app.models.institucional import (Instituicao, InstituicaoPapel, PacienteInstituicao,
                                      ProfissionalInstituicao, PacienteProfissional)
 from app.schemas.institucional import (InstituicaoCreate, PapelCreate, PacienteInstituicaoCreate,
-                                      ProfissionalInstituicaoCreate, PacienteProfissionalCreate)
+                                      ProfissionalInstituicaoCreate, PacienteProfissionalCreate, InstituicaoUpdate)
 from app.models.usuario import Usuario
 from app.models.institucional_operacao import InstitucionalOperacao
 
@@ -51,11 +51,11 @@ class InstitucionalService:
         seen = set()
         while parent is not None:
             if parent == identity or parent in seen:
-                raise ValueError('Ciclo institucional não permitido')
+                raise InstitucionalErro('INSTITUTION_HIERARCHY_CYCLE')
             seen.add(parent)
             row = db.get(Instituicao, parent, populate_existing=True)
             if row is None:
-                raise ValueError('Instituição pai inexistente')
+                raise InstitucionalErro('PARENT_INSTITUTION_NOT_FOUND')
             parent = row.instituicao_pai_id
 
     def create(self, db, model, payload, *, actor_id=None, motivo=None):
@@ -86,6 +86,55 @@ class InstitucionalService:
             raise ValueError('Instituição inexistente')
         self.validate_parent(db, identity, parent)
         row.instituicao_pai_id = parent
+        db.flush()
+        return row
+
+    def list_instituicoes(self, db, *, actor_id, ativo=None, tipo_instituicao=None):
+        self._admin(db, actor_id)
+        query = db.query(Instituicao)
+        if ativo is not None:
+            query = query.filter(Instituicao.ativo.is_(ativo))
+        if tipo_instituicao is not None:
+            query = query.filter(Instituicao.tipo_instituicao == tipo_instituicao)
+        return query.order_by(Instituicao.razao_social, Instituicao.id).populate_existing().all()
+
+    def get_instituicao(self, db, identity, *, actor_id):
+        self._admin(db, actor_id)
+        return self._institution(db, identity)
+
+    @staticmethod
+    def _institution(db, identity):
+        row = db.get(Instituicao, identity, populate_existing=True)
+        if row is None:
+            raise InstitucionalErro('INSTITUTION_NOT_FOUND')
+        return row
+
+    def _institution_write_gate(self, db, actor_id):
+        if db.new or db.dirty or db.deleted:
+            raise InstitucionalErro('CLEAN_SESSION_REQUIRED')
+        self._admin(db, actor_id)
+        # Reuse the hierarchy lock for all institution edits to serialize updates.
+        self.hierarchy_lock(db)
+
+    def create_instituicao(self, db, payload, *, actor_id):
+        self._institution_write_gate(db, actor_id)
+        return self.create(db, Instituicao, payload)
+
+    def update_instituicao(self, db, identity, payload, *, actor_id):
+        data = InstituicaoUpdate.model_validate(payload).model_dump(exclude_unset=True)
+        self._institution_write_gate(db, actor_id)
+        row = self._institution(db, identity)
+        if 'instituicao_pai_id' in data:
+            self.validate_parent(db, identity, data['instituicao_pai_id'])
+        for field, value in data.items():
+            setattr(row, field, value)
+        db.flush()
+        return row
+
+    def set_instituicao_active(self, db, identity, active, *, actor_id):
+        self._institution_write_gate(db, actor_id)
+        row = self._institution(db, identity)
+        row.ativo = active
         db.flush()
         return row
 
