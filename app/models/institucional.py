@@ -59,7 +59,8 @@ class PacienteInstituicao(Temporal, Base):
     tipo_vinculo = Column(String, nullable=False)
     identificador_externo = Column(String)
     __table_args__ = temporal_constraints('paciente_instituicao', ('paciente_id', 'instituicao_id', 'tipo_vinculo')) + (
-        CheckConstraint('tipo_vinculo IN ' + str(LINK_TYPES), name='ck_paciente_instituicao_tipo'),)
+        CheckConstraint('tipo_vinculo IN ' + str(LINK_TYPES), name='ck_paciente_instituicao_tipo'),
+        UniqueConstraint('id', 'paciente_id', 'instituicao_id', name='uq_paciente_instituicao_identidade'),)
 
 class ProfissionalInstituicao(Temporal, Base):
     __tablename__ = 'profissional_instituicoes'

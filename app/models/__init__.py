@@ -40,3 +40,5 @@ from .institucional_operacao import InstitucionalOperacao
 from .autorizacao_institucional import UsuarioInstituicaoAcesso
 from .financeiro import (ServicoEconomico, TabelaPreco, TabelaPrecoVersao, PrecoServico,
                          ContratoFinanceiro, PacienteContrato, MapeamentoAgendaServico)
+
+from .contexto_assistencial import ContextoAssistencial, ContextoAssistencialLinha
