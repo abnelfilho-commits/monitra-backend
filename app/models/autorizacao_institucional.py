@@ -11,6 +11,7 @@ class UsuarioInstituicaoAcesso(Base):
     perfil_institucional = Column(String(16), nullable=False)
     ativo = Column(Boolean, nullable=False, server_default=text('false'))
     __table_args__ = (
+        UniqueConstraint('id', 'instituicao_id', name='uq_acesso_instituicao'),
         UniqueConstraint('usuario_id', 'instituicao_id', name='uq_usuario_instituicao_acesso'),
         CheckConstraint("perfil_institucional IN ('GESTOR', 'PROFISSIONAL', 'SUPORTE')", name='ck_acesso_perfil_institucional'),
     )

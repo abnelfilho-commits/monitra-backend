@@ -67,7 +67,8 @@ class ProfissionalInstituicao(Temporal, Base):
     profissional_id = Column(Integer, ForeignKey('profissionais.id', ondelete='RESTRICT'), nullable=False, index=True)
     instituicao_id = Column(Integer, ForeignKey('instituicoes.id', ondelete='RESTRICT'), nullable=False, index=True)
     ocupacao_id = Column(Integer, ForeignKey('ocupacoes_profissionais.id', ondelete='RESTRICT'), nullable=False, index=True)
-    __table_args__ = temporal_constraints('profissional_instituicao', ('profissional_id', 'instituicao_id', 'ocupacao_id'))
+    __table_args__ = temporal_constraints('profissional_instituicao', ('profissional_id', 'instituicao_id', 'ocupacao_id')) + (
+        UniqueConstraint('id', 'instituicao_id', name='uq_profissional_instituicao_identidade'),)
 
 class PacienteProfissional(Temporal, Base):
     __tablename__ = 'paciente_profissionais'

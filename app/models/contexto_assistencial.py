@@ -20,6 +20,7 @@ class ContextoAssistencial(Base):
     atualizado_em = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
     criado_por_usuario_id = Column(Integer, ForeignKey('usuarios.id', ondelete='RESTRICT'), nullable=False)
     __table_args__ = (
+        UniqueConstraint('id', 'instituicao_id', name='uq_contexto_instituicao'),
         ForeignKeyConstraint(
             ['paciente_instituicao_id', 'paciente_id', 'instituicao_id'],
             ['paciente_instituicoes.id', 'paciente_instituicoes.paciente_id', 'paciente_instituicoes.instituicao_id'],

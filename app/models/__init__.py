@@ -42,3 +42,5 @@ from .financeiro import (ServicoEconomico, TabelaPreco, TabelaPrecoVersao, Preco
                          ContratoFinanceiro, PacienteContrato, MapeamentoAgendaServico)
 
 from .contexto_assistencial import ContextoAssistencial, ContextoAssistencialLinha
+
+from .permissao_assistencial import ContextoProfissional, ConcessaoAssistencial, AutoridadeDelegacao
