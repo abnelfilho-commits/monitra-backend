@@ -1,6 +1,7 @@
 """Canonical authorization foundation. No consumer migration; caller owns commit."""
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
+from app.services.permissao_assistencial import PermissaoAssistencialService
 from app.models.usuario import Usuario
 from app.models.institucional import Instituicao
 from app.models.autorizacao_institucional import UsuarioInstituicaoAcesso as Acesso
@@ -79,12 +80,18 @@ class AutorizacaoInstitucionalService:
 
     def _mutate(self, db, usuario_id, instituicao_id, actor_id, *, active=None, profile=None):
         self._write_gate(db, actor_id)
+        PermissaoAssistencialService.lock_institution(db, instituicao_id)
+        # Lock roots in the same order as W1B commands.
+        db.query(Acesso).filter_by(instituicao_id=instituicao_id).order_by(Acesso.id).populate_existing().with_for_update().all()
         # Revocation remains possible even if the account/institution was disabled.
         self._context(db, usuario_id, instituicao_id, require_active=active is not False)
         with db.begin_nested():
             row = self._row(db, usuario_id, instituicao_id)
             if row is None:
                 raise AutorizacaoInstitucionalErro('ACCESS_NOT_FOUND')
+            if active is False:
+                PermissaoAssistencialService().revoke_root_dependents(
+                    db, row.id, instituicao_id=instituicao_id, actor_id=actor_id)
             if active is not None:
                 row.ativo = active
             if profile is not None:

@@ -31,7 +31,7 @@ class AuthorizationHttpStructureTests(unittest.TestCase):
 @unittest.skipUnless(URL, 'Requires explicitly disposable PostgreSQL 18')
 class AuthorizationHttpPostgresTests(unittest.TestCase):
     @classmethod
-    def setUpClass(cls):
+    def create_database(cls):
         url = make_url(URL)
         if url.host != '127.0.0.1' or url.database != 'm0_baseline':
             raise RuntimeError('Disposable local database only')
@@ -43,16 +43,19 @@ class AuthorizationHttpPostgresTests(unittest.TestCase):
             c.execute(text('CREATE DATABASE '+cls.name))
         cls.engine = create_engine(url.set(database=cls.name))
         with cls.engine.begin() as c:
-            command.upgrade(config(c), 'g2c1_autorizacao_v1')
+            command.upgrade(config(c), 'w1b_permissoes_v1')
 
     @classmethod
-    def tearDownClass(cls):
+    def drop_database(cls):
         cls.engine.dispose()
         with cls.admin.connect() as c:
             c.execute(text('DROP DATABASE '+cls.name))
         cls.admin.dispose()
 
     def setUp(self):
+        # One current-schema database per test: no TRUNCATE across protected financial tables.
+        # Institution HTTP tests also compose this fixture without inheriting the class.
+        AuthorizationHttpPostgresTests.create_database.__func__(type(self))
         self.users = {}
         with self.engine.begin() as c:
             for role in ('ADMIN', 'ADMIN_CLINICA', 'PROFISSIONAL', 'SUPORTE', 'UNKNOWN', 'ADMINISTRADOR', 'INACTIVE'):
@@ -72,8 +75,7 @@ class AuthorizationHttpPostgresTests(unittest.TestCase):
 
     def tearDown(self):
         self.db.rollback(); self.db.close()
-        with self.engine.begin() as c:
-            c.execute(text('TRUNCATE usuario_instituicao_acessos,institucional_operacoes,paciente_profissionais,paciente_instituicoes,profissional_instituicoes,instituicoes,pacientes,profissionais,usuarios,ocupacoes_profissionais CASCADE'))
+        AuthorizationHttpPostgresTests.drop_database.__func__(type(self))
 
     def request(self, method, suffix, payload=None, params=None, role='ADMIN', token=None):
         if token is None and role is not None:

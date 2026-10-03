@@ -23,6 +23,7 @@ from test_m0_baseline import config
 URL = os.getenv('G2C1_TEST_POSTGRES_URL')
 HEAD = 'g2c1_autorizacao_v1'
 PARENT = 'g2b1_institucional_v1'
+CURRENT = 'w1b_permissoes_v1'
 
 
 class AuthorizationContractTests(unittest.TestCase):
@@ -44,7 +45,7 @@ class AuthorizationContractTests(unittest.TestCase):
 @unittest.skipUnless(URL,'Requires disposable PostgreSQL 18')
 class AuthorizationPostgresTests(unittest.TestCase):
     @classmethod
-    def setUpClass(cls):
+    def create_database(cls):
         url=make_url(URL)
         if url.host!='127.0.0.1' or url.database!='m0_baseline':raise RuntimeError('Disposable local database only')
         cls.admin=create_engine(url,isolation_level='AUTOCOMMIT');cls.name='g2c1_'+uuid4().hex
@@ -52,15 +53,17 @@ class AuthorizationPostgresTests(unittest.TestCase):
             if int(c.execute(text('SHOW server_version_num')).scalar())//10000!=18:raise RuntimeError('PG18 required')
             c.execute(text('CREATE DATABASE '+cls.name))
         cls.engine=create_engine(url.set(database=cls.name))
-        with cls.engine.begin() as c:command.upgrade(config(c),HEAD)
+        with cls.engine.begin() as c:command.upgrade(config(c),CURRENT)
 
     @classmethod
-    def tearDownClass(cls):
+    def drop_database(cls):
         cls.engine.dispose()
         with cls.admin.connect() as c:c.execute(text('DROP DATABASE '+cls.name))
         cls.admin.dispose()
 
     def setUp(self):
+        # One current-schema database per test: no TRUNCATE across protected financial tables.
+        self.create_database()
         self.s=Service()
         with self.engine.begin() as c:
             self.users={}
@@ -73,7 +76,7 @@ class AuthorizationPostgresTests(unittest.TestCase):
 
     def tearDown(self):
         self.db.rollback();self.db.close()
-        with self.engine.begin() as c:c.execute(text('TRUNCATE usuario_instituicao_acessos,usuarios,instituicoes,pessoas,profissionais,pacientes CASCADE'))
+        self.drop_database()
 
     def create(self,db=None,profile='GESTOR',active=False,target=None,institution=None,actor=None):
         return self.s.create(db or self.db,dict(usuario_id=target or self.target,instituicao_id=institution or self.a,
@@ -86,7 +89,7 @@ class AuthorizationPostgresTests(unittest.TestCase):
         self.assertEqual({c['name']:str(c['type']) for c in cols},dict(id='INTEGER',usuario_id='INTEGER',instituicao_id='INTEGER',perfil_institucional='VARCHAR(16)',ativo='BOOLEAN'))
         self.assertEqual(next(c for c in cols if c['name']=='ativo')['default'],'false')
         self.assertEqual(i.get_pk_constraint('usuario_instituicao_acessos')['constrained_columns'],['id'])
-        self.assertEqual(i.get_unique_constraints('usuario_instituicao_acessos')[0]['column_names'],['usuario_id','instituicao_id'])
+        self.assertEqual({tuple(u['column_names']) for u in i.get_unique_constraints('usuario_instituicao_acessos')}, {('usuario_id','instituicao_id'), ('id','instituicao_id')})
         fks=i.get_foreign_keys('usuario_instituicao_acessos')
         self.assertEqual({(f['constrained_columns'][0],f['referred_table'],tuple(f['referred_columns']),f['options']['ondelete']) for f in fks},
                          {('usuario_id','usuarios',('id',),'RESTRICT'),('instituicao_id','instituicoes',('id',),'RESTRICT')})
@@ -243,9 +246,11 @@ class AuthorizationPostgresTests(unittest.TestCase):
             command.downgrade(config(c),PARENT)
             before=c.execute(text('SELECT to_jsonb(u) FROM usuarios u ORDER BY id')).scalars().all()
             command.upgrade(config(c),HEAD)
+            self.assertEqual(inspect(c).get_unique_constraints('usuario_instituicao_acessos')[0]['column_names'],['usuario_id','instituicao_id'])
             self.assertEqual(c.execute(text('SELECT count(*) FROM usuario_instituicao_acessos')).scalar(),0)
             self.assertEqual(c.execute(text('SELECT to_jsonb(u) FROM usuarios u ORDER BY id')).scalars().all(),before)
-        self.create();self.db.commit()
+        self.db.add(Acesso(usuario_id=self.target,instituicao_id=self.a,perfil_institucional='GESTOR',ativo=False))
+        self.db.commit()
         with self.assertRaisesRegex(RuntimeError,'DOWNGRADE_BLOCKED'):
             with self.engine.begin() as c:command.downgrade(config(c),PARENT)
         with self.engine.connect() as c:self.assertEqual(c.execute(text('SELECT version_num FROM alembic_version')).scalar(),HEAD)

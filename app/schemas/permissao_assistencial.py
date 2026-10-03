@@ -1,4 +1,4 @@
-"""Structural records, not HTTP commands or authorization decisions."""
+"""Structural records and command payloads; no HTTP or resource evaluator."""
 from datetime import date, datetime
 from typing import Annotated, Literal, Optional
 from uuid import UUID
@@ -93,3 +93,71 @@ class AutoridadeDelegacaoRecord(PermissionRecord):
     def scope_consistency(self):
         self.validate_scope(self.envelope_tipo)
         return self
+
+
+class ParticipationCreate(StructuralRecord):
+    instituicao_id: Identity
+    contexto_assistencial_id: Identity
+    profissional_instituicao_id: Identity
+    data_inicio: date
+    data_fim: Optional[date] = None
+    motivo: Reason
+
+    @model_validator(mode='after')
+    def period(self):
+        if self.data_fim is not None and self.data_fim < self.data_inicio:
+            raise ValueError('INVALID_PERIOD')
+        return self
+
+
+class GrantCommand(StructuralRecord):
+    instituicao_id: Identity
+    usuario_instituicao_acesso_id: Identity
+    capacidade: Capability
+    escopo_tipo: Scope
+    contexto_assistencial_id: Optional[Identity] = None
+    motivo: Reason
+
+    @model_validator(mode='after')
+    def scope(self):
+        if (self.escopo_tipo == 'CONTEXTO') != (self.contexto_assistencial_id is not None):
+            raise ValueError('INVALID_SCOPE')
+        if self.capacidade != 'CONTEXTO_ADMINISTRAR' and self.escopo_tipo != 'CONTEXTO':
+            raise ValueError('CLINICAL_CONTEXT_REQUIRED')
+        return self
+
+
+class AuthorityEnvelope(StructuralRecord):
+    capacidade_delegavel: Capability
+    envelope_tipo: Scope
+    contexto_assistencial_id: Optional[Identity] = None
+
+    @model_validator(mode='after')
+    def scope(self):
+        if (self.envelope_tipo == 'CONTEXTO') != (self.contexto_assistencial_id is not None):
+            raise ValueError('INVALID_SCOPE')
+        return self
+
+
+class AuthorityCommand(StructuralRecord):
+    instituicao_id: Identity
+    usuario_instituicao_acesso_id: Identity
+    envelopes: Annotated[list[AuthorityEnvelope], Field(min_length=1)]
+    motivo: Reason
+
+    @model_validator(mode='after')
+    def distinct_envelopes(self):
+        keys = [(e.capacidade_delegavel, e.envelope_tipo, e.contexto_assistencial_id) for e in self.envelopes]
+        if len(keys) != len(set(keys)):
+            raise ValueError('DUPLICATE_ENVELOPE')
+        return self
+
+
+class RevocationCommand(StructuralRecord):
+    instituicao_id: Identity
+    id: Identity
+    motivo: Reason
+
+
+class ParticipationClose(RevocationCommand):
+    data_fim: date
