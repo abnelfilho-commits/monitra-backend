@@ -24,6 +24,8 @@ class DiagnosticoService:
         db: Session,
         payload: DiagnosticoCreate,
         module_id: int,
+        *,
+        commit: bool = True,
     ) -> Diagnostico:
         paciente = (
             db.query(Paciente)
@@ -37,7 +39,14 @@ class DiagnosticoService:
                 detail="Paciente não encontrado.",
             )
 
-        diagnostico = Diagnostico(
+        diagnostico = DiagnosticoService._novo(payload, module_id)
+        db.add(diagnostico)
+        return DiagnosticoService._finalizar(db, diagnostico, commit=commit)
+
+    @staticmethod
+    def _novo(payload, module_id, contexto_assistencial_id=None):
+        return Diagnostico(
+            contexto_assistencial_id=contexto_assistencial_id,
             paciente_id=payload.paciente_id,
             modulo_id=module_id,
             tipo=payload.tipo,
@@ -52,10 +61,13 @@ class DiagnosticoService:
             observacoes=payload.observacoes,
         )
 
-        db.add(diagnostico)
-        db.commit()
-        db.refresh(diagnostico)
-
+    @staticmethod
+    def _finalizar(db, diagnostico, *, commit):
+        if commit:
+            db.commit()
+            db.refresh(diagnostico)
+        else:
+            db.flush()
         return diagnostico
 
     @staticmethod
@@ -111,6 +123,8 @@ class DiagnosticoService:
         db: Session,
         diagnostico_id: int,
         payload: DiagnosticoUpdate,
+        *,
+        commit: bool = True,
     ) -> Diagnostico:
         diagnostico = (
             DiagnosticoService.buscar_por_id(
@@ -130,15 +144,14 @@ class DiagnosticoService:
                 valor,
             )
 
-        db.commit()
-        db.refresh(diagnostico)
-
-        return diagnostico
+        return DiagnosticoService._finalizar(db, diagnostico, commit=commit)
 
     @staticmethod
     def cancelar(
         db: Session,
         diagnostico_id: int,
+        *,
+        commit: bool = True,
     ) -> Diagnostico:
         """
         Cancela logicamente o diagnóstico.
@@ -154,6 +167,11 @@ class DiagnosticoService:
             )
         )
 
+        DiagnosticoService._aplicar_cancelar(diagnostico)
+        return DiagnosticoService._finalizar(db, diagnostico, commit=commit)
+
+    @staticmethod
+    def _aplicar_cancelar(diagnostico):
         if diagnostico.status == "CANCELADO":
             raise HTTPException(
                 status_code=409,
@@ -162,15 +180,12 @@ class DiagnosticoService:
 
         diagnostico.status = "CANCELADO"
 
-        db.commit()
-        db.refresh(diagnostico)
-
-        return diagnostico
-
     @staticmethod
     def revisar(
         db: Session,
         diagnostico_id: int,
+        *,
+        commit: bool = True,
     ) -> Diagnostico:
         """
         Marca o diagnóstico como revisado.
@@ -186,6 +201,11 @@ class DiagnosticoService:
             )
         )
 
+        DiagnosticoService._aplicar_revisar(diagnostico)
+        return DiagnosticoService._finalizar(db, diagnostico, commit=commit)
+
+    @staticmethod
+    def _aplicar_revisar(diagnostico):
         if diagnostico.status == "CANCELADO":
             raise HTTPException(
                 status_code=409,
@@ -197,11 +217,68 @@ class DiagnosticoService:
 
         diagnostico.status = "REVISADO"
 
-        db.commit()
-        db.refresh(diagnostico)
+    # Internal persistence primitives, NOT authorization or an operational endpoint.
+    # The future caller must validate Context/Line, run the W1B evaluator and
+    # stabilize/revalidate the transaction before calling these methods.
+    # None of these methods commits, rolls back, retries or grants ADMIN bypass.
+    @staticmethod
+    def _exigir_identidade_contextual(contexto_assistencial_id, paciente_id, modulo_id):
+        if any(type(value) is not int or value <= 0 for value in
+               (contexto_assistencial_id, paciente_id, modulo_id)):
+            raise ValueError("Contexto, paciente e módulo explícitos são obrigatórios.")
 
+    @staticmethod
+    def _criar_contextual(db, payload: DiagnosticoCreate, *, contexto_assistencial_id, modulo_id):
+        DiagnosticoService._exigir_identidade_contextual(
+            contexto_assistencial_id, payload.paciente_id, modulo_id)
+        diagnostico = DiagnosticoService._novo(payload, modulo_id, contexto_assistencial_id)
+        db.add(diagnostico)
+        # Existing W1C-H composite FKs/checks enforce Context/Patient/Line.
+        return DiagnosticoService._finalizar(db, diagnostico, commit=False)
+
+    @staticmethod
+    def _buscar_contextual(db, diagnostico_id, *, contexto_assistencial_id, paciente_id, modulo_id):
+        DiagnosticoService._exigir_identidade_contextual(
+            contexto_assistencial_id, paciente_id, modulo_id)
+        diagnostico = db.query(Diagnostico).filter_by(
+            id=diagnostico_id, contexto_assistencial_id=contexto_assistencial_id,
+            paciente_id=paciente_id, modulo_id=modulo_id).first()
+        if diagnostico is None:
+            raise HTTPException(404, "Diagnóstico não encontrado.")
         return diagnostico
-    
+
+    @staticmethod
+    def _atualizar_contextual(db, diagnostico_id, dados: dict, *,
+                             contexto_assistencial_id, paciente_id, modulo_id):
+        # Validate raw internal changes before the legacy schema could ignore extras.
+        if set(dados) & {"contexto_assistencial_id", "paciente_id", "modulo_id"}:
+            raise ValueError("A identidade contextual do diagnóstico é imutável.")
+        if set(dados) - set(DiagnosticoUpdate.model_fields):
+            raise ValueError("Campo de diagnóstico não suportado.")
+        payload = DiagnosticoUpdate.model_validate(dados)
+        diagnostico = DiagnosticoService._buscar_contextual(db, diagnostico_id,
+            contexto_assistencial_id=contexto_assistencial_id,
+            paciente_id=paciente_id, modulo_id=modulo_id)
+        for campo, valor in payload.model_dump(exclude_unset=True).items():
+            setattr(diagnostico, campo, valor)
+        return DiagnosticoService._finalizar(db, diagnostico, commit=False)
+
+    @staticmethod
+    def _cancelar_contextual(db, diagnostico_id, *, contexto_assistencial_id, paciente_id, modulo_id):
+        diagnostico = DiagnosticoService._buscar_contextual(db, diagnostico_id,
+            contexto_assistencial_id=contexto_assistencial_id,
+            paciente_id=paciente_id, modulo_id=modulo_id)
+        DiagnosticoService._aplicar_cancelar(diagnostico)
+        return DiagnosticoService._finalizar(db, diagnostico, commit=False)
+
+    @staticmethod
+    def _revisar_contextual(db, diagnostico_id, *, contexto_assistencial_id, paciente_id, modulo_id):
+        diagnostico = DiagnosticoService._buscar_contextual(db, diagnostico_id,
+            contexto_assistencial_id=contexto_assistencial_id,
+            paciente_id=paciente_id, modulo_id=modulo_id)
+        DiagnosticoService._aplicar_revisar(diagnostico)
+        return DiagnosticoService._finalizar(db, diagnostico, commit=False)
+
     @staticmethod
     def serializar_para_relatorio(
         diagnostico: Diagnostico,
