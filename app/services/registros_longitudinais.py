@@ -59,7 +59,7 @@ def preencher_resposta(resposta: RespostaRegistro, valor):
         resposta.valor_json = valor
 
 
-def persistir_registro_longitudinal(db: Session, payload):
+def persistir_registro_longitudinal(db: Session, payload, *, contexto_assistencial_id=None, criado_por_usuario_id=None):
     """Insert without committing; caller owns transaction completion."""
     registro = RegistroLongitudinal(
         paciente_id=payload.paciente_id,
@@ -67,6 +67,8 @@ def persistir_registro_longitudinal(db: Session, payload):
         formulario_id=payload.formulario_id,
         data_registro=payload.data_registro,
         origem=payload.origem,
+        contexto_assistencial_id=contexto_assistencial_id,
+        criado_por_usuario_id=criado_por_usuario_id,
     )
 
     db.add(registro)
@@ -84,9 +86,13 @@ def persistir_registro_longitudinal(db: Session, payload):
     return registro
 
 
-def criar_registro_longitudinal(db: Session, payload, *, commit: bool = True):
+def criar_registro_longitudinal(db: Session, payload, *, commit: bool = True,
+                                contexto_assistencial_id=None, criado_por_usuario_id=None):
     """Legacy commits by default; commit=False leaves the entire unit to the caller."""
-    registro = persistir_registro_longitudinal(db, payload)
+    if contexto_assistencial_id is not None and commit:
+        raise ValueError("Contextual records require a caller-owned transaction")
+    registro = persistir_registro_longitudinal(db, payload,
+        contexto_assistencial_id=contexto_assistencial_id, criado_por_usuario_id=criado_por_usuario_id)
     if commit:
         db.commit()
         db.refresh(registro)

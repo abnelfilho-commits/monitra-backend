@@ -44,3 +44,5 @@ from .financeiro import (ServicoEconomico, TabelaPreco, TabelaPrecoVersao, Preco
 from .contexto_assistencial import ContextoAssistencial, ContextoAssistencialLinha
 
 from .permissao_assistencial import ContextoProfissional, ConcessaoAssistencial, AutoridadeDelegacao
+
+from .registro_proveniencia import RegistroProveniencia

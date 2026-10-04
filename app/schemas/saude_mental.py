@@ -1,4 +1,4 @@
-"""Minimal contextual read models; no clinical event or onboarding payload."""
+"""Contextual journey read models; no onboarding payload."""
 from datetime import date
 from typing import Literal, Optional
 from pydantic import BaseModel
@@ -28,3 +28,10 @@ class JornadaMental(BaseModel):
 class PessoasMentais(BaseModel):
     itens: list[JornadaMental]
     tem_mais: bool
+
+
+from app.schemas.checkin_bem_estar import BemEstarJornada
+
+
+class JornadaMentalDetalhe(JornadaMental):
+    bem_estar: BemEstarJornada

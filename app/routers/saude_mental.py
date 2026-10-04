@@ -1,9 +1,9 @@
-"""Authenticated read-only Mental Health boundary. No global-role bypass."""
+"""Authenticated Mental Health boundary. No global-role bypass."""
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy.orm import Session
 from app.core.deps import get_usuario_atual
 from app.database import get_db
-from app.schemas.saude_mental import InstituicaoDisponivel, JornadaMental, PessoasMentais
+from app.schemas.saude_mental import InstituicaoDisponivel, JornadaMentalDetalhe, PessoasMentais
 from app.services.saude_mental import SaudeMentalService, MentalHealthUnavailable
 
 router = APIRouter(prefix='/saude-mental', tags=['Saúde Mental'])
@@ -28,7 +28,7 @@ def people(instituicao_id: int = Query(..., gt=0, le=2147483647),
     return read(lambda: service.people(db, actor_id=actor.id, institution=instituicao_id, offset=offset))
 
 
-@router.get('/pessoas/{pessoa_id}/contextos/{contexto_id}', response_model=JornadaMental)
+@router.get('/pessoas/{pessoa_id}/contextos/{contexto_id}', response_model=JornadaMentalDetalhe)
 def journey(pessoa_id: int = Path(..., gt=0, le=2147483647),
             contexto_id: int = Path(..., gt=0, le=2147483647),
             instituicao_id: int = Query(..., gt=0, le=2147483647),
@@ -38,3 +38,36 @@ def journey(pessoa_id: int = Path(..., gt=0, le=2147483647),
     if result is None:
         raise HTTPException(404, {'code': 'JOURNEY_UNAVAILABLE'})
     return result
+
+
+from sqlalchemy.exc import SQLAlchemyError
+from app.schemas.checkin_bem_estar import CheckinCreate, CheckinOut
+from app.services.checkin_bem_estar import CheckinBemEstarService, CheckinDenied, CheckinInvalid, CheckinUnavailable
+
+
+@router.post('/pessoas/{pessoa_id}/contextos/{contexto_id}/check-ins', response_model=CheckinOut, status_code=201)
+def create_checkin(payload: CheckinCreate,
+                   pessoa_id: int = Path(..., gt=0, le=2147483647),
+                   contexto_id: int = Path(..., gt=0, le=2147483647),
+                   instituicao_id: int = Query(..., gt=0, le=2147483647),
+                   db: Session = Depends(get_db), actor=Depends(get_usuario_atual)):
+    try:
+        result=CheckinBemEstarService().create(db,payload,actor=actor.id,institution=instituicao_id,person=pessoa_id,context=contexto_id)
+        response=CheckinOut.model_validate(result).model_dump(mode='json')
+        db.commit()
+        return response
+    except CheckinDenied:
+        db.rollback()
+        raise HTTPException(403, {'code':'CHECKIN_UNAVAILABLE'}) from None
+    except CheckinInvalid:
+        db.rollback()
+        raise HTTPException(422, {'code':'INVALID_CHECKIN'}) from None
+    except CheckinUnavailable:
+        db.rollback()
+        raise HTTPException(503, {'code':'CHECKIN_CATALOG_UNAVAILABLE'}) from None
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(409, {'code':'CHECKIN_NOT_SAVED'}) from None
+    except Exception:
+        db.rollback()
+        raise HTTPException(500, {'code':'CHECKIN_NOT_SAVED'}) from None

@@ -34,15 +34,16 @@ class RegistryTests(unittest.TestCase):
     def test_registered_routes(self):
         from app.main import app
         self.assertEqual({r.path for r in app.routes if r.path.startswith("/saude-mental")},
-                         {"/saude-mental/instituicoes", "/saude-mental/pessoas", "/saude-mental/pessoas/{pessoa_id}/contextos/{contexto_id}"})
+                         {"/saude-mental/pessoas/{pessoa_id}/contextos/{contexto_id}/check-ins", "/saude-mental/instituicoes", "/saude-mental/pessoas", "/saude-mental/pessoas/{pessoa_id}/contextos/{contexto_id}"})
 
     def test_no_legacy_acl_or_write_api(self):
         for file in ('app/services/saude_mental.py','app/routers/saude_mental.py'):
             source=Path(file).read_text()
             self.assertNotIn('clinica_id',source)
             self.assertNotIn('ADMIN',source)
-            self.assertNotIn('.commit(',source)
-        self.assertTrue(all(route.methods == {'GET'} for route in router.routes))
+            if '/services/' in file:self.assertNotIn('.commit(',source)
+        self.assertTrue(all(route.methods == {'GET'} for route in router.routes if not route.path.endswith('/check-ins')))
+        self.assertEqual(sum(route.methods == {'POST'} for route in router.routes),1)
 
 
 @unittest.skipUnless(os.getenv('M0_TEST_POSTGRES_URL'), 'Requires disposable PostgreSQL 18')

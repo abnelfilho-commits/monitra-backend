@@ -9,7 +9,7 @@ from app.models.contexto_assistencial import ContextoAssistencial as Contexto, C
 from app.models.modular import ModuloClinico
 from app.services.autorizacao_contextual import AutorizacaoContextualService
 from app.services.care_lines.registry import MENTAL_HEALTH
-from app.schemas.saude_mental import JornadaMental, PessoasMentais, InstituicaoDisponivel
+from app.schemas.saude_mental import JornadaMentalDetalhe, JornadaMental, PessoasMentais, InstituicaoDisponivel
 
 
 class MentalHealthUnavailable(ValueError):
@@ -80,4 +80,8 @@ class SaudeMentalService:
             row = db.execute(self._query(actor_id=actor_id, institution=institution)
                              .where(Pessoa.id == person, Contexto.id == context)).mappings().one_or_none()
             # Not found and denied are indistinguishable. No prior resource load.
-            return self._result(row) if row else None
+            if row is None:
+                return None
+            from app.services.checkin_bem_estar import CheckinBemEstarService
+            wellbeing=CheckinBemEstarService().journey(db,actor=actor_id,institution=institution,person=person,context=context)
+            return JornadaMentalDetalhe(**self._result(row).model_dump(),bem_estar=wellbeing)
