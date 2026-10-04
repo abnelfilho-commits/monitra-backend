@@ -1,3 +1,4 @@
+from app.services.legacy_scope import legacy_session
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -49,7 +50,7 @@ def buscar_sessao(
     db: Session,
 ) -> SessaoAssistencial:
     sessao = (
-        db.query(SessaoAssistencial)
+        db.query(SessaoAssistencial).filter(legacy_session())
         .filter(SessaoAssistencial.id == sessao_id)
         .first()
     )

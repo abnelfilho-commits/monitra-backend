@@ -13,7 +13,7 @@ router = APIRouter(prefix="/diagnosticos", tags=["Diagnósticos"])
 
 
 def scoped_record(db, user, identity, care_line, write=False):
-    row = db.query(Diagnostico).filter_by(id=identity).first()
+    row = db.query(Diagnostico).filter(Diagnostico.contexto_assistencial_id.is_(None)).filter_by(id=identity).first()
     if row is None:
         raise HTTPException(404, "Diagnóstico não encontrado.")
     _, line = authorized_patient(db, user, row.paciente_id, care_line, write)
@@ -33,7 +33,7 @@ def criar_diagnostico(payload: DiagnosticoCreate, db: Session = Depends(get_db),
 def listar_diagnosticos_paciente(paciente_id: int, care_line: str = Query(...),
                                  db: Session = Depends(get_db), usuario=Depends(get_usuario_atual)):
     _, line = authorized_patient(db, usuario, paciente_id, care_line)
-    return db.query(Diagnostico).filter_by(paciente_id=paciente_id, modulo_id=line.module_id).order_by(
+    return db.query(Diagnostico).filter(Diagnostico.contexto_assistencial_id.is_(None)).filter_by(paciente_id=paciente_id, modulo_id=line.module_id).order_by(
         Diagnostico.data_diagnostico.desc(), Diagnostico.id.desc()).all()
 
 

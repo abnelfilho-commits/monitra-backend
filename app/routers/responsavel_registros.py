@@ -163,7 +163,7 @@ def listar_registros_meu_paciente(
             origem,
             criado_por_responsavel_id,
             criado_em
-        FROM registros_longitudinais
+        FROM (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) registros_longitudinais
         WHERE paciente_id = :paciente_id
           AND modulo_id = :modulo_id
           AND formulario_id = :formulario_id
@@ -230,7 +230,7 @@ def criar_registro_meu_paciente(
         {name: getattr(payload, name) for name in FIELDS},
     )
     result = call_write(db, submission)
-    registro = db.query(RegistroLongitudinal).filter(RegistroLongitudinal.id == result.record_id).one()
+    registro = db.query(RegistroLongitudinal).filter(RegistroLongitudinal.contexto_assistencial_id.is_(None)).filter(RegistroLongitudinal.id == result.record_id).one()
 
     respostas = extrair_respostas_registro(db, registro.id)
 
@@ -251,7 +251,7 @@ def obter_registro(
             origem,
             criado_por_responsavel_id,
             criado_em
-        FROM registros_longitudinais
+        FROM (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) registros_longitudinais
         WHERE id = :registro_id
           AND modulo_id = :modulo_id
           AND formulario_id = :formulario_id

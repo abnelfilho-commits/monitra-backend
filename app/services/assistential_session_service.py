@@ -1,3 +1,4 @@
+from app.services.legacy_scope import legacy_session
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -134,7 +135,7 @@ class AssistentialSessionService:
         # ---------------------------------------------------------
 
         sessao = (
-            db.query(SessaoAssistencial)
+            db.query(SessaoAssistencial).filter(legacy_session())
             .filter(
                 SessaoAssistencial.id == sessao_id
             )
@@ -171,7 +172,7 @@ class AssistentialSessionService:
         # ---------------------------------------------------------
 
         pts = (
-            db.query(PTS)
+            db.query(PTS).filter(PTS.contexto_assistencial_id.is_(None))
             .filter(
                 PTS.id == agenda.pts_id
             )
@@ -282,7 +283,7 @@ class AssistentialSessionService:
 
         if sessao.registro_longitudinal_id:
             registro = (
-                db.query(RegistroLongitudinal)
+                db.query(RegistroLongitudinal).filter(RegistroLongitudinal.contexto_assistencial_id.is_(None))
                 .filter(
                     RegistroLongitudinal.id
                     == sessao.registro_longitudinal_id
@@ -317,7 +318,7 @@ class AssistentialSessionService:
         # ---------------------------------------------------------
 
         intervencoes = (
-            db.query(Intervencao)
+            db.query(Intervencao).filter(Intervencao.contexto_assistencial_id.is_(None))
             .filter(
                 Intervencao.paciente_id == paciente.id
             )
@@ -627,7 +628,7 @@ class AssistentialSessionService:
         from sqlalchemy import func
         from app.models.pts import PTS
         from app.models.agenda_cuidado import AgendaCuidado
-        query = db.query(SessaoAssistencial)
+        query = db.query(SessaoAssistencial).filter(legacy_session())
         if module_id is not None:
             query = query.join(AgendaCuidado, AgendaCuidado.id==SessaoAssistencial.agenda_cuidado_id).join(
                 PTS, PTS.id==AgendaCuidado.pts_id).filter(PTS.modulo_id==module_id,PTS.paciente_id==patient_id)

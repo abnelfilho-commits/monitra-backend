@@ -22,7 +22,7 @@ class AssessmentBuilder:
                     formulario_id,
                     criado_por_usuario_id,
                     data_registro
-                FROM registros_longitudinais
+                FROM (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) registros_longitudinais
                 WHERE id = :registro_id
             """),
             {

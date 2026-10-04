@@ -77,7 +77,7 @@ class TimelineService:
                     MAX(CASE WHEN cf.nome_campo = 'observacao'
                         THEN rr.valor_texto END) AS observacao
 
-                FROM registros_longitudinais rl
+                FROM (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) rl
 
                 LEFT JOIN respostas_registro rr
                     ON rr.registro_id = rl.id
@@ -141,7 +141,7 @@ class TimelineService:
                     created_at,
                     descricao,
                     profissional_id
-                FROM intervencoes
+                FROM (SELECT * FROM intervencoes WHERE contexto_assistencial_id IS NULL) intervencoes
                 WHERE paciente_id = :paciente_id
                 ORDER BY created_at DESC, id DESC
             """),
@@ -193,9 +193,9 @@ class TimelineService:
                     ac.score,
                     ac.classificacao,
                     ac.created_at
-                FROM avaliacoes_clinicas ac
+                FROM (SELECT a.* FROM avaliacoes_clinicas a WHERE NOT EXISTS (SELECT 1 FROM registros_longitudinais ancestor WHERE ancestor.id=a.registro_id AND ancestor.contexto_assistencial_id IS NOT NULL)) ac
 
-                JOIN registros_longitudinais rl
+                JOIN (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) rl
                     ON rl.id = ac.registro_id
 
                 WHERE rl.paciente_id = :paciente_id
@@ -370,7 +370,7 @@ class TimelineService:
                     MAX(CASE WHEN cf.nome_campo = 'observacao'
                         THEN rr.valor_texto END) AS observacao
 
-                FROM registros_longitudinais rl
+                FROM (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) rl
                 LEFT JOIN respostas_registro rr
                     ON rr.registro_id = rl.id
                 LEFT JOIN campos_formulario cf
@@ -420,7 +420,7 @@ class TimelineService:
                     created_at,
                     descricao,
                     profissional_id
-                FROM intervencoes
+                FROM (SELECT * FROM intervencoes WHERE contexto_assistencial_id IS NULL) intervencoes
                 WHERE paciente_id = :paciente_id AND modulo_id = 1
                 ORDER BY created_at DESC, id DESC
             """),
@@ -457,8 +457,8 @@ class TimelineService:
                     ac.score,
                     ac.classificacao,
                     ac.created_at
-                FROM avaliacoes_clinicas ac
-                JOIN registros_longitudinais rl
+                FROM (SELECT a.* FROM avaliacoes_clinicas a WHERE NOT EXISTS (SELECT 1 FROM registros_longitudinais ancestor WHERE ancestor.id=a.registro_id AND ancestor.contexto_assistencial_id IS NOT NULL)) ac
+                JOIN (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) rl
                     ON rl.id = ac.registro_id
                 WHERE rl.paciente_id = :paciente_id AND rl.modulo_id = 1
                 ORDER BY ac.created_at DESC

@@ -67,7 +67,7 @@ def criar_registro_cardio_responsavel(
     existente = db.execute(
         text("""
             SELECT id
-            FROM registros_longitudinais
+            FROM (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) registros_longitudinais
             WHERE paciente_id = :paciente_id
               AND data_registro = :data_registro
               AND origem IN ('RESPONSAVEL', 'RESPONSAVEL_APP', 'RESPONSAVEL_WHATSAPP')
@@ -94,7 +94,7 @@ def criar_registro_cardio_responsavel(
     result = call_write(db, DailyRecordSubmission(paciente_id, 'CARDIO', payload.data,
         CareOrigin.RESPONSAVEL_APP, ActorRef(ActorType.RESPONSIBLE, responsavel.id), values))
     derived = db.execute(text("""SELECT score_clinico, risco, protocolo, leitura_clinica
-        FROM registros_longitudinais WHERE id=:id"""), {'id': result.record_id}).mappings().one()
+        FROM (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) registros_longitudinais WHERE id=:id"""), {'id': result.record_id}).mappings().one()
 
     return {
         "message": "Registro cardiometabólico criado com sucesso.",
@@ -134,7 +134,7 @@ def listar_registros_cardio_responsavel(
                 observacoes,
                 origem,
                 criado_por_responsavel_id
-            FROM registros_longitudinais
+            FROM (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) registros_longitudinais
             WHERE paciente_id = :paciente_id
               AND modulo_id = 2
               AND origem IN ('RESPONSAVEL', 'RESPONSAVEL_APP', 'RESPONSAVEL_WHATSAPP')

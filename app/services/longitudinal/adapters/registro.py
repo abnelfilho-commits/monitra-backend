@@ -24,7 +24,7 @@ class RegistroAdapter(LongitudinalAdapter):
 
                 COALESCE(prof.nome, u.nome) AS profissional
 
-            FROM registros_longitudinais rl
+            FROM (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) rl
 
             JOIN pacientes p
             ON p.id = rl.paciente_id

@@ -108,7 +108,7 @@ class CockpitGestaoService:
                 SELECT DISTINCT paciente_id
                 FROM (
                     SELECT rl.paciente_id
-                    FROM registros_longitudinais rl
+                    FROM (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) rl
                     JOIN pacientes p
                     ON p.id = rl.paciente_id
                     WHERE p.ativo = TRUE
@@ -118,7 +118,11 @@ class CockpitGestaoService:
                     UNION
 
                     SELECT sa.paciente_id
-                    FROM sessoes_assistenciais sa
+                    FROM (SELECT s.* FROM sessoes_assistenciais s WHERE NOT EXISTS (
+                    SELECT 1 FROM agenda_cuidados g JOIN pts p ON p.id=g.pts_id
+                    WHERE g.id=s.agenda_cuidado_id AND p.contexto_assistencial_id IS NOT NULL)
+                    AND NOT EXISTS (SELECT 1 FROM agenda_cuidados g JOIN pts_objetivos o ON o.id=g.objetivo_id JOIN pts p ON p.id=o.pts_id
+                    WHERE g.id=s.agenda_cuidado_id AND p.contexto_assistencial_id IS NOT NULL)) sa
                     JOIN pacientes p
                     ON p.id = sa.paciente_id
                     WHERE p.ativo = TRUE
@@ -129,7 +133,7 @@ class CockpitGestaoService:
                     UNION
 
                     SELECT ac.paciente_id
-                    FROM avaliacoes_clinicas ac
+                    FROM (SELECT a.* FROM avaliacoes_clinicas a WHERE NOT EXISTS (SELECT 1 FROM registros_longitudinais ancestor WHERE ancestor.id=a.registro_id AND ancestor.contexto_assistencial_id IS NOT NULL)) ac
                     JOIN pacientes p
                     ON p.id = ac.paciente_id
                     WHERE p.ativo = TRUE
@@ -140,7 +144,7 @@ class CockpitGestaoService:
                     UNION
 
                     SELECT i.paciente_id
-                    FROM intervencoes i
+                    FROM (SELECT * FROM intervencoes WHERE contexto_assistencial_id IS NULL) i
                     JOIN pacientes p
                     ON p.id = i.paciente_id
                     WHERE p.ativo = TRUE
@@ -327,7 +331,7 @@ class CockpitGestaoService:
             SELECT tipo, COUNT(*) AS total
             FROM (
                 SELECT 'REGISTRO_DIARIO' AS tipo
-                FROM registros_longitudinais rl
+                FROM (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) rl
                 JOIN pacientes p
                 ON p.id = rl.paciente_id
                 WHERE p.ativo = TRUE
@@ -337,7 +341,11 @@ class CockpitGestaoService:
                 UNION ALL
 
                 SELECT 'SESSAO_REALIZADA' AS tipo
-                FROM sessoes_assistenciais sa
+                FROM (SELECT s.* FROM sessoes_assistenciais s WHERE NOT EXISTS (
+                    SELECT 1 FROM agenda_cuidados g JOIN pts p ON p.id=g.pts_id
+                    WHERE g.id=s.agenda_cuidado_id AND p.contexto_assistencial_id IS NOT NULL)
+                    AND NOT EXISTS (SELECT 1 FROM agenda_cuidados g JOIN pts_objetivos o ON o.id=g.objetivo_id JOIN pts p ON p.id=o.pts_id
+                    WHERE g.id=s.agenda_cuidado_id AND p.contexto_assistencial_id IS NOT NULL)) sa
                 JOIN pacientes p
                 ON p.id = sa.paciente_id
                 WHERE p.ativo = TRUE
@@ -348,7 +356,7 @@ class CockpitGestaoService:
                 UNION ALL
 
                 SELECT 'AVALIACAO_CLINICA' AS tipo
-                FROM avaliacoes_clinicas ac
+                FROM (SELECT a.* FROM avaliacoes_clinicas a WHERE NOT EXISTS (SELECT 1 FROM registros_longitudinais ancestor WHERE ancestor.id=a.registro_id AND ancestor.contexto_assistencial_id IS NOT NULL)) ac
                 JOIN pacientes p
                 ON p.id = ac.paciente_id
                 WHERE p.ativo = TRUE
@@ -359,7 +367,7 @@ class CockpitGestaoService:
                 UNION ALL
 
                 SELECT 'INTERVENCAO' AS tipo
-                FROM intervencoes i
+                FROM (SELECT * FROM intervencoes WHERE contexto_assistencial_id IS NULL) i
                 JOIN pacientes p
                 ON p.id = i.paciente_id
                 WHERE p.ativo = TRUE
@@ -505,7 +513,7 @@ class CockpitGestaoService:
                         END
                     ) AS observacao
 
-                FROM registros_longitudinais rl
+                FROM (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) rl
 
                 JOIN pacientes p
                     ON p.id = rl.paciente_id
@@ -568,7 +576,7 @@ class CockpitGestaoService:
                     i.data_intervencao,
                     i.descricao
 
-                FROM intervencoes i
+                FROM (SELECT * FROM intervencoes WHERE contexto_assistencial_id IS NULL) i
 
                 JOIN pacientes p
                     ON p.id = i.paciente_id
@@ -617,9 +625,9 @@ class CockpitGestaoService:
                     ac.classificacao,
                     ac.created_at
 
-                FROM avaliacoes_clinicas ac
+                FROM (SELECT a.* FROM avaliacoes_clinicas a WHERE NOT EXISTS (SELECT 1 FROM registros_longitudinais ancestor WHERE ancestor.id=a.registro_id AND ancestor.contexto_assistencial_id IS NOT NULL)) ac
 
-                JOIN registros_longitudinais rl
+                JOIN (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) rl
                     ON rl.id = ac.registro_id
 
                 JOIN pacientes p
@@ -673,7 +681,11 @@ class CockpitGestaoService:
                     sa.hora_fim_real,
                     at.nome AS atividade_nome
 
-                FROM sessoes_assistenciais sa
+                FROM (SELECT s.* FROM sessoes_assistenciais s WHERE NOT EXISTS (
+                    SELECT 1 FROM agenda_cuidados g JOIN pts p ON p.id=g.pts_id
+                    WHERE g.id=s.agenda_cuidado_id AND p.contexto_assistencial_id IS NOT NULL)
+                    AND NOT EXISTS (SELECT 1 FROM agenda_cuidados g JOIN pts_objetivos o ON o.id=g.objetivo_id JOIN pts p ON p.id=o.pts_id
+                    WHERE g.id=s.agenda_cuidado_id AND p.contexto_assistencial_id IS NOT NULL)) sa
 
                 JOIN pacientes p
                     ON p.id = sa.paciente_id
@@ -744,7 +756,7 @@ class CockpitGestaoService:
                     d.cid,
                     d.descricao_clinica
 
-                FROM diagnosticos d
+                FROM (SELECT * FROM diagnosticos WHERE contexto_assistencial_id IS NULL) d
 
                 JOIN pacientes p
                     ON p.id = d.paciente_id
@@ -847,7 +859,7 @@ class CockpitGestaoService:
 
                 FROM pacientes p
 
-                LEFT JOIN registros_longitudinais rl
+                LEFT JOIN (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) rl
                     ON rl.paciente_id = p.id
                    AND rl.modulo_id = 1
 
@@ -1141,10 +1153,10 @@ class CockpitGestaoService:
 
                 FROM pacientes p
 
-                LEFT JOIN registros_longitudinais rl
+                LEFT JOIN (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) rl
                     ON rl.paciente_id = p.id
 
-                LEFT JOIN intervencoes i
+                LEFT JOIN (SELECT * FROM intervencoes WHERE contexto_assistencial_id IS NULL) i
                     ON i.paciente_id = p.id
 
                 WHERE p.ativo = TRUE
@@ -1290,7 +1302,7 @@ class CockpitGestaoService:
             SELECT COUNT(*)
             FROM (
                 SELECT rl.paciente_id
-                FROM registros_longitudinais rl
+                FROM (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) rl
                 JOIN pacientes p ON p.id = rl.paciente_id
                 WHERE p.ativo = true
                 AND rl.data_registro >= :data_inicio
@@ -1299,7 +1311,11 @@ class CockpitGestaoService:
                 UNION
 
                 SELECT sa.paciente_id
-                FROM sessoes_assistenciais sa
+                FROM (SELECT s.* FROM sessoes_assistenciais s WHERE NOT EXISTS (
+                    SELECT 1 FROM agenda_cuidados g JOIN pts p ON p.id=g.pts_id
+                    WHERE g.id=s.agenda_cuidado_id AND p.contexto_assistencial_id IS NOT NULL)
+                    AND NOT EXISTS (SELECT 1 FROM agenda_cuidados g JOIN pts_objetivos o ON o.id=g.objetivo_id JOIN pts p ON p.id=o.pts_id
+                    WHERE g.id=s.agenda_cuidado_id AND p.contexto_assistencial_id IS NOT NULL)) sa
                 JOIN pacientes p ON p.id = sa.paciente_id
                 WHERE p.ativo = true
                 AND sa.status = 'REALIZADA'
@@ -1310,7 +1326,7 @@ class CockpitGestaoService:
                 UNION
 
                 SELECT ac.paciente_id
-                FROM avaliacoes_clinicas ac
+                FROM (SELECT a.* FROM avaliacoes_clinicas a WHERE NOT EXISTS (SELECT 1 FROM registros_longitudinais ancestor WHERE ancestor.id=a.registro_id AND ancestor.contexto_assistencial_id IS NOT NULL)) ac
                 JOIN pacientes p ON p.id = ac.paciente_id
                 WHERE p.ativo = true
                 AND ac.status = 'CONCLUIDA'
@@ -1320,7 +1336,7 @@ class CockpitGestaoService:
                 UNION
 
                 SELECT i.paciente_id
-                FROM intervencoes i
+                FROM (SELECT * FROM intervencoes WHERE contexto_assistencial_id IS NULL) i
                 JOIN pacientes p ON p.id = i.paciente_id
                 WHERE p.ativo = true
                 AND i.paciente_id IS NOT NULL

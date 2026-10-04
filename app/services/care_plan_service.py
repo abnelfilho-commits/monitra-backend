@@ -3,6 +3,7 @@
 Patient locks serialize active-plan changes. Agenda locks serialize planning
 mutation with scheduling confirmation. Legacy reads never infer historical lines.
 """
+from app.services.legacy_scope import legacy_agenda, legacy_session
 from datetime import date
 from functools import wraps
 
@@ -59,6 +60,14 @@ class CarePlanService:
     @staticmethod
     def row(db, model, identity, lock=False):
         query = db.query(model).filter(model.id == identity)
+        if model is PTS:
+            query = query.filter(PTS.contexto_assistencial_id.is_(None))
+        elif model is PTSObjetivo:
+            query = query.filter(~PTSObjetivo.pts.has(PTS.contexto_assistencial_id.is_not(None)))
+        elif model is AgendaCuidado:
+            query = query.filter(legacy_agenda())
+        elif model is SessaoAssistencial:
+            query = query.filter(legacy_session())
         if lock:
             query = query.populate_existing().with_for_update()
         row = query.first()
@@ -100,7 +109,7 @@ class CarePlanService:
 
     @staticmethod
     def conflict(db, patient_id, module_id, exclude=None):
-        query = db.query(PTS.id).filter(PTS.paciente_id == patient_id,
+        query = db.query(PTS.id).filter(PTS.contexto_assistencial_id.is_(None)).filter(PTS.paciente_id == patient_id,
             PTS.modulo_id == module_id, PTS.status == 'ATIVO')
         if exclude is not None:
             query = query.filter(PTS.id != exclude)
@@ -122,7 +131,7 @@ class CarePlanService:
     def list_scoped(self, db, patient_id, user, requested_line=None):
         self.patient(db, patient_id, user)
         line = self.resolver.resolve(db, patient_id, requested_line)
-        return db.query(PTS).filter(PTS.paciente_id == patient_id,
+        return db.query(PTS).filter(PTS.contexto_assistencial_id.is_(None)).filter(PTS.paciente_id == patient_id,
             PTS.modulo_id == line.module_id).order_by(PTS.id.desc()).all()
 
     def list_plans(self, db, patient_id, user, requested_line=None):
@@ -130,7 +139,7 @@ class CarePlanService:
             return self.list_scoped(db, patient_id, user, requested_line)
         # Explicit compatibility path; never chooses an active plan across lines.
         self.patient(db, patient_id, user)
-        return db.query(PTS).filter(PTS.paciente_id == patient_id).order_by(PTS.id.desc()).all()
+        return db.query(PTS).filter(PTS.contexto_assistencial_id.is_(None)).filter(PTS.paciente_id == patient_id).order_by(PTS.id.desc()).all()
 
     @transaction
     def set_closed(self, db, identity, user, closed):
@@ -186,7 +195,7 @@ class CarePlanService:
 
     def list_agendas(self, db, objective_id, user):
         self.objective(db, objective_id, user)
-        rows = db.query(AgendaCuidado).filter(AgendaCuidado.objetivo_id == objective_id).order_by(
+        rows = db.query(AgendaCuidado).filter(legacy_agenda()).filter(AgendaCuidado.objetivo_id == objective_id).order_by(
             AgendaCuidado.created_at.desc()).all()
         for row in rows:
             self.agenda(db, row.id, user)

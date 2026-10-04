@@ -12,7 +12,7 @@ db = SessionLocal()
 
 rows = db.execute(text("""
     SELECT id
-    FROM registros_longitudinais
+    FROM (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) registros_longitudinais
     WHERE modulo_id = 2
 """)).fetchall()
 
@@ -63,7 +63,7 @@ for row in rows:
             risco = :risco,
             protocolo = :protocolo,
             leitura_clinica = :leitura
-        WHERE id = :registro_id
+        WHERE id = :registro_id AND contexto_assistencial_id IS NULL
     """), {
         "score": score,
         "risco": risco,

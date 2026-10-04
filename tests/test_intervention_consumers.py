@@ -44,9 +44,12 @@ class ConsumerTests(Fixture):
     def test_cockpit_gestao_count_unchanged_by_module(self):
         self.seed_interventions()
         for table,columns in {
-            'registros_longitudinais':'paciente_id INTEGER, data_registro DATE',
-            'sessoes_assistenciais':'paciente_id INTEGER, status TEXT, data_realizacao DATE',
-            'avaliacoes_clinicas':'paciente_id INTEGER, status TEXT, executado_em TIMESTAMP'}.items():
+            'registros_longitudinais':'id INTEGER, contexto_assistencial_id INTEGER, paciente_id INTEGER, data_registro DATE',
+            'sessoes_assistenciais':'agenda_cuidado_id INTEGER, paciente_id INTEGER, status TEXT, data_realizacao DATE',
+            'avaliacoes_clinicas':'registro_id INTEGER, paciente_id INTEGER, status TEXT, executado_em TIMESTAMP',
+            'pts':'id INTEGER, contexto_assistencial_id INTEGER',
+            'pts_objetivos':'id INTEGER, pts_id INTEGER',
+            'agenda_cuidados':'id INTEGER, pts_id INTEGER, objetivo_id INTEGER'}.items():
             self.db.execute(text('CREATE TABLE '+table+' ('+columns+')'))
         result=CockpitGestaoService.obter_atividade_assistencial(self.db,self.user)
         self.assertEqual(result['intervencoes'],3)

@@ -34,7 +34,8 @@ def read_neuro_batch(db, patient_ids, request):
         .join(Agenda, Sessao.agenda_cuidado_id == Agenda.id)
         .join(PTS, Agenda.pts_id == PTS.id)
         .outerjoin(PTSObjetivo, Agenda.objetivo_id == PTSObjetivo.id)
-        .where(PTS.modulo_id == NEURO.module_id,
+        .where(PTS.contexto_assistencial_id.is_(None),
+               ~PTSObjetivo.pts.has(PTS.contexto_assistencial_id.is_not(None)), PTS.modulo_id == NEURO.module_id,
                or_(PTS.paciente_id.in_(patient_ids), Sessao.paciente_id.in_(patient_ids)),
                Sessao.status.in_(('AGENDADA', 'CONFIRMADA')),
                Sessao.data_agendada.between(request.data_inicio, request.data_fim))
@@ -56,7 +57,8 @@ def read_neuro_batch(db, patient_ids, request):
         select(Agenda.id, Agenda.pts_id, PTS.paciente_id, PTSObjetivo.pts_id.label('objetivo_pts_id'))
         .join(PTS, Agenda.pts_id == PTS.id)
         .outerjoin(PTSObjetivo, Agenda.objetivo_id == PTSObjetivo.id)
-        .where(PTS.paciente_id.in_(patient_ids), PTS.modulo_id == NEURO.module_id,
+        .where(PTS.contexto_assistencial_id.is_(None),
+               ~PTSObjetivo.pts.has(PTS.contexto_assistencial_id.is_not(None)), PTS.paciente_id.in_(patient_ids), PTS.modulo_id == NEURO.module_id,
                Agenda.data_inicio <= request.data_fim,
                or_(Agenda.data_fim.is_(None), Agenda.data_fim >= request.data_inicio))
         .order_by(Agenda.id)).all()

@@ -60,11 +60,11 @@ def actor(namespace, identity, name=None):
 def daily_records(db, patient_id, registry, module_id=None, limit=None, recent_activity=False):
     records = rows(db, '''SELECT r.paciente_id AS patient_id, r.id, r.modulo_id, r.formulario_id, r.data_registro,
         r.criado_em, r.origem, r.observacoes, r.criado_por_usuario_id, r.criado_por_responsavel_id
-        FROM registros_longitudinais r JOIN formularios_modulo f ON f.id=r.formulario_id
+        FROM (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) r JOIN formularios_modulo f ON f.id=r.formulario_id
         WHERE r.paciente_id=:patient_id AND f.tipo='REGISTRO_DIARIO' AND f.modulo_id=r.modulo_id''', patient_id, module_id, 'r.modulo_id', limit, 'r.criado_em DESC, r.id DESC' if recent_activity else 'r.data_registro DESC, r.id ASC')
     answers = rows(db, '''SELECT a.registro_id, c.id AS field_id, c.nome_campo,
         a.valor_texto, a.valor_numero, a.valor_booleano, a.valor_data, a.valor_hora, a.valor_json
-        FROM respostas_registro a JOIN registros_longitudinais r ON r.id=a.registro_id
+        FROM respostas_registro a JOIN (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) r ON r.id=a.registro_id
         JOIN formularios_modulo f ON f.id=r.formulario_id
         JOIN campos_formulario c ON c.id=a.campo_id AND c.formulario_id=r.formulario_id
         WHERE r.paciente_id=:patient_id AND f.tipo='REGISTRO_DIARIO' AND f.modulo_id=r.modulo_id''', patient_id, record_ids=[r['id'] for r in records])
@@ -95,7 +95,7 @@ def daily_records(db, patient_id, registry, module_id=None, limit=None, recent_a
 def generic_interventions(db, patient_id, registry, module_id=None, limit=None, recent_activity=False):
     result = []
     for r in rows(db, '''SELECT paciente_id AS patient_id, id, modulo_id, profissional_id, tipo, descricao, data_intervencao, created_at
-                        FROM intervencoes WHERE paciente_id=:patient_id''', patient_id, module_id, 'modulo_id', limit, 'created_at DESC, id DESC' if recent_activity else 'DATE(COALESCE(data_intervencao, created_at)) DESC NULLS LAST, (data_intervencao IS NOT NULL) DESC, data_intervencao DESC NULLS LAST, id ASC'):
+                        FROM (SELECT * FROM intervencoes WHERE contexto_assistencial_id IS NULL) intervencoes WHERE paciente_id=:patient_id''', patient_id, module_id, 'modulo_id', limit, 'created_at DESC, id DESC' if recent_activity else 'DATE(COALESCE(data_intervencao, created_at)) DESC NULLS LAST, (data_intervencao IS NOT NULL) DESC, data_intervencao DESC NULLS LAST, id ASC'):
         occurrence = as_datetime(r['data_intervencao'])
         result.append(TimelineEvent(S.GENERIC_INTERVENTION, r['id'], r.get('patient_id', patient_id), registry.get(r['modulo_id']),
             A.EXPLICIT, E.INTERVENTION, 'Intervenção',
@@ -128,8 +128,8 @@ def assessments(db, patient_id, registry, module_id=None, limit=None):
                   'executed_at':as_datetime(r['executado_em'])})
         for r in rows(db, '''SELECT a.paciente_id AS patient_id, a.id, a.modulo_id, a.registro_id, a.instrumento, a.score,
             a.classificacao, a.interpretacao, a.profissional_id, a.status, a.executado_em,
-            a.created_at, r.data_registro FROM avaliacoes_clinicas a
-            LEFT JOIN registros_longitudinais r ON r.id=a.registro_id AND r.paciente_id=a.paciente_id
+            a.created_at, r.data_registro FROM (SELECT a.* FROM avaliacoes_clinicas a WHERE NOT EXISTS (SELECT 1 FROM registros_longitudinais ancestor WHERE ancestor.id=a.registro_id AND ancestor.contexto_assistencial_id IS NOT NULL)) a
+            LEFT JOIN (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) r ON r.id=a.registro_id AND r.paciente_id=a.paciente_id
             WHERE a.paciente_id=:patient_id''', patient_id, module_id, 'a.modulo_id', limit, 'a.created_at DESC, a.id DESC')]
 
 
@@ -144,7 +144,8 @@ def sessions(db, patient_id, registry, module_id=None, limit=None, recent_activi
         FROM sessoes_assistenciais s LEFT JOIN agenda_cuidados g ON g.id=s.agenda_cuidado_id
         LEFT JOIN pts p ON p.id=g.pts_id
         {extra_join}
-        WHERE s.paciente_id=:patient_id AND s.status='REALIZADA' '''.format(extra_columns=extra_columns, extra_join=extra_join), patient_id, module_id, 'p.modulo_id', limit, 's.data_realizacao DESC, s.numero_sessao DESC'):
+        WHERE s.paciente_id=:patient_id AND NOT EXISTS (SELECT 1 FROM pts legacy_root WHERE legacy_root.id=g.pts_id AND legacy_root.contexto_assistencial_id IS NOT NULL)
+          AND NOT EXISTS (SELECT 1 FROM pts_objetivos legacy_objective JOIN pts legacy_root ON legacy_root.id=legacy_objective.pts_id WHERE legacy_objective.id=g.objetivo_id AND legacy_root.contexto_assistencial_id IS NOT NULL) AND s.status='REALIZADA' '''.format(extra_columns=extra_columns, extra_join=extra_join), patient_id, module_id, 'p.modulo_id', limit, 's.data_realizacao DESC, s.numero_sessao DESC'):
         module = r['modulo_id'] if r['pts_patient_id']==r.get('patient_id', patient_id) else None
         day = as_date(r['data_realizacao'])
         clock = as_time(r['hora_fim_real']) if day else None
@@ -167,7 +168,7 @@ def diagnoses(db, patient_id, registry, module_id=None, limit=None, recent_activ
         summary=r['descricao_clinica'], actor=actor('authored_physician', None, r['medico_nome']),
         metadata={'cid':r['cid'], 'status':r['status']})
         for r in rows(db, '''SELECT paciente_id AS patient_id, id, modulo_id, data_diagnostico, created_at, descricao_clinica,
-            medico_nome, cid, status FROM diagnosticos
+            medico_nome, cid, status FROM (SELECT * FROM diagnosticos WHERE contexto_assistencial_id IS NULL) diagnosticos
             WHERE paciente_id=:patient_id AND status <> 'CANCELADO' ''', patient_id, module_id, 'modulo_id', limit, 'data_diagnostico DESC, id DESC' if recent_activity else 'data_diagnostico DESC, id ASC')]
 
 

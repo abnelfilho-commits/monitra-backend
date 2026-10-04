@@ -9,7 +9,7 @@ class DiagnosisProvider(BaseProvider):
     version = '2.0'
 
     def collect(self, context):
-        records = context.db.query(Diagnostico).filter(
+        records = context.db.query(Diagnostico).filter(Diagnostico.contexto_assistencial_id.is_(None)).filter(
             Diagnostico.paciente_id==context.subject_id,
             Diagnostico.modulo_id==context.care_line.module_id,
             or_(Diagnostico.data_diagnostico.between(context.period_start,context.period_end),

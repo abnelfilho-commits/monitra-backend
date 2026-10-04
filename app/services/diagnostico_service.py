@@ -64,7 +64,7 @@ class DiagnosticoService:
         diagnostico_id: int,
     ) -> Diagnostico:
         diagnostico = (
-            db.query(Diagnostico)
+            db.query(Diagnostico).filter(Diagnostico.contexto_assistencial_id.is_(None))
             .filter(Diagnostico.id == diagnostico_id)
             .first()
         )
@@ -95,7 +95,7 @@ class DiagnosticoService:
             )
 
         return (
-            db.query(Diagnostico)
+            db.query(Diagnostico).filter(Diagnostico.contexto_assistencial_id.is_(None))
             .filter(
                 Diagnostico.paciente_id == paciente_id
             )

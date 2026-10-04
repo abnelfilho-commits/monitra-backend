@@ -66,7 +66,7 @@ def obter_assessment_por_registro(
             status,
             executado_em,
             created_at
-        FROM avaliacoes_clinicas
+        FROM (SELECT a.* FROM avaliacoes_clinicas a WHERE NOT EXISTS (SELECT 1 FROM registros_longitudinais ancestor WHERE ancestor.id=a.registro_id AND ancestor.contexto_assistencial_id IS NOT NULL)) avaliacoes_clinicas
         WHERE registro_id = :registro_id
         ORDER BY id DESC
         LIMIT 1
@@ -116,7 +116,7 @@ def listar_assessments_paciente(
             score,
             classificacao,
             created_at
-        FROM avaliacoes_clinicas
+        FROM (SELECT a.* FROM avaliacoes_clinicas a WHERE NOT EXISTS (SELECT 1 FROM registros_longitudinais ancestor WHERE ancestor.id=a.registro_id AND ancestor.contexto_assistencial_id IS NOT NULL)) avaliacoes_clinicas
         WHERE paciente_id = :paciente_id
         ORDER BY created_at DESC
     """), {
@@ -162,7 +162,7 @@ def obter_assessment(
             status,
             executado_em,
             created_at
-        FROM avaliacoes_clinicas
+        FROM (SELECT a.* FROM avaliacoes_clinicas a WHERE NOT EXISTS (SELECT 1 FROM registros_longitudinais ancestor WHERE ancestor.id=a.registro_id AND ancestor.contexto_assistencial_id IS NOT NULL)) avaliacoes_clinicas
         WHERE id = :assessment_id
         LIMIT 1
     """), {

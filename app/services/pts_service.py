@@ -4,6 +4,7 @@ Serviço de domínio responsável pelo Plano Terapêutico Singular (PTS).
 Centraliza a leitura do PTS, objetivos e planejamentos assistenciais
 para reutilização pelo Report Engine e futuros consumidores.
 """
+from app.services.legacy_scope import legacy_agenda
 
 from typing import Any, Dict, List
 
@@ -27,7 +28,7 @@ class PTSService:
         """
 
         return (
-            db.query(PTS)
+            db.query(PTS).filter(PTS.contexto_assistencial_id.is_(None))
             .options(
                 joinedload(PTS.objetivos),
             )
@@ -52,7 +53,7 @@ class PTSService:
         """
 
         return (
-            db.query(AgendaCuidado)
+            db.query(AgendaCuidado).filter(legacy_agenda())
             .options(
                 joinedload(AgendaCuidado.atividade),
                 joinedload(AgendaCuidado.ocupacao),

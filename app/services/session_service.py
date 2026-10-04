@@ -3,6 +3,7 @@
 Existing identity derives from persisted ancestry, never current patient links.
 Mutation methods own one commit/rollback and serialize on the session row.
 """
+from app.services.legacy_scope import legacy_session
 from datetime import datetime
 from typing import Optional
 
@@ -33,7 +34,7 @@ class SessionService:
         elif clinical:
             raise HTTPException(422, 'UNASSIGNED: sessão sem linha de cuidado definida.')
         if session.registro_longitudinal_id is not None:
-            record = db.query(RegistroLongitudinal).filter_by(id=session.registro_longitudinal_id).first()
+            record = db.query(RegistroLongitudinal).filter(RegistroLongitudinal.contexto_assistencial_id.is_(None)).filter_by(id=session.registro_longitudinal_id).first()
             form = db.query(FormularioModulo).filter_by(id=record.formulario_id).first() if record else None
             if (record is None or form is None or record.paciente_id != pts.paciente_id
                     or record.modulo_id != pts.modulo_id or form.modulo_id != pts.modulo_id
@@ -43,7 +44,7 @@ class SessionService:
 
     def patient_sessions(self, db, patient_id, user, care_line=None):
         self.care_plans.patient(db, patient_id, user)
-        query = db.query(SessaoAssistencial).filter_by(paciente_id=patient_id)
+        query = db.query(SessaoAssistencial).filter(legacy_session()).filter_by(paciente_id=patient_id)
         if care_line is not None:
             from app.services.care_lines.access import authorized_patient
             _, line = authorized_patient(db, user, patient_id, care_line)
@@ -73,7 +74,7 @@ class SessionService:
             PTS, PTS.id == PTSObjetivo.pts_id).join(Paciente, Paciente.id == PTS.paciente_id).filter(
                 AgendaCuidado.id == SessaoAssistencial.agenda_cuidado_id,
                 or_(Paciente.clinica_id.is_(None), Paciente.clinica_id != user.clinica_id)).exists()
-        rows = db.query(SessaoAssistencial).filter(
+        rows = db.query(SessaoAssistencial).filter(legacy_session()).filter(
             SessaoAssistencial.profissional_id == user.profissional_id,
             ~foreign_patient, ~foreign_ancestry).order_by(
             SessaoAssistencial.data_agendada, SessaoAssistencial.hora_inicio).all()

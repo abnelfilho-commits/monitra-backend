@@ -36,7 +36,7 @@ def authorized_lines(db, responsible_id, patient_id):
 
 
 def record_exists(db, patient_id, line, reference_date, responsible_id=None):
-    query = db.query(RegistroLongitudinal.id).filter(
+    query = db.query(RegistroLongitudinal.id).filter(RegistroLongitudinal.contexto_assistencial_id.is_(None)).filter(
         RegistroLongitudinal.paciente_id == patient_id,
         RegistroLongitudinal.modulo_id == line.module_id,
         RegistroLongitudinal.data_registro == reference_date,

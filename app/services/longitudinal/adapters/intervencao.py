@@ -19,7 +19,7 @@ class IntervencaoAdapter(LongitudinalAdapter):
 
                 COALESCE(prof.nome, u.nome) AS profissional
 
-            FROM intervencoes i
+            FROM (SELECT * FROM intervencoes WHERE contexto_assistencial_id IS NULL) i
 
             LEFT JOIN pacientes p
               ON p.id = i.paciente_id

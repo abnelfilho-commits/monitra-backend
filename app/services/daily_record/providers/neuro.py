@@ -27,7 +27,7 @@ class NeuroDailyRecordProvider:
             today = date.today()
             if submission.reference_date not in (today, today - timedelta(days=1)):
                 raise InvalidDailyRecordPayload('A data do registro deve ser hoje ou ontem.')
-            query = db.query(RegistroLongitudinal.id).filter(
+            query = db.query(RegistroLongitudinal.id).filter(RegistroLongitudinal.contexto_assistencial_id.is_(None)).filter(
                 RegistroLongitudinal.paciente_id == submission.patient_id,
                 RegistroLongitudinal.modulo_id == line.module_id,
                 RegistroLongitudinal.formulario_id == form.id,

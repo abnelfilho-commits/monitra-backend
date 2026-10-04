@@ -30,7 +30,7 @@ class DailyRecordService:
                 raise DailyRecordError('Daily Record provider unavailable.')
             record = None
             if record_id is not None:
-                record = db.query(RegistroLongitudinal).filter(
+                record = db.query(RegistroLongitudinal).filter(RegistroLongitudinal.contexto_assistencial_id.is_(None)).filter(
                     RegistroLongitudinal.id == record_id).with_for_update().first()
                 if record is None:
                     raise DailyRecordNotFound('Daily Record not found.')

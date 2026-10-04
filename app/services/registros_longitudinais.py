@@ -118,7 +118,7 @@ def criar_registro_longitudinal(db: Session, payload):
 
 def obter_registro_longitudinal(db: Session, registro_id: int):
     registro = (
-        db.query(RegistroLongitudinal)
+        db.query(RegistroLongitudinal).filter(RegistroLongitudinal.contexto_assistencial_id.is_(None))
         .filter(RegistroLongitudinal.id == registro_id)
         .first()
     )
@@ -152,7 +152,7 @@ def obter_registro_longitudinal(db: Session, registro_id: int):
 def proteger_atendimento_canonico(db: Session, registro_id: int):
     """Lock before checking linkage; protect all generic dispatch paths."""
     from app.models.sessao_assistencial import SessaoAssistencial
-    registro = db.query(RegistroLongitudinal).filter(
+    registro = db.query(RegistroLongitudinal).filter(RegistroLongitudinal.contexto_assistencial_id.is_(None)).filter(
         RegistroLongitudinal.id == registro_id).populate_existing().with_for_update().first()
     if registro is None:
         raise HTTPException(status_code=404, detail="Registro longitudinal não encontrado.")

@@ -17,7 +17,7 @@ class CardioDailyRecordProvider:
     def prepare(self, db, line, submission, record_id=None):
         form = resolve_form(db, line)
         if submission.origin in (CareOrigin.RESPONSAVEL_APP, CareOrigin.RESPONSAVEL_WHATSAPP):
-            query = db.query(RegistroLongitudinal.id).filter(
+            query = db.query(RegistroLongitudinal.id).filter(RegistroLongitudinal.contexto_assistencial_id.is_(None)).filter(
                 RegistroLongitudinal.paciente_id == submission.patient_id,
                 RegistroLongitudinal.modulo_id == line.module_id,
                 RegistroLongitudinal.data_registro == submission.reference_date,
@@ -64,5 +64,5 @@ class CardioDailyRecordProvider:
             if not set(projection) <= allowed:
                 raise DailyRecordError('Unsupported projection column.')
             assignments = ', '.join(key + ' = :' + key for key in sorted(projection))
-            db.execute(text('UPDATE registros_longitudinais SET ' + assignments + ' WHERE id = :record_id'),
+            db.execute(text('UPDATE registros_longitudinais SET ' + assignments + ' WHERE id = :record_id AND contexto_assistencial_id IS NULL'),
                        dict(projection, record_id=record_id))

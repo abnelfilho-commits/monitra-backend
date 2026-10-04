@@ -171,7 +171,7 @@ def obter_registros_neuro_pacientes(db: Session, paciente_ids):
 
             MAX(CASE WHEN cf.nome_campo = 'observacao'
                 THEN rr.valor_texto END) AS observacao
-        FROM registros_longitudinais rl
+        FROM (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) rl
         LEFT JOIN respostas_registro rr
             ON rr.registro_id = rl.id
         LEFT JOIN campos_formulario cf

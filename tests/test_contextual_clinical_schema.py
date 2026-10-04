@@ -23,7 +23,7 @@ class StructuralTests(unittest.TestCase):
         from app.database import Base
         import app.models
         scripts = ScriptDirectory.from_config(config())
-        self.assertEqual(scripts.get_heads(), [REVISION])
+        self.assertEqual(scripts.get_heads(), ['w1c_isolamento_legado_v1'])
         self.assertEqual(scripts.get_revision(REVISION).down_revision, PARENT)
         for name in ('respostas_registro', 'avaliacoes_clinicas', 'pts_objetivos', 'agenda_cuidados', 'sessoes_assistenciais'):
             self.assertNotIn('contexto_assistencial_id', Base.metadata.tables[name].c)
@@ -51,7 +51,7 @@ class PhysicalTests(unittest.TestCase):
         cls.engine = create_engine(cls.url.set(database=cls.name), connect_args={
             'options': '-c lock_timeout=5000 -c statement_timeout=15000'})
         with cls.engine.begin() as c:
-            command.upgrade(config(c), 'head')
+            command.upgrade(config(c), REVISION)
 
     @classmethod
     def tearDownClass(cls):

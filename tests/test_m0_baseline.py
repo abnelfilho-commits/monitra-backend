@@ -62,7 +62,7 @@ class ModelContractTests(unittest.TestCase):
         self.assertNotIn("planejamento_atividades", CONTRACT["tables"])
 
     def test_separate_single_heads(self):
-        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["w1c_contexto_clinico_v1"])
+        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["w1c_isolamento_legado_v1"])
         historical = Config(str(ROOT / "alembic.ini"))
         historical.set_main_option("script_location", str(ROOT / "alembic"))
         self.assertEqual(ScriptDirectory.from_config(historical).get_heads(), ["8c01a0d1a004"])
@@ -222,6 +222,8 @@ class BaselinePostgresTests(unittest.TestCase):
                 for ident, field, typ, value in [(901,"tempo_tela","texto","MAIS_4H"),(902,"seletividade_alimentar","texto","ALTA"),(903,"aceitou_alimento_novo","booleano",False)]:
                     conn.execute(text("INSERT INTO campos_formulario(id,formulario_id,nome_campo,label,tipo_campo) VALUES(:id,901,:field,:field,:typ)"), {"id":ident,"field":field,"typ":typ})
                     conn.execute(text("INSERT INTO respostas_registro(registro_id,campo_id,valor_{}) VALUES(901,:id,:value)".format(typ)), {"id":ident,"value":value})
+                # Validate the current reader after upgrading; rollback preserves the M0 fixture.
+                command.upgrade(config(conn), 'head')
                 record = obter_registros_neuro_paciente(conn, 901)[0]
                 self.assertEqual(record.tempo_tela, "MAIS_4H")
                 self.assertEqual(record.seletividade_alimentar, "ALTA")

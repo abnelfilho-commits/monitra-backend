@@ -48,7 +48,8 @@ class TimelineEventService:
                         ac.profissional_id
                     )
 
-                WHERE sa.paciente_id = :paciente_id
+                WHERE sa.paciente_id = :paciente_id AND NOT EXISTS (SELECT 1 FROM pts legacy_root WHERE legacy_root.id=ac.pts_id AND legacy_root.contexto_assistencial_id IS NOT NULL)
+          AND NOT EXISTS (SELECT 1 FROM pts_objetivos legacy_objective JOIN pts legacy_root ON legacy_root.id=legacy_objective.pts_id WHERE legacy_objective.id=ac.objetivo_id AND legacy_root.contexto_assistencial_id IS NOT NULL)
                   AND sa.status = 'REALIZADA'
                   AND (:module_id IS NULL OR EXISTS (SELECT 1 FROM pts p WHERE p.id=ac.pts_id AND p.modulo_id=:module_id))
 
@@ -116,7 +117,7 @@ class TimelineEventService:
         module_id: Optional[int] = None,
     ):
         diagnosticos = (
-            db.query(Diagnostico)
+            db.query(Diagnostico).filter(Diagnostico.contexto_assistencial_id.is_(None))
             .filter(
                 Diagnostico.paciente_id == paciente_id,
                 Diagnostico.status != "CANCELADO",

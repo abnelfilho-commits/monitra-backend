@@ -26,7 +26,7 @@ class MChatAdapter(LongitudinalAdapter):
 
                 COALESCE(prof.nome, u.nome) AS profissional
 
-            FROM avaliacoes_clinicas ac
+            FROM (SELECT a.* FROM avaliacoes_clinicas a WHERE NOT EXISTS (SELECT 1 FROM registros_longitudinais ancestor WHERE ancestor.id=a.registro_id AND ancestor.contexto_assistencial_id IS NOT NULL)) ac
 
             JOIN pacientes p
               ON p.id = ac.paciente_id

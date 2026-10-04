@@ -40,13 +40,13 @@ def project_observation(record, answers):
 def evolution(db, patient_ids, module_id, latest_only=False):
     if not patient_ids:
         return []
-    query = db.query(Record).join(Form, Form.id == Record.formulario_id).filter(
+    query = db.query(Record).filter(Record.contexto_assistencial_id.is_(None)).join(Form, Form.id == Record.formulario_id).filter(
         Record.paciente_id.in_(patient_ids), Record.modulo_id == module_id,
         Form.modulo_id == module_id, Form.tipo == 'REGISTRO_DIARIO')
     if latest_only:
         ranked = query.with_entities(Record.id.label('id'), func.row_number().over(
             partition_by=Record.paciente_id, order_by=(Record.data_registro.desc(), Record.id.desc())).label('pos')).subquery()
-        query = db.query(Record).join(ranked, ranked.c.id == Record.id).filter(ranked.c.pos == 1)
+        query = db.query(Record).filter(Record.contexto_assistencial_id.is_(None)).join(ranked, ranked.c.id == Record.id).filter(ranked.c.pos == 1)
     records = query.order_by(Record.data_registro, Record.id).all()
     if not records:
         return []

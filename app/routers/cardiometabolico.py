@@ -114,7 +114,7 @@ def alertas_cardiometabolico(
 
         FROM pacientes p
 
-        JOIN registros_longitudinais rl
+        JOIN (SELECT * FROM registros_longitudinais WHERE contexto_assistencial_id IS NULL) rl
           ON rl.paciente_id = p.id
 
         JOIN respostas_registro r

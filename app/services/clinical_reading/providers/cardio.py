@@ -20,7 +20,7 @@ TEXT_FIELDS = {"atividade_fisica", "sono", "humor"}
 
 def read_cardio(db: Session, patient_id: int, care_line: CareLineDefinition) -> ClinicalReading:
     record = (
-        db.query(RegistroLongitudinal)
+        db.query(RegistroLongitudinal).filter(RegistroLongitudinal.contexto_assistencial_id.is_(None))
         .join(FormularioModulo, FormularioModulo.id == RegistroLongitudinal.formulario_id)
         .filter(
             RegistroLongitudinal.paciente_id == patient_id,
@@ -113,11 +113,11 @@ def read_cardio_many(db, patient_ids, care_line):
         partition_by=RegistroLongitudinal.paciente_id,
         order_by=(RegistroLongitudinal.data_registro.desc(), RegistroLongitudinal.id.desc())).label('position'))
         .join(FormularioModulo, FormularioModulo.id == RegistroLongitudinal.formulario_id)
-        .filter(RegistroLongitudinal.paciente_id.in_(patient_ids),
+        .filter(RegistroLongitudinal.contexto_assistencial_id.is_(None), RegistroLongitudinal.paciente_id.in_(patient_ids),
                 RegistroLongitudinal.modulo_id == care_line.module_id,
                 FormularioModulo.modulo_id == care_line.module_id,
                 FormularioModulo.tipo == 'REGISTRO_DIARIO').subquery())
-    records = db.query(RegistroLongitudinal).join(ranked, ranked.c.id == RegistroLongitudinal.id).filter(ranked.c.position == 1).all()
+    records = db.query(RegistroLongitudinal).filter(RegistroLongitudinal.contexto_assistencial_id.is_(None)).join(ranked, ranked.c.id == RegistroLongitudinal.id).filter(ranked.c.position == 1).all()
     by_patient = {r.paciente_id: r for r in records}
     answers = {}
     if records:

@@ -14,11 +14,11 @@ class GenericAdapter:
     source_type = SourceType.GENERIC_INTERVENTION
 
     def get(self, db, identity, lock=False):
-        query = db.query(Intervencao).filter(Intervencao.id == identity)
+        query = db.query(Intervencao).filter(Intervencao.contexto_assistencial_id.is_(None)).filter(Intervencao.id == identity)
         return (query.with_for_update() if lock else query).first()
 
     def list_for_patient(self, db, patient_id):
-        return db.query(Intervencao).filter(Intervencao.paciente_id == patient_id).order_by(
+        return db.query(Intervencao).filter(Intervencao.contexto_assistencial_id.is_(None)).filter(Intervencao.paciente_id == patient_id).order_by(
             Intervencao.data_intervencao.desc()).all()
 
     def to_record(self, row, registry):

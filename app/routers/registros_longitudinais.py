@@ -49,7 +49,7 @@ def obter_registro(
     db: Session = Depends(get_db),
     usuario=Depends(get_usuario_atual),
 ):
-    record = db.query(RegistroLongitudinal).filter_by(id=registro_id).first()
+    record = db.query(RegistroLongitudinal).filter(RegistroLongitudinal.contexto_assistencial_id.is_(None)).filter_by(id=registro_id).first()
     if record is None:
         raise HTTPException(404, 'Registro não encontrado.')
     authorized_patient(db, usuario, record.paciente_id, record.modulo_id)
@@ -63,7 +63,7 @@ def atualizar_registro(
     db: Session = Depends(get_db),
     usuario=Depends(get_usuario_atual),
 ):
-    record = db.query(RegistroLongitudinal).filter_by(id=registro_id).first()
+    record = db.query(RegistroLongitudinal).filter(RegistroLongitudinal.contexto_assistencial_id.is_(None)).filter_by(id=registro_id).first()
     if record is None:
         raise HTTPException(404, 'Registro não encontrado.')
     authorized_patient(db, usuario, record.paciente_id, record.modulo_id, write=True)

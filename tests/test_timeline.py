@@ -103,11 +103,14 @@ class SourceTests(unittest.TestCase):
             'intervencoes_cardiometabolicas':'modulo_id INTEGER, id INTEGER, paciente_id INTEGER, tipo TEXT, descricao TEXT, prioridade TEXT, created_at TEXT',
             'avaliacoes_clinicas':'id INTEGER, paciente_id INTEGER, modulo_id INTEGER, registro_id INTEGER, instrumento TEXT, score NUMERIC, classificacao TEXT, interpretacao TEXT, profissional_id INTEGER, status TEXT, executado_em TEXT, created_at TEXT',
             'pts':'id INTEGER, modulo_id INTEGER, paciente_id INTEGER',
-            'agenda_cuidados':'id INTEGER, pts_id INTEGER, profissional_id INTEGER',
+            'agenda_cuidados':'id INTEGER, pts_id INTEGER, objetivo_id INTEGER, profissional_id INTEGER',
+            'pts_objetivos':'id INTEGER, pts_id INTEGER',
             'sessoes_assistenciais':'id INTEGER, paciente_id INTEGER, agenda_cuidado_id INTEGER, profissional_id INTEGER, data_realizacao TEXT, hora_fim_real TEXT, created_at TEXT, numero_sessao INTEGER, registro_longitudinal_id INTEGER, status TEXT',
             'diagnosticos':'modulo_id INTEGER, id INTEGER, paciente_id INTEGER, data_diagnostico TEXT, created_at TEXT, descricao_clinica TEXT, medico_nome TEXT, cid TEXT, status TEXT',
         }
         for table, columns in schemas.items():
+            if table in ('registros_longitudinais','diagnosticos','pts','intervencoes'):
+                columns += ', contexto_assistencial_id INTEGER'
             self.db.execute(text('CREATE TABLE '+table+' ('+columns+')'))
         for id, module, kind in ((1,1,'REGISTRO_DIARIO'),(2,2,'REGISTRO_DIARIO'),
                                   (3,1,'ASSESSMENT'),(4,1,'LONGITUDINAL'),(5,99,'REGISTRO_DIARIO')):
@@ -241,7 +244,7 @@ class LegacyTests(unittest.TestCase):
     def fake_db(self):
         def execute(sql, params):
             sql = str(sql)
-            if 'FROM registros_longitudinais rl' in sql:
+            if 'rl.data_registro' in sql and 'FROM avaliacoes_clinicas' not in sql:
                 data = [SimpleNamespace(id=id,paciente_id=10,data_registro=D,
                     criado_em=datetime(2026,2,1),origem='RESPONSAVEL',observacao='authored',
                     sono_qualidade=4,irritabilidade=2,crise_sensorial=2,tempo_tela='MENOS_1H',

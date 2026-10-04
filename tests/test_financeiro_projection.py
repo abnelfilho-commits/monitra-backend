@@ -43,7 +43,16 @@ class ProjectionMathTests(unittest.TestCase):
 @unittest.skipUnless(os.getenv('M0_TEST_POSTGRES_URL'), 'Requires disposable PostgreSQL 18')
 class ProjectionPostgresTests(unittest.TestCase):
     @classmethod
-    def setUpClass(cls): foundation.FinancialPostgresTests.setUpClass.__func__(cls)
+    def setUpClass(cls):
+        foundation.FinancialPostgresTests.setUpClass.__func__(cls)
+        # Current projection code runs against the current schema; Gate A physical tests remain historical.
+        from sqlalchemy import create_engine
+        from alembic import command
+        from test_m0_baseline import config
+        engine=create_engine(cls.url.set(database=cls.template))
+        try:
+            with engine.begin() as c: command.upgrade(config(c), 'head')
+        finally: engine.dispose()
 
     @classmethod
     def tearDownClass(cls): foundation.FinancialPostgresTests.tearDownClass.__func__(cls)
