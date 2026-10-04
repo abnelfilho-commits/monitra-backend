@@ -23,7 +23,7 @@ URL = os.getenv('M0_TEST_POSTGRES_URL')
 class StructuralTests(unittest.TestCase):
     def test_head(self):
         scripts = ScriptDirectory.from_config(config())
-        self.assertEqual(scripts.get_heads(), ['w1b_permissoes_v1'])
+        self.assertEqual(scripts.get_heads(), ['w1c_contexto_clinico_v1'])
         self.assertEqual(scripts.get_revision('w1b_permissoes_v1').down_revision, 'w1a_contexto_v1')
 
     def test_no_legacy_or_operational_fields(self):
@@ -55,6 +55,7 @@ class StructuralTests(unittest.TestCase):
 
 @unittest.skipUnless(URL, 'Requires disposable PostgreSQL 18')
 class PhysicalTests(unittest.TestCase):
+    schema_revision = 'w1b_permissoes_v1'  # Historical physical contract.
     @classmethod
     def setUpClass(cls):
         cls.url=make_url(URL)
@@ -64,7 +65,7 @@ class PhysicalTests(unittest.TestCase):
             if int(c.exec_driver_sql('SHOW server_version_num').scalar())//10000!=18:raise RuntimeError('PG18 required')
             c.exec_driver_sql('CREATE DATABASE '+cls.name)
         cls.engine=create_engine(cls.url.set(database=cls.name),connect_args={'options':'-c lock_timeout=5000 -c statement_timeout=15000'})
-        with cls.engine.begin() as c:command.upgrade(config(c),'head')
+        with cls.engine.begin() as c:command.upgrade(config(c), getattr(cls, 'schema_revision', 'head'))
 
     @classmethod
     def tearDownClass(cls):
@@ -263,7 +264,7 @@ class PhysicalTests(unittest.TestCase):
                 for model in MODELS:self.assertNotIn(model.__tablename__,inspect(c).get_table_names())
                 self.assertTrue(c.exec_driver_sql("SELECT EXISTS(SELECT FROM pg_extension WHERE extname='btree_gist')").scalar())
                 command.upgrade(config(c),'head')
-                self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar(),'w1b_permissoes_v1')
+                self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar(),'w1c_contexto_clinico_v1')
         finally:
             engine.dispose()
             with self.admin.connect() as c:c.exec_driver_sql('DROP DATABASE '+name)
@@ -296,6 +297,7 @@ from app.services.autorizacao_institucional import AutorizacaoInstitucionalServi
 
 @unittest.skipUnless(URL, 'Requires disposable PostgreSQL 18')
 class CommandTests(unittest.TestCase):
+    schema_revision = 'head'  # Current service uses the current schema.
     setUpClass = classmethod(PhysicalTests.setUpClass.__func__)
     tearDownClass = classmethod(PhysicalTests.tearDownClass.__func__)
 

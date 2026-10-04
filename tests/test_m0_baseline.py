@@ -36,6 +36,8 @@ class ModelContractTests(unittest.TestCase):
                 continue  # Explicit transitional model; never bootstrap it.
             physical = {c["column_name"]: c for c in CONTRACT["tables"][name]["columns"]}
             for col in table.c:
+                if name in {"registros_longitudinais", "diagnosticos", "pts", "intervencoes"} and col.name == "contexto_assistencial_id":
+                    continue  # W1C addition, verified against PostgreSQL by its physical contract tests.
                 if name in {"pacientes", "profissionais", "usuarios", "responsaveis"} and col.name == "pessoa_id":
                     continue  # G2.A.2 addition, verified on the current canonical head.
                 with self.subTest(table=name, column=col.name):
@@ -60,7 +62,7 @@ class ModelContractTests(unittest.TestCase):
         self.assertNotIn("planejamento_atividades", CONTRACT["tables"])
 
     def test_separate_single_heads(self):
-        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["w1b_permissoes_v1"])
+        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["w1c_contexto_clinico_v1"])
         historical = Config(str(ROOT / "alembic.ini"))
         historical.set_main_option("script_location", str(ROOT / "alembic"))
         self.assertEqual(ScriptDirectory.from_config(historical).get_heads(), ["8c01a0d1a004"])
@@ -141,18 +143,20 @@ class BaselinePostgresTests(unittest.TestCase):
                     continue
                 with self.subTest(table=name):
                     actual = {(tuple(f["constrained_columns"]), f["referred_table"], tuple(f["referred_columns"]), f["options"].get("ondelete", "NO ACTION")) for f in inspector.get_foreign_keys(name)}
-                    expected = {(tuple(c.name for c in f.columns), f.elements[0].column.table.name, tuple(e.column.name for e in f.elements), f.ondelete or "NO ACTION") for f in table.foreign_key_constraints if f.elements[0].column.table.name != "pessoas"}
+                    expected = {(tuple(c.name for c in f.columns), f.elements[0].column.table.name, tuple(e.column.name for e in f.elements), f.ondelete or "NO ACTION") for f in table.foreign_key_constraints if f.elements[0].column.table.name not in {"pessoas", "contextos_assistenciais", "contexto_assistencial_linhas"}}
                     self.assertEqual(actual, expected)
                     actual_unique = {tuple(u["column_names"]) for u in inspector.get_unique_constraints(name)}
                     expected_unique = {tuple(c.name for c in u.columns) for u in table.constraints if isinstance(u, UniqueConstraint) and tuple(c.name for c in u.columns) != ("pessoa_id",)}
                     self.assertEqual(actual_unique, expected_unique)
                     actual_indexes = {(i["name"], tuple(i["column_names"]), i["unique"]) for i in inspector.get_indexes(name) if not i.get("duplicates_constraint")}
-                    expected_indexes = {(i.name, tuple(c.name for c in i.columns), i.unique) for i in table.indexes if tuple(c.name for c in i.columns) != ("pessoa_id",)}
+                    expected_indexes = {(i.name, tuple(c.name for c in i.columns), i.unique) for i in table.indexes if not {"pessoa_id", "contexto_assistencial_id"}.intersection(c.name for c in i.columns)}
                     self.assertEqual(actual_indexes, expected_indexes)
                     physical = {c["column_name"]: c for c in CONTRACT["tables"][name]["columns"]}
                     for column in table.c:
                         if column.name == "pessoa_id" and name in {"pacientes", "profissionais", "usuarios", "responsaveis"}:
                             continue  # Not part of frozen M0.
+                        if column.name == "contexto_assistencial_id" and name in {"registros_longitudinais", "diagnosticos", "pts", "intervencoes"}:
+                            continue  # W1C is verified against its own migrated catalogue.
                         expected_default = physical[column.name]["default_expression"]
                         if expected_default and expected_default.startswith("nextval("):
                             continue  # SERIAL/autoincrement, verified separately.

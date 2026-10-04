@@ -1,3 +1,4 @@
+from sqlalchemy import CheckConstraint, ForeignKeyConstraint, Index
 from sqlalchemy import text
 from sqlalchemy import Column, Integer, String, Text, Date, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
@@ -8,6 +9,21 @@ from app.database import Base
 
 class PTS(Base):
     __tablename__ = "pts"
+
+    contexto_assistencial_id = Column(Integer, nullable=True)
+    __table_args__ = (
+        ForeignKeyConstraint(['contexto_assistencial_id', 'paciente_id'],
+            ['contextos_assistenciais.id', 'contextos_assistenciais.paciente_id'],
+            name='fk_pts_contexto_paciente', ondelete='RESTRICT', onupdate='RESTRICT'),
+        ForeignKeyConstraint(['contexto_assistencial_id', 'modulo_id'],
+            ['contexto_assistencial_linhas.contexto_assistencial_id', 'contexto_assistencial_linhas.modulo_id'],
+            name='fk_pts_contexto_linha', ondelete='RESTRICT', onupdate='RESTRICT'),
+        CheckConstraint('contexto_assistencial_id IS NULL OR (paciente_id IS NOT NULL AND modulo_id IS NOT NULL)',
+            name='ck_pts_contexto_identidade'),
+        Index('ix_pts_contexto', 'contexto_assistencial_id'),
+        Index('uq_pts_contexto_linha_ativo', 'contexto_assistencial_id', 'modulo_id', unique=True,
+            postgresql_where=text("contexto_assistencial_id IS NOT NULL AND status = 'ATIVO'")).ddl_if(dialect='postgresql'),
+    )
 
     id = Column(Integer, primary_key=True)
     paciente_id = Column(Integer, ForeignKey("pacientes.id", ondelete="CASCADE"), nullable=False)

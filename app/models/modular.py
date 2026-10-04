@@ -1,3 +1,4 @@
+from sqlalchemy import CheckConstraint, ForeignKeyConstraint, Index
 from sqlalchemy import text
 from sqlalchemy import Column, Integer, String, Text, Boolean, Date, DateTime, ForeignKey, Numeric, Time, JSON
 from sqlalchemy.sql import func
@@ -67,6 +68,19 @@ class CampoFormulario(Base):
 
 class RegistroLongitudinal(Base):
     __tablename__ = "registros_longitudinais"
+
+    contexto_assistencial_id = Column(Integer, nullable=True)
+    __table_args__ = (
+        ForeignKeyConstraint(['contexto_assistencial_id', 'paciente_id'],
+            ['contextos_assistenciais.id', 'contextos_assistenciais.paciente_id'],
+            name='fk_registros_longitudinais_contexto_paciente', ondelete='RESTRICT', onupdate='RESTRICT'),
+        ForeignKeyConstraint(['contexto_assistencial_id', 'modulo_id'],
+            ['contexto_assistencial_linhas.contexto_assistencial_id', 'contexto_assistencial_linhas.modulo_id'],
+            name='fk_registros_longitudinais_contexto_linha', ondelete='RESTRICT', onupdate='RESTRICT'),
+        CheckConstraint('contexto_assistencial_id IS NULL OR (paciente_id IS NOT NULL AND modulo_id IS NOT NULL)',
+            name='ck_registros_longitudinais_contexto_identidade'),
+        Index('ix_registros_longitudinais_contexto', 'contexto_assistencial_id'),
+    )
 
     id = Column(Integer, primary_key=True)
     paciente_id = Column(Integer, ForeignKey("pacientes.id"), nullable=False)

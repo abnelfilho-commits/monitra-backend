@@ -21,6 +21,7 @@ class ContextoAssistencial(Base):
     criado_por_usuario_id = Column(Integer, ForeignKey('usuarios.id', ondelete='RESTRICT'), nullable=False)
     __table_args__ = (
         UniqueConstraint('id', 'instituicao_id', name='uq_contexto_instituicao'),
+        UniqueConstraint('id', 'paciente_id', name='uq_contexto_paciente'),
         ForeignKeyConstraint(
             ['paciente_instituicao_id', 'paciente_id', 'instituicao_id'],
             ['paciente_instituicoes.id', 'paciente_instituicoes.paciente_id', 'paciente_instituicoes.instituicao_id'],

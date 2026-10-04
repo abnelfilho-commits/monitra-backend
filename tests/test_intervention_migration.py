@@ -8,6 +8,9 @@ import unittest
 from uuid import uuid4
 
 os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
+from app.models.institucional import Instituicao, PacienteInstituicao
+from app.models.contexto_assistencial import ContextoAssistencial, ContextoAssistencialLinha
+
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session
 from alembic.migration import MigrationContext
@@ -79,7 +82,7 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(scripts.get_revision('5a01c7e2d903').down_revision,'fb27d5139e1e')
 
     def test_postgres_adapters_defaults_and_namespaces(self):
-        for model in (Pessoa,Clinica,OcupacaoProfissional,Profissional,Usuario,Paciente,ModuloClinico,PacienteModulo,Intervencao,ProfissionalModulo):
+        for model in (Pessoa,Clinica,OcupacaoProfissional,Profissional,Usuario,Paciente,ModuloClinico,PacienteModulo,Instituicao,PacienteInstituicao,ContextoAssistencial,ContextoAssistencialLinha,Intervencao,ProfissionalModulo):
             model.__table__.create(self.engine)
         with self.engine.begin() as conn:
             create_cardio_intervention_table(conn)

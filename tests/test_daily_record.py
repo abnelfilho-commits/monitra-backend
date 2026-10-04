@@ -8,6 +8,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
+from app.models.institucional import Instituicao, PacienteInstituicao
+from app.models.contexto_assistencial import ContextoAssistencial, ContextoAssistencialLinha
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -87,6 +90,7 @@ class PersistenceTests(unittest.TestCase):
                 connection.execute(text('INSERT INTO pacientes VALUES (10)'))
                 connection.execute(text('INSERT INTO responsaveis VALUES (99)'))
         for model in (ModuloClinico, PacienteModulo, FormularioModulo, CampoFormulario,
+                      Instituicao, PacienteInstituicao, ContextoAssistencial, ContextoAssistencialLinha,
                       RegistroLongitudinal, RespostaRegistro):
             model.__table__.create(self.engine)
         with self.engine.begin() as connection:
