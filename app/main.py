@@ -1,3 +1,4 @@
+from app.routers import saude_mental
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -117,3 +118,5 @@ app.include_router(diagnosticos.router)
 
 app.include_router(whatsapp.router)
 app.include_router(financeiro_institucional.router)
+
+app.include_router(saude_mental.router)

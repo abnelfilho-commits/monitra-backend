@@ -48,9 +48,16 @@ CARDIO = CareLineDefinition(
 )
 
 
+MENTAL_HEALTH = CareLineDefinition(
+    code="MENTAL_HEALTH", slug="saude_mental", module_id=3,
+    display_name="Saúde Mental",
+    capabilities={"contextual_journey": CareLineCapabilityStatus.ACTIVE},
+)
+
+
 class CareLineRegistry:
     def __init__(self, definitions: Optional[Iterable[CareLineDefinition]] = None):
-        items = tuple((NEURO, CARDIO) if definitions is None else definitions)
+        items = tuple((NEURO, CARDIO, MENTAL_HEALTH) if definitions is None else definitions)
         self._by_alias: Dict[str, CareLineDefinition] = {}
         self._by_module_id: Dict[int, CareLineDefinition] = {}
         for item in items:
