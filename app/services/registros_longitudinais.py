@@ -84,10 +84,15 @@ def persistir_registro_longitudinal(db: Session, payload):
     return registro
 
 
-def criar_registro_longitudinal(db: Session, payload):
+def criar_registro_longitudinal(db: Session, payload, *, commit: bool = True):
+    """Legacy commits by default; commit=False leaves the entire unit to the caller."""
     registro = persistir_registro_longitudinal(db, payload)
-    db.commit()
-    db.refresh(registro)
+    if commit:
+        db.commit()
+        db.refresh(registro)
+    else:
+        # Raw-SQL assessment reads must see answers even with autoflush disabled.
+        db.flush()
 
     formulario = (
         db.query(FormularioModulo)
@@ -108,9 +113,12 @@ def criar_registro_longitudinal(db: Session, payload):
                 db=db,
                 registro_id=registro.id,
                 instrumento=instrumento,
+                **({} if commit else {"commit": False}),
             )
 
         except Exception as e:
+            if not commit:
+                raise
             print(f"Erro ao executar assessment: {e}")
 
     return registro

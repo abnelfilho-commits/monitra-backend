@@ -18,8 +18,14 @@ def executar_avaliacao_clinica(
 def executar_avaliacao_por_registro(
     db: Session,
     registro_id: int,
-    instrumento: str
+    instrumento: str,
+    *,
+    commit: bool = True
 ) -> dict:
+
+    # The caller may have pending answers and deliberately disabled autoflush.
+    if not commit:
+        db.flush()
 
     context = AssessmentBuilder.from_registro(
         db=db,
@@ -36,7 +42,8 @@ def executar_avaliacao_por_registro(
     avaliacao = AssessmentRepository.salvar_avaliacao(
         db=db,
         context=context,
-        resultado=resultado
+        resultado=resultado,
+        commit=commit
     )
 
     return {

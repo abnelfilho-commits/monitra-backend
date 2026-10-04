@@ -10,7 +10,9 @@ class AssessmentRepository:
     def salvar_avaliacao(
         db: Session,
         context: AssessmentContext,
-        resultado: dict
+        resultado: dict,
+        *,
+        commit: bool = True
     ) -> AvaliacaoClinica:
 
         avaliacao = AvaliacaoClinica(
@@ -42,7 +44,10 @@ class AssessmentRepository:
         )
 
         db.add(avaliacao)
-        db.commit()
-        db.refresh(avaliacao)
+        if commit:
+            db.commit()
+            db.refresh(avaliacao)
+        else:
+            db.flush()
 
         return avaliacao
