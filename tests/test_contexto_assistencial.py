@@ -40,7 +40,7 @@ class ContextContractTests(unittest.TestCase):
 
     def test_head_and_frozen_parent(self):
         script = ScriptDirectory.from_config(config())
-        self.assertEqual(script.get_heads(), ['w2b_checkin_v1'])
+        self.assertEqual(script.get_heads(), ['capacidade_reconciliacao_v1'])
         self.assertEqual(script.get_revision('w1a_contexto_v1').down_revision, 'f1_economia_v1')
         self.assertEqual(script.get_revision('f1_economia_v1').down_revision, 'g2c1_autorizacao_v1')
 
@@ -59,7 +59,8 @@ class ContextPostgresTests(unittest.TestCase):
                 raise RuntimeError('PG18 required')
             c.exec_driver_sql('CREATE DATABASE '+cls.name)
         cls.engine=create_engine(url.set(database=cls.name),connect_args={'options':'-c lock_timeout=5000 -c statement_timeout=15000'})
-        with cls.engine.begin() as c: command.upgrade(config(c),'head')
+        # Historical downgrade assertions must start before the non-destructive adoption barrier.
+        with cls.engine.begin() as c: command.upgrade(config(c),'w2b_checkin_v1')
 
     @classmethod
     def tearDownClass(cls):
@@ -276,7 +277,7 @@ class ContextPostgresTests(unittest.TestCase):
                 self.assertNotIn('contextos_assistenciais',inspect(c).get_table_names())
                 self.assertTrue(c.exec_driver_sql("SELECT EXISTS(SELECT FROM pg_extension WHERE extname='btree_gist')").scalar())
                 command.upgrade(config(c),'head')
-                self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar(),'w2b_checkin_v1')
+                self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar(),'capacidade_reconciliacao_v1')
         finally:
             engine.dispose()
             with self.admin.connect() as c:c.exec_driver_sql('DROP DATABASE '+name)

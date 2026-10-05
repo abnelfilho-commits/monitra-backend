@@ -22,7 +22,8 @@ class IsolationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         physical.PhysicalTests.setUpClass.__func__(cls)
-        with cls.engine.begin() as c: command.upgrade(config(c), 'head')
+        # This fixture also exercises the historical view downgrade.
+        with cls.engine.begin() as c: command.upgrade(config(c), 'w2b_checkin_v1')
 
     tearDownClass = classmethod(physical.PhysicalTests.tearDownClass.__func__)
     seed = physical.PhysicalTests.seed
@@ -245,7 +246,7 @@ class IsolationTests(unittest.TestCase):
                 c.exec_driver_sql('CREATE VIEW public.vw_timeline_paciente AS '+migration.TIMELINE)
                 command.downgrade(config(c),'w1c_contexto_clinico_v1')
                 old=c.execute(text("SELECT * FROM vw_timeline_paciente WHERE paciente_id=:p AND NOT (id=:id AND tipo_evento='INTERVENCAO') ORDER BY tipo_evento,id"),dict(p=self.patient,id=self.contextual['intervencoes'])).all()
-                command.upgrade(config(c),'head')
+                command.upgrade(config(c),'w2b_checkin_v1')
                 rows=c.execute(text("SELECT * FROM vw_timeline_paciente WHERE paciente_id=:p ORDER BY tipo_evento,id"),dict(p=self.patient)).all()
                 self.assertEqual(rows,old)
                 columns=c.exec_driver_sql("SELECT attname,format_type(atttypid,atttypmod) FROM pg_attribute WHERE attrelid='vw_timeline_paciente'::regclass AND attnum>0 ORDER BY attnum").all()
@@ -257,7 +258,7 @@ class IsolationTests(unittest.TestCase):
                 self.assertEqual(set(dependencies),{'registros_diarios','intervencoes'})
                 command.downgrade(config(c),'w1c_contexto_clinico_v1')
                 self.assertEqual(c.execute(text('SELECT count(*) FROM vw_timeline_paciente WHERE paciente_id=:p'),dict(p=self.patient)).scalar(),3)
-                command.upgrade(config(c),'head')
+                command.upgrade(config(c),'w2b_checkin_v1')
                 self.assertEqual(c.execute(text('SELECT count(*) FROM vw_timeline_paciente WHERE paciente_id=:p'),dict(p=self.patient)).scalar(),2)
             finally: tx.rollback()
 
@@ -318,6 +319,7 @@ import test_financeiro_projection as financial
 
 @unittest.skipUnless(os.getenv('M0_TEST_POSTGRES_URL'), 'Disposable PostgreSQL 18 required')
 class FinancialAndViewIsolationTests(unittest.TestCase):
+    schema_revision = 'w2b_checkin_v1'  # Historical view upgrade/downgrade contract.
     setUpClass=classmethod(financial.ProjectionPostgresTests.setUpClass.__func__)
     tearDownClass=classmethod(financial.ProjectionPostgresTests.tearDownClass.__func__)
     setUp=financial.ProjectionPostgresTests.setUp

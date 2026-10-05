@@ -51,7 +51,7 @@ class ProjectionPostgresTests(unittest.TestCase):
         from test_m0_baseline import config
         engine=create_engine(cls.url.set(database=cls.template))
         try:
-            with engine.begin() as c: command.upgrade(config(c), 'head')
+            with engine.begin() as c: command.upgrade(config(c), getattr(cls, 'schema_revision', 'head'))
         finally: engine.dispose()
 
     @classmethod

@@ -14,7 +14,7 @@ import test_saude_mental as foundation
 
 @unittest.skipUnless(os.getenv('M0_TEST_POSTGRES_URL'),'Disposable PostgreSQL 18 required')
 class CheckinTests(unittest.TestCase):
-    schema_revision='head'
+    schema_revision='w2b_checkin_v1'  # Includes historical W2B downgrade coverage.
     setUpClass=classmethod(foundation.JourneyTests.setUpClass.__func__)
     tearDownClass=classmethod(foundation.JourneyTests.tearDownClass.__func__)
     command_grant=foundation.JourneyTests.command_grant
@@ -208,11 +208,11 @@ class CheckinMigrationTests(unittest.TestCase):
         from alembic import command
         from test_m0_baseline import config
         with self.engine.begin() as c:
-            command.upgrade(config(c),'head')
+            command.upgrade(config(c),'w2b_checkin_v1')
             self.assertEqual(c.exec_driver_sql("SELECT count(*) FROM campos_formulario WHERE formulario_id=(SELECT id FROM formularios_modulo WHERE codigo='BEM_ESTAR_V1')").scalar(),10)
             self.assertEqual(c.exec_driver_sql('SELECT count(*) FROM registros_longitudinais').scalar(),0)
             command.downgrade(config(c),'w2a_saude_mental_v1')
-            command.upgrade(config(c),'head')
+            command.upgrade(config(c),'w2b_checkin_v1')
             self.assertEqual(c.exec_driver_sql('SELECT count(*) FROM registro_proveniencias').scalar(),0)
 
     def test_provenance_exact_physical_contract(self):
