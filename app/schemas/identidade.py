@@ -60,3 +60,9 @@ class AssociarPapelLegado(AssociacaoBase):
 
 class AssociarContaLegada(AssociacaoBase):
     """Only association of an existing Usuario; no account provisioning."""
+
+
+class ProfissionalEstadoOut(BaseModel):
+    profissional_id: int
+    pessoa_id: int
+    ativo: bool

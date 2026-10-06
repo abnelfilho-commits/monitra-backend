@@ -27,6 +27,22 @@ PERSON_FIELDS = ("nome_completo", "nome_social", "data_nascimento", "sexo", "cpf
 
 
 class IdentidadeService:
+    def set_profissional_active(self, db, actor, pessoa_id, active):
+        """Native role lifecycle only; the caller owns the transaction."""
+        self._admin(db, actor)
+        # Match the person -> role lock order used by canonical role creation.
+        person = db.query(Pessoa).filter_by(id=pessoa_id).populate_existing().with_for_update().first()
+        if person is None:
+            raise IdentidadeErro("PERSON_NOT_FOUND", status=404)
+        role = db.query(Profissional).filter_by(pessoa_id=person.id).populate_existing().with_for_update().first()
+        if role is None:
+            raise IdentidadeErro("PROFESSIONAL_ROLE_NOT_FOUND", status=404)
+        if role.clinica_id is not None:
+            raise IdentidadeErro("LEGACY_PROFESSIONAL_NOT_SUPPORTED")
+        role.ativo = active
+        db.flush()
+        return dict(profissional_id=role.id, pessoa_id=role.pessoa_id, ativo=role.ativo)
+
     @staticmethod
     def _admin(db, actor):
         user = db.query(Usuario).filter_by(id=actor, ativo=True).first()

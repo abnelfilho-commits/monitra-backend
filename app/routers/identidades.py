@@ -1,15 +1,42 @@
 """Administrative identity only. No digital-account creation endpoint."""
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from app.database import get_db
 from app.core.permissoes import exigir_admin
 from app.schemas.identidade import CpfConsulta, IdentidadeComando, AdicionarPapel, AssociarPapelLegado, AssociarContaLegada
+from app.schemas.identidade import ProfissionalEstadoOut
 from app.services.identidade import IdentidadeService, IdentidadeErro, constraint_violation
 
 router = APIRouter(prefix="/admin/identidades", tags=["Identidade administrativa"])
 service = IdentidadeService()
+
+
+def professional_state(db, actor, pessoa_id, active):
+    try:
+        result = service.set_profissional_active(db, actor.id, pessoa_id, active)
+        output = ProfissionalEstadoOut.model_validate(result)
+        db.commit()
+        return output
+    except IdentidadeErro as exc:
+        db.rollback()
+        raise HTTPException(exc.status, {"code": exc.code}) from None
+    except Exception:
+        db.rollback()
+        raise HTTPException(500, {"code": "IDENTITY_OPERATION_FAILED"}) from None
+
+
+@router.post("/pessoas/{pessoa_id}/profissional/ativar", response_model=ProfissionalEstadoOut)
+def activate_professional(pessoa_id: int = Path(..., gt=0, le=2147483647),
+                          db: Session = Depends(get_db), admin=Depends(exigir_admin)):
+    return professional_state(db, admin, pessoa_id, True)
+
+
+@router.post("/pessoas/{pessoa_id}/profissional/inativar", response_model=ProfissionalEstadoOut)
+def deactivate_professional(pessoa_id: int = Path(..., gt=0, le=2147483647),
+                            db: Session = Depends(get_db), admin=Depends(exigir_admin)):
+    return professional_state(db, admin, pessoa_id, False)
 
 
 def write(db, actor, command):
