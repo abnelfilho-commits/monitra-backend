@@ -79,3 +79,22 @@ class PessoaOut(PessoaDados):
     id: int
     criado_em: datetime
     atualizado_em: datetime
+
+
+class PessoaUpdate(BaseModel):
+    """Partial administrative update; CPF and identity are never accepted."""
+    model_config = ConfigDict(extra="forbid")
+    nome_completo: Optional[StrictStr] = None
+    nome_social: Optional[StrictStr] = None
+    data_nascimento: Optional[date] = None
+    sexo: Optional[StrictStr] = Field(default=None, max_length=32)
+    email: Optional[EmailStr] = None
+    telefone: Optional[StrictStr] = Field(default=None, max_length=32)
+    ativo: Optional[bool] = None
+
+    @field_validator("nome_completo", "ativo")
+    @classmethod
+    def nonnull(cls, value):
+        if value is None:
+            raise ValueError("Campo obrigatório não pode ser nulo")
+        return value

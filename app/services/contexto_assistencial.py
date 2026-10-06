@@ -99,3 +99,12 @@ class ContextoAssistencialService:
             row.ativo = False
             db.flush()
         return row
+
+
+    @staticmethod
+    def get(db, identity, *, instituicao_id):
+        row = db.query(Contexto).filter(Contexto.id == identity,
+            Contexto.instituicao_id == instituicao_id).one_or_none()
+        if row is None:
+            raise ContextoAssistencialErro('RESOURCE_NOT_FOUND')
+        return row

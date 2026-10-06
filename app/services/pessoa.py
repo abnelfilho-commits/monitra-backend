@@ -31,3 +31,12 @@ class PessoaService:
         row.atualizado_em = max(row.criado_em, datetime.now(timezone.utc))
         db.flush()
         return row
+
+
+    @staticmethod
+    def get(db, identity):
+        return db.query(Pessoa).filter(Pessoa.id == identity).one_or_none()
+
+    @staticmethod
+    def list(db, *, offset=0, limit=50):
+        return db.query(Pessoa).order_by(Pessoa.id).offset(offset).limit(limit).all()

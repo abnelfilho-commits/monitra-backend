@@ -26,3 +26,23 @@ class ContextoLinhaCreate(BaseModel):
     model_config = ConfigDict(extra='forbid')
     contexto_assistencial_id: int = Field(gt=0, strict=True)
     modulo_id: int = Field(gt=0, strict=True)
+
+
+class ContextoLinhaRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    modulo_id: int = Field(gt=0, strict=True)
+
+
+class ContextoOut(ContextoCreate):
+    model_config = ConfigDict(from_attributes=True, extra='forbid')
+    id: int
+    paciente_id: int
+    instituicao_id: int
+    ativo: bool
+    criado_por_usuario_id: int
+
+
+class ContextoLinhaOut(ContextoLinhaCreate):
+    model_config = ConfigDict(from_attributes=True, extra='forbid')
+    id: int
+    ativo: bool

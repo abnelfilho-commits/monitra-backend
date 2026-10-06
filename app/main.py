@@ -48,7 +48,11 @@ from app.routers.autorizacoes_institucionais import router as autorizacoes_insti
 
 from app.routers.instituicoes import router as instituicoes_router
 
+from app.routers import pessoas, contextos_assistenciais
+
 app = FastAPI(title="Integra Care API")
+app.include_router(pessoas.router)
+app.include_router(contextos_assistenciais.router)
 app.include_router(instituicoes_router)
 app.include_router(autorizacoes_institucionais_router)
 app.include_router(identidades_router)
