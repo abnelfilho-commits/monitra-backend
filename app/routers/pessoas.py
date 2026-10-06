@@ -11,6 +11,8 @@ from app.services.pessoa import PessoaService
 from app.schemas.acesso_pessoa import AcessoPessoaCreate, AcessoPessoaOut
 from app.services.acesso_pessoa import AcessoPessoaService, AcessoPessoaErro
 from app.services.autorizacao_institucional import AutorizacaoInstitucionalErro
+from app.schemas.pessoa_administrativa import PessoaAcessosOut, PessoaVinculosOut
+from app.services.pessoa_administrativa import PessoaAdministrativaService, PessoaAdministrativaErro
 
 
 class PessoaRoute(APIRoute):
@@ -26,6 +28,27 @@ class PessoaRoute(APIRoute):
 
 router = APIRouter(prefix='/admin/pessoas', tags=['Pessoas administrativas'], route_class=PessoaRoute)
 service = PessoaService()
+
+
+def administrative_read(db, operation, response):
+    try:
+        return response.model_validate(operation())
+    except PessoaAdministrativaErro:
+        raise HTTPException(404, {'code': 'PERSON_NOT_FOUND'}) from None
+    except AutorizacaoInstitucionalErro:
+        raise HTTPException(403, {'code': 'ADMIN_REQUIRED'}) from None
+    except Exception:
+        raise HTTPException(500, {'code': 'PERSON_READ_FAILED'}) from None
+
+
+@router.get('/{pessoa_id}/acessos', response_model=PessoaAcessosOut)
+def person_accesses(pessoa_id: int = Path(..., gt=0), db: Session = Depends(get_db), admin=Depends(exigir_admin)):
+    return administrative_read(db, lambda: PessoaAdministrativaService().acessos(db, pessoa_id, actor_id=admin.id), PessoaAcessosOut)
+
+
+@router.get('/{pessoa_id}/vinculos', response_model=PessoaVinculosOut)
+def person_links(pessoa_id: int = Path(..., gt=0), db: Session = Depends(get_db), admin=Depends(exigir_admin)):
+    return administrative_read(db, lambda: PessoaAdministrativaService().vinculos(db, pessoa_id, actor_id=admin.id), PessoaVinculosOut)
 
 
 @router.post('/{pessoa_id}/acesso', response_model=AcessoPessoaOut)
