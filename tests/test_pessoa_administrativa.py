@@ -29,7 +29,45 @@ class PersonReadTests(unittest.TestCase):
         self.db.add(p); self.db.commit()
         self.assertEqual(self.read('acessos', p.id).json(), dict(pessoa_id=p.id, usuario=None, autorizacoes=[]))
         self.assertEqual(self.read('vinculos', p.id).json(), dict(pessoa_id=p.id, paciente_id=None,
-            profissional_id=None, pacientes=[], profissionais=[]))
+            profissional_id=None, profissional_ativo=None, pacientes=[], profissionais=[]))
+
+    def test_canonical_professional_state_without_links_survives_fresh_read(self):
+        from uuid import uuid4
+        from app.routers import identidades
+        self.app.include_router(identidades.router)
+        created = self.request('POST', '/admin/identidades/papeis', {
+            'chave_idempotencia': str(uuid4()), 'pessoa': {'nome_completo': 'Native B', 'cpf': '11144477735'},
+            'papel': 'PROFISSIONAL', 'motivo': 'Explicit native role'})
+        self.assertEqual(created.status_code, 200, created.text)
+        person = created.json()['pessoa_id']
+        professional = created.json()['profissional_id']
+        for action, active in ((None, False), ('ativar', True), ('inativar', False)):
+            if action:
+                response = self.request('POST', f'/admin/identidades/pessoas/{person}/profissional/{action}')
+                self.assertEqual(response.status_code, 200, response.text)
+            self.db.close()
+            response = self.read('vinculos', person)
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json(), dict(pessoa_id=person, paciente_id=None,
+                profissional_id=professional, profissional_ativo=active, pacientes=[], profissionais=[]))
+
+    def test_professional_state_independent_of_link_state(self):
+        with self.engine.begin() as c:
+            c.execute(text('UPDATE profissionais SET pessoa_id=:p WHERE id=:id'),
+                      {'p': self.person, 'id': self.professional})
+            c.execute(text("INSERT INTO profissional_instituicoes(profissional_id,instituicao_id,ocupacao_id,data_inicio) VALUES (:p,:i,:o,'2025-01-01')"),
+                      {'p': self.professional, 'i': self.institution, 'o': self.occupation})
+        for role_active, link_active in ((True, True), (False, True), (True, False)):
+            self.db.close()
+            with self.engine.begin() as c:
+                c.execute(text('UPDATE profissionais SET ativo=:a WHERE id=:id'), {'a': role_active, 'id': self.professional})
+                c.execute(text('UPDATE profissional_instituicoes SET ativo=:a WHERE profissional_id=:id'), {'a': link_active, 'id': self.professional})
+            response = self.read('vinculos')
+            self.assertEqual(response.status_code, 200, response.text)
+            data = response.json()
+            self.assertEqual(data['profissional_id'], self.professional)
+            self.assertEqual(data['profissional_ativo'], role_active)
+            self.assertEqual(data['profissionais'][0]['ativo'], link_active)
 
     def test_post_then_fresh_read_multiple_inactive_history_no_secrets(self):
         created = self.enable()
@@ -71,6 +109,9 @@ class PersonReadTests(unittest.TestCase):
         self.assertFalse(data['profissionais'][0]['ativo'])
 
     def test_reads_only_select_and_never_commit_or_entitle(self):
+        with self.engine.begin() as c:
+            c.execute(text('UPDATE profissionais SET pessoa_id=:p WHERE id=:id'),
+                      {'p': self.person, 'id': self.professional})
         statements = []
         def capture(conn, cursor, statement, params, context, many):
             statements.append(statement.strip().upper())

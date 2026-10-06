@@ -52,8 +52,11 @@ class PessoaAdministrativaService:
                 (Paciente, PacienteInstituicao, 'paciente_id', 'pacientes', PacienteInstituicao.tipo_vinculo),
                 (Profissional, ProfissionalInstituicao, 'profissional_id', 'profissionais', ProfissionalInstituicao.ocupacao_id),
             ):
-                identity = db.query(role.id).filter(role.pessoa_id == person_id).scalar()
+                record = db.query(role.id, role.ativo).filter(role.pessoa_id == person_id).one_or_none()
+                identity = record.id if record is not None else None
                 result[key] = identity
+                if role is Profissional:
+                    result['profissional_ativo'] = record.ativo if record is not None else None
                 rows = []
                 if identity is not None:
                     rows = db.query(link.id, getattr(link, key), link.instituicao_id, extra,
