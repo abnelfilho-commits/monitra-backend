@@ -8,6 +8,9 @@ from app.database import get_db
 from app.core.permissoes import exigir_admin
 from app.schemas.pessoa import PessoaUpdate, PessoaOut
 from app.services.pessoa import PessoaService
+from app.schemas.acesso_pessoa import AcessoPessoaCreate, AcessoPessoaOut
+from app.services.acesso_pessoa import AcessoPessoaService, AcessoPessoaErro
+from app.services.autorizacao_institucional import AutorizacaoInstitucionalErro
 
 
 class PessoaRoute(APIRoute):
@@ -23,6 +26,25 @@ class PessoaRoute(APIRoute):
 
 router = APIRouter(prefix='/admin/pessoas', tags=['Pessoas administrativas'], route_class=PessoaRoute)
 service = PessoaService()
+
+
+@router.post('/{pessoa_id}/acesso', response_model=AcessoPessoaOut)
+def enable_access(payload: AcessoPessoaCreate, pessoa_id: int = Path(..., gt=0),
+                  db: Session = Depends(get_db), admin=Depends(exigir_admin)):
+    try:
+        result = AcessoPessoaService().enable(db, pessoa_id, payload, actor_id=admin.id)
+        output = AcessoPessoaOut.model_validate(result)
+        db.commit()
+        return output
+    except AcessoPessoaErro as exc:
+        db.rollback()
+        raise HTTPException(exc.status, {'code': exc.code}) from None
+    except AutorizacaoInstitucionalErro as exc:
+        db.rollback()
+        raise HTTPException(403 if exc.code == 'ADMIN_REQUIRED' else 409, {'code': exc.code}) from None
+    except Exception:
+        db.rollback()
+        raise HTTPException(500, {'code': 'ACCESS_PROVISIONING_FAILED'}) from None
 
 
 @router.get('/', response_model=list[PessoaOut])

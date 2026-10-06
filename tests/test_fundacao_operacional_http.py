@@ -21,7 +21,7 @@ class OperationalContractTests(unittest.TestCase):
         actual={(m,r.path) for r in main_app.routes for m in getattr(r,'methods',())
                 if r.path.startswith(('/admin/pessoas','/admin/contextos-assistenciais'))}
         self.assertEqual(actual,{('GET','/admin/pessoas/'),('GET','/admin/pessoas/{pessoa_id}'),
-            ('PATCH','/admin/pessoas/{pessoa_id}'),('POST','/admin/contextos-assistenciais/'),
+            ('PATCH','/admin/pessoas/{pessoa_id}'),('POST','/admin/pessoas/{pessoa_id}/acesso'),('POST','/admin/contextos-assistenciais/'),
             ('GET','/admin/contextos-assistenciais/{contexto_id}'),('POST','/admin/contextos-assistenciais/{contexto_id}/linhas')})
 
     def test_patch_contract(self):
