@@ -90,6 +90,25 @@ class ContextoAssistencialService:
         self._row(db, ModuloClinico, data.modulo_id)
         return self._flush(db, Linha(**data.model_dump()), 'uq_contexto_linha', 'CONTEXT_LINE_DUPLICATE', '23505')
 
+    def activate_line(self, db, context_id, line_id, *, instituicao_id):
+        # Caller owns transaction. The same lock order is used by check-in.
+        from app.services.permissao_assistencial import PermissaoAssistencialService
+        PermissaoAssistencialService.lock_institution(db, instituicao_id)
+        context = self._row(db, Contexto, context_id)
+        if context.instituicao_id != instituicao_id:
+            raise ContextoAssistencialErro('INSTITUTION_MISMATCH')
+        if not context.ativo or context.data_fim is not None:
+            raise ContextoAssistencialErro('CONTEXT_NOT_OPEN')
+        row = self._row(db, Linha, line_id)
+        if row.contexto_assistencial_id != context_id:
+            raise ContextoAssistencialErro('CONTEXT_LINE_MISMATCH')
+        if not self._row(db, ModuloClinico, row.modulo_id).ativo:
+            raise ContextoAssistencialErro('LINE_CATALOG_INACTIVE')
+        with db.begin_nested():
+            row.ativo = True
+            db.flush()
+        return row
+
     def deactivate_line(self, db, context_id, line_id):
         self._row(db, Contexto, context_id)
         row = self._row(db, Linha, line_id)

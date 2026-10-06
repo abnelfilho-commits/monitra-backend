@@ -124,3 +124,6 @@ app.include_router(whatsapp.router)
 app.include_router(financeiro_institucional.router)
 
 app.include_router(saude_mental.router)
+
+from app.routers import operacao_assistencial
+app.include_router(operacao_assistencial.router)
