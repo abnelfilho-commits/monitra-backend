@@ -59,8 +59,17 @@ def preencher_resposta(resposta: RespostaRegistro, valor):
         resposta.valor_json = valor
 
 
+def proteger_formulario_contextual(db: Session, formulario_id, contexto_assistencial_id=None, modulo_id=None):
+    """PHQ-9 is contextual-only, including generic create/update dispatch paths."""
+    with db.no_autoflush:
+        code = db.query(FormularioModulo.codigo).filter(FormularioModulo.id == formulario_id).scalar()
+    if code == "PHQ9" and (contexto_assistencial_id is None or modulo_id != 3):
+        raise HTTPException(403, "PHQ-9 requer a jornada contextual de Saúde Mental.")
+
+
 def persistir_registro_longitudinal(db: Session, payload, *, contexto_assistencial_id=None, criado_por_usuario_id=None):
     """Insert without committing; caller owns transaction completion."""
+    proteger_formulario_contextual(db, payload.formulario_id, contexto_assistencial_id, payload.modulo_id)
     registro = RegistroLongitudinal(
         paciente_id=payload.paciente_id,
         modulo_id=payload.modulo_id,
@@ -179,6 +188,7 @@ def proteger_atendimento_canonico(db: Session, registro_id: int):
 
 def atualizar_registro_longitudinal(db: Session, registro_id: int, payload):
     registro = proteger_atendimento_canonico(db, registro_id)
+    proteger_formulario_contextual(db, payload.formulario_id)
 
     registro.paciente_id = payload.paciente_id
     registro.modulo_id = payload.modulo_id

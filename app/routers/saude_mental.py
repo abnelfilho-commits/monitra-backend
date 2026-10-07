@@ -125,3 +125,33 @@ def create_intervention(payload: IntervencaoMentalCreate,
     except Exception:
         db.rollback()
         raise HTTPException(500, {'code': 'INTERVENTION_NOT_SAVED'}) from None
+
+
+from app.schemas.phq9 import PHQ9Create, PHQ9Out
+from app.services.phq9 import PHQ9Service, PHQ9Denied, PHQ9Unavailable
+
+
+@router.post('/pessoas/{pessoa_id}/contextos/{contexto_id}/phq9', response_model=PHQ9Out, status_code=201)
+def create_phq9(payload: PHQ9Create,
+                     pessoa_id: int = Path(..., gt=0, le=2147483647),
+                     contexto_id: int = Path(..., gt=0, le=2147483647),
+                     instituicao_id: int = Query(..., gt=0, le=2147483647),
+                     db: Session = Depends(get_db), actor=Depends(get_usuario_atual)):
+    try:
+        result = PHQ9Service().create(db, payload, actor=actor.id, institution=instituicao_id,
+                                                   person=pessoa_id, context=contexto_id)
+        response = PHQ9Out.model_validate(result).model_dump(mode='json')
+        db.commit()
+        return response
+    except PHQ9Denied:
+        db.rollback()
+        raise HTTPException(403, {'code': 'PHQ9_UNAVAILABLE'}) from None
+    except PHQ9Unavailable:
+        db.rollback()
+        raise HTTPException(503, {'code': 'PHQ9_CATALOG_UNAVAILABLE'}) from None
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(409, {'code': 'PHQ9_NOT_SAVED'}) from None
+    except Exception:
+        db.rollback()
+        raise HTTPException(500, {'code': 'PHQ9_NOT_SAVED'}) from None

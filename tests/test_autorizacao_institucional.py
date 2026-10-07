@@ -39,7 +39,7 @@ class AuthorizationContractTests(unittest.TestCase):
 
     def test_single_head_direct_parent(self):
         s=ScriptDirectory.from_config(config())
-        self.assertEqual(s.get_heads(),['w3_intervencao_autoria_v1']);self.assertEqual(s.get_revision(HEAD).down_revision,PARENT)
+        self.assertEqual(s.get_heads(),['w3_phq9_v1']);self.assertEqual(s.get_revision(HEAD).down_revision,PARENT)
 
 
 @unittest.skipUnless(URL,'Requires disposable PostgreSQL 18')

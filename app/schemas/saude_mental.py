@@ -42,7 +42,11 @@ from app.schemas.diagnostico_mental import DiagnosticosJornada
 from app.schemas.intervencao_mental import IntervencoesJornada
 
 
+from app.schemas.phq9 import PHQ9Jornada
+
+
 class JornadaMentalDetalhe(JornadaMental):
+    phq9: PHQ9Jornada
     intervencoes: IntervencoesJornada
     diagnosticos: DiagnosticosJornada
     bem_estar: BemEstarJornada

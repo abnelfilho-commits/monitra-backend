@@ -1,4 +1,5 @@
 ASSESSMENT_LABELS = {
+    "PHQ9": "PHQ-9",
     "MCHAT": "M-CHAT",
     "DENVER": "Denver II",
 }

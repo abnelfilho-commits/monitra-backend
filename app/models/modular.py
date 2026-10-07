@@ -57,7 +57,7 @@ class CampoFormulario(Base):
     id = Column(Integer, primary_key=True)
     formulario_id = Column(Integer, ForeignKey("formularios_modulo.id"), nullable=False)
     nome_campo = Column(String(100), nullable=False)
-    label = Column(String(200), nullable=False)
+    label = Column(Text, nullable=False)
     tipo_campo = Column(String(50), nullable=False)
     obrigatorio = Column(Boolean, default=False, server_default=text('false'))
     ordem = Column(Integer, default=0, server_default=text('0'))

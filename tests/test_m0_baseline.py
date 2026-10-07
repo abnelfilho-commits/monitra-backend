@@ -47,7 +47,13 @@ class ModelContractTests(unittest.TestCase):
                 with self.subTest(table=name, column=col.name):
                     self.assertIn(col.name, physical)
                     actual_type = str(col.type.compile(dialect=dialect())).lower().replace("varchar", "character varying").replace(", ", ",")
-                    self.assertEqual(actual_type, physical[col.name]["formatted_type"])
+                    expected_type = physical[col.name]["formatted_type"]
+                    if name == "campos_formulario" and col.name == "label":
+                        # M0 remains varchar(200); w3_phq9_v1 widens the current model.
+                        # Both physical states and downgrade are covered in test_phq9.
+                        self.assertEqual(expected_type, "character varying(200)")
+                        expected_type = "text"
+                    self.assertEqual(actual_type, expected_type)
                     self.assertEqual(col.nullable, physical[col.name]["nullable"])
 
     def test_explicit_approved_legacy_boundaries(self):
@@ -66,7 +72,7 @@ class ModelContractTests(unittest.TestCase):
         self.assertNotIn("planejamento_atividades", CONTRACT["tables"])
 
     def test_separate_single_heads(self):
-        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["w3_intervencao_autoria_v1"])
+        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["w3_phq9_v1"])
         historical = Config(str(ROOT / "alembic.ini"))
         historical.set_main_option("script_location", str(ROOT / "alembic"))
         self.assertEqual(ScriptDirectory.from_config(historical).get_heads(), ["8c01a0d1a004"])
