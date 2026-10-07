@@ -50,7 +50,8 @@ class ReadingTests(unittest.TestCase):
         self.assertEqual(r['metadata']['total_registros'], 0)
         r = describe_checkins([record(1, humor='BOM')])
         self.assertEqual(r['clinical_state']['status'], 'MOMENTO_OBSERVADO')
-        self.assertIn('Humor: bom', r['summary'])
+        self.assertIn('momento observado', r['summary'])
+        self.assertNotIn('Humor:', r['summary'])
         self.assertIn('Ainda não há histórico suficiente', r['summary'])
 
     def test_dimension_comparisons(self):
@@ -89,6 +90,42 @@ class ReadingTests(unittest.TestCase):
         self.assertIsNone(r['risk'])
         r=describe_checkins([record(1,pedido_ajuda='SIM'),record(2,pedido_ajuda='NAO')])
         self.assertIn('não há informação de resolução',r['summary'])
+
+    def test_grouped_narratives_follow_existing_states_without_score(self):
+        cases = [
+            ([record(1,humor='RUIM',energia='RUIM',ansiedade='MUITA'), record(2,humor='BOM',energia='BOM',ansiedade='POUCA')], 'Melhora observacional', 'respostas mais favoráveis'),
+            ([record(1,humor='BOM',energia='BOM',estresse='POUCA'), record(2,humor='RUIM',energia='RUIM',estresse='MUITA')], 'Piora observacional', 'respostas menos favoráveis'),
+            ([record(1,humor='RUIM'), record(2,humor='RUIM')], 'Respostas estáveis', 'não significam, por si só, bem-estar favorável'),
+            ([record(1,humor='RUIM'), record(2,humor='BOM'), record(3,humor='REGULAR')], 'Oscilação observada', 'alternância'),
+            ([record(1,humor='RUIM',sono='BOM'), record(2,humor='BOM',sono='RUIM')], 'Movimentos distintos', 'não sustentam uma direção única'),
+        ]
+        for records, title, phrase in cases:
+            with self.subTest(title=title):
+                result = describe_checkins(records)
+                self.assertTrue(result['clinical_state']['titulo'].startswith(title))
+                self.assertIn(phrase, result['summary'])
+                self.assertNotIn('Comparação por dimensão:', result['summary'])
+                self.assertNotIn('Humor:', result['summary'])
+                self.assertIsNone(result['risk']); self.assertIsNone(result['trend'])
+                self.assertEqual(result['metadata']['total_registros'], len(records))
+                self.assertIn('leitura é parcial', result['summary'])
+
+    def test_full_agreement_is_synthesized_without_seven_item_inventory(self):
+        from app.services.mental_health_engine import DIMENSIONS
+        first = {key: options[0][0] for key, (_, options) in DIMENSIONS.items()}
+        last = {key: options[-1][0] for key, (_, options) in DIMENSIONS.items()}
+        result = describe_checkins([record(1, **first), record(2, **last)])
+        self.assertIn('respostas mais favoráveis nas dimensões comparáveis', result['summary'])
+        self.assertNotIn('leitura é parcial', result['summary'])
+        self.assertTrue(all(d['state']=='MELHORA_OBSERVACIONAL' for d in result['evidence']['dimensions'].values()))
+        self.assertNotIn('Humor:', result['summary'])
+
+    def test_missing_and_not_applicable_limit_narrative(self):
+        for value in (None, 'NAO_SE_APLICA'):
+            result = describe_checkins([record(1,trabalho='RUIM'), record(2,trabalho=value), record(3,trabalho='BOM')])
+            self.assertIn('não permitem uma comparação longitudinal contínua', result['summary'])
+            self.assertIn('não indicam melhora, piora ou estabilidade', result['summary'])
+            self.assertEqual(result['clinical_state']['status'], 'INSUFICIENTE')
 
 
 @unittest.skipUnless(os.getenv('M0_TEST_POSTGRES_URL'), 'Disposable PostgreSQL required')
@@ -141,3 +178,19 @@ class ReadingHTTPTests(unittest.TestCase):
         self.db.execute(text("UPDATE usuarios SET perfil='ADMIN' WHERE id=:u"),dict(u=self.actor))
         self.db.execute(text('DELETE FROM concessoes_assistenciais WHERE usuario_instituicao_acesso_id=:r'),dict(r=self.roots[0]));self.db.commit()
         self.assertEqual(self.client.get(self.path()).status_code,404)
+
+    def test_diagnosis_and_intervention_do_not_change_checkin_reading(self):
+        import json
+        from urllib.parse import urlsplit, parse_qsl
+        self.assertEqual(self.post().status_code, 201)
+        before = self.client.get(self.path()).json()['clinical_reading']
+        url = urlsplit(self.path())
+        for endpoint, payload in (
+            ('diagnosticos', dict(descricao_clinica='Synthetic diagnosis',medico_nome='Synthetic physician',data_diagnostico='2026-01-01')),
+            ('intervencoes', dict(tipo='Synthetic intervention',descricao='Synthetic description',data_intervencao='2026-01-01T10:00:00Z')),
+        ):
+            response = self.client.request('POST',url.path+'/'+endpoint,params=dict(parse_qsl(url.query)),body=json.dumps(payload).encode(),headers={'Content-Type':'application/json'})
+            self.assertEqual(response.status_code,201,response.text)
+            after = self.client.get(self.path()).json()['clinical_reading']
+            self.assertEqual(after,before)
+            self.assertEqual(after['metadata']['total_registros'],1)
