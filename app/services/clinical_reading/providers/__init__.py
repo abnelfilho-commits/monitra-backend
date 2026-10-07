@@ -5,3 +5,7 @@ from .neuro import read_neuro, read_neuro_many
 READING_PROVIDERS = {"NEURO": read_neuro, "CARDIO": read_cardio}
 
 BATCH_READING_PROVIDERS = {"CARDIO": read_cardio_many, "NEURO": read_neuro_many}
+
+from .mental_health import read_mental_health
+
+CONTEXTUAL_READING_PROVIDERS = {"MENTAL_HEALTH": read_mental_health}

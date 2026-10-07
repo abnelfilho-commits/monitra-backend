@@ -84,4 +84,11 @@ class SaudeMentalService:
                 return None
             from app.services.checkin_bem_estar import CheckinBemEstarService
             wellbeing=CheckinBemEstarService().journey(db,actor=actor_id,institution=institution,person=person,context=context)
-            return JornadaMentalDetalhe(**self._result(row).model_dump(),bem_estar=wellbeing)
+            from app.services.clinical_reading import ClinicalReadingService
+            reading = None
+            if row['line_active'] is True:
+                reading = ClinicalReadingService().get_contextual_reading(
+                    pessoa_id=person, contexto_assistencial_id=context,
+                    care_line=MENTAL_HEALTH.code, checkins=wellbeing.checkins)
+            return JornadaMentalDetalhe(**self._result(row).model_dump(),bem_estar=wellbeing,
+                                        clinical_reading=reading)

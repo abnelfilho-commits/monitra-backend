@@ -1,7 +1,7 @@
 """Contextual journey read models; no onboarding payload."""
 from datetime import date
 from typing import Literal, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 
 
 class InstituicaoDisponivel(BaseModel):
@@ -33,5 +33,16 @@ class PessoasMentais(BaseModel):
 from app.schemas.checkin_bem_estar import BemEstarJornada
 
 
+from app.services.clinical_reading.models import ClinicalReading
+
+
 class JornadaMentalDetalhe(JornadaMental):
     bem_estar: BemEstarJornada
+    clinical_reading: Optional[ClinicalReading] = None
+
+    @field_serializer('clinical_reading')
+    def serialize_reading(self, reading):
+        if reading is None:
+            return None
+        # The HTTP boundary exposes the canonical code, not the internal registry.
+        return {**vars(reading), 'care_line': reading.care_line.code}

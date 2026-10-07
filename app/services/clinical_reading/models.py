@@ -10,20 +10,25 @@ from app.services.care_lines import CareLineDefinition
 
 @dataclass(frozen=True)
 class ClinicalReading:
-    patient_id: int
-    care_line: CareLineDefinition
-    reference_date: Optional[date]
-    risk: Optional[str]
-    trend: Optional[str]
-    summary: Optional[str]
+    patient_id: Optional[int] = None
+    care_line: Optional[CareLineDefinition] = None
+    reference_date: Optional[date] = None
+    risk: Optional[str] = None
+    trend: Optional[str] = None
+    summary: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     clinical_state: Optional[Dict[str, Any]] = None
     evidence: Optional[Dict[str, Any]] = None
     alerts: Optional[List[str]] = None
 
+    pessoa_id: Optional[int] = None
+    contexto_assistencial_id: Optional[int] = None
+
     def __post_init__(self) -> None:
-        if type(self.patient_id) is not int or self.patient_id <= 0:
-            raise ValueError("patient_id must be a positive integer.")
+        contextual = self.pessoa_id is not None or self.contexto_assistencial_id is not None
+        ids = (self.pessoa_id, self.contexto_assistencial_id) if contextual else (self.patient_id,)
+        if (contextual and self.patient_id is not None) or any(type(i) is not int or i <= 0 for i in ids):
+            raise ValueError("Use either a positive patient_id or positive pessoa_id and contexto_assistencial_id.")
         if not isinstance(self.care_line, CareLineDefinition):
             raise TypeError("care_line must be a resolved CareLineDefinition.")
         if self.reference_date is not None and type(self.reference_date) is not date:

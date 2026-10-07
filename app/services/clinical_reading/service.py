@@ -7,7 +7,7 @@ from app.services.care_lines import (
 )
 from app.services.care_lines.registry import CAP_CLINICAL_READING
 from .models import ClinicalReading
-from .providers import READING_PROVIDERS, BATCH_READING_PROVIDERS
+from .providers import READING_PROVIDERS, BATCH_READING_PROVIDERS, CONTEXTUAL_READING_PROVIDERS
 from .compatibility import build_report_context, get_neuro_reading
 
 ReadingProvider = Callable[[Session, int, CareLineDefinition], ClinicalReading]
@@ -28,6 +28,20 @@ class ClinicalReadingService:
         if provider is None:
             raise CareLineCapabilityNotSupported("Linha de cuidado sem provider de leitura clínica.")
         return provider(db, patient_id, line)
+
+    def get_contextual_reading(self, *, pessoa_id, contexto_assistencial_id, care_line, checkins):
+        """Consume context-scoped observations authorized by the assistential boundary.
+
+        No patient resolver or legacy linkage. The caller verifies person/context,
+        active line and ASSISTENCIAL_LER before acquiring these observations.
+        """
+        from app.services.care_lines.registry import care_line_registry
+        line = care_line_registry.get(care_line)
+        provider = None if line is None else CONTEXTUAL_READING_PROVIDERS.get(line.code)
+        if line is None or not line.active or provider is None:
+            raise CareLineCapabilityNotSupported("Linha sem leitura contextual.")
+        return provider(pessoa_id=pessoa_id, contexto_assistencial_id=contexto_assistencial_id,
+                        care_line=line, checkins=checkins)
 
     def get_readings(self, db, patient_ids, requested_line):
         """Explicit-line batch access; callers still own clinic authorization."""
