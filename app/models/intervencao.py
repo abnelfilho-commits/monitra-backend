@@ -26,6 +26,8 @@ class Intervencao(Base):
     modulo_id = Column(Integer, ForeignKey("modulos_clinicos.id"), nullable=False)
     profissional_id = Column(Integer, ForeignKey("usuarios.id"))
 
+    registrador_profissional_id = Column(Integer, ForeignKey("profissionais.id", name="fk_intervencoes_registrador_profissional_id", ondelete="RESTRICT"), nullable=True)
+
     tipo = Column(String, nullable=False)
     descricao = Column(Text, nullable=True)
     data_intervencao = Column(DateTime, nullable=False)

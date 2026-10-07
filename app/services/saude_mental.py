@@ -92,5 +92,7 @@ class SaudeMentalService:
                     care_line=MENTAL_HEALTH.code, checkins=wellbeing.checkins)
             from app.services.diagnostico_mental import DiagnosticoMentalService
             diagnoses = DiagnosticoMentalService().journey(db, actor=actor_id, institution=institution, person=person, context=context)
-            return JornadaMentalDetalhe(**self._result(row).model_dump(),bem_estar=wellbeing, diagnosticos=diagnoses,
+            from app.services.intervencao_mental import IntervencaoMentalService
+            interventions = IntervencaoMentalService().journey(db, actor=actor_id, institution=institution, person=person, context=context)
+            return JornadaMentalDetalhe(**self._result(row).model_dump(),bem_estar=wellbeing, diagnosticos=diagnoses, intervencoes=interventions,
                                         clinical_reading=reading)

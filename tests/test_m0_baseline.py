@@ -36,6 +36,8 @@ class ModelContractTests(unittest.TestCase):
                 continue  # Explicit transitional model; never bootstrap it.
             physical = {c["column_name"]: c for c in CONTRACT["tables"][name]["columns"]}
             for col in table.c:
+                if name == "intervencoes" and col.name == "registrador_profissional_id":
+                    continue
                 if name == "diagnosticos" and col.name in {"registrador_usuario_id", "registrador_profissional_id"}:
                     continue  # W3 authorship is verified by its migrated physical contract tests.
                 if name in {"registros_longitudinais", "diagnosticos", "pts", "intervencoes"} and col.name == "contexto_assistencial_id":
@@ -64,7 +66,7 @@ class ModelContractTests(unittest.TestCase):
         self.assertNotIn("planejamento_atividades", CONTRACT["tables"])
 
     def test_separate_single_heads(self):
-        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["w3_diagnostico_autoria_v1"])
+        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["w3_intervencao_autoria_v1"])
         historical = Config(str(ROOT / "alembic.ini"))
         historical.set_main_option("script_location", str(ROOT / "alembic"))
         self.assertEqual(ScriptDirectory.from_config(historical).get_heads(), ["8c01a0d1a004"])
@@ -145,7 +147,7 @@ class BaselinePostgresTests(unittest.TestCase):
                     continue
                 with self.subTest(table=name):
                     actual = {(tuple(f["constrained_columns"]), f["referred_table"], tuple(f["referred_columns"]), f["options"].get("ondelete", "NO ACTION")) for f in inspector.get_foreign_keys(name)}
-                    expected = {(tuple(c.name for c in f.columns), f.elements[0].column.table.name, tuple(e.column.name for e in f.elements), f.ondelete or "NO ACTION") for f in table.foreign_key_constraints if not (name == "diagnosticos" and {"registrador_usuario_id", "registrador_profissional_id"}.intersection(c.name for c in f.columns)) and f.elements[0].column.table.name not in {"pessoas", "contextos_assistenciais", "contexto_assistencial_linhas"}}
+                    expected = {(tuple(c.name for c in f.columns), f.elements[0].column.table.name, tuple(e.column.name for e in f.elements), f.ondelete or "NO ACTION") for f in table.foreign_key_constraints if not (name == "intervencoes" and "registrador_profissional_id" in {c.name for c in f.columns}) and not (name == "diagnosticos" and {"registrador_usuario_id", "registrador_profissional_id"}.intersection(c.name for c in f.columns)) and f.elements[0].column.table.name not in {"pessoas", "contextos_assistenciais", "contexto_assistencial_linhas"}}
                     self.assertEqual(actual, expected)
                     actual_unique = {tuple(u["column_names"]) for u in inspector.get_unique_constraints(name)}
                     expected_unique = {tuple(c.name for c in u.columns) for u in table.constraints if isinstance(u, UniqueConstraint) and tuple(c.name for c in u.columns) != ("pessoa_id",)}
@@ -155,6 +157,8 @@ class BaselinePostgresTests(unittest.TestCase):
                     self.assertEqual(actual_indexes, expected_indexes)
                     physical = {c["column_name"]: c for c in CONTRACT["tables"][name]["columns"]}
                     for column in table.c:
+                        if name == "intervencoes" and column.name == "registrador_profissional_id":
+                            continue
                         if name == "diagnosticos" and column.name in {"registrador_usuario_id", "registrador_profissional_id"}:
                             continue  # Not part of frozen M0; covered by W3 physical tests.
                         if column.name == "pessoa_id" and name in {"pacientes", "profissionais", "usuarios", "responsaveis"}:

@@ -40,7 +40,7 @@ class ContextContractTests(unittest.TestCase):
 
     def test_head_and_frozen_parent(self):
         script = ScriptDirectory.from_config(config())
-        self.assertEqual(script.get_heads(), ['w3_diagnostico_autoria_v1'])
+        self.assertEqual(script.get_heads(), ['w3_intervencao_autoria_v1'])
         self.assertEqual(script.get_revision('w1a_contexto_v1').down_revision, 'f1_economia_v1')
         self.assertEqual(script.get_revision('f1_economia_v1').down_revision, 'g2c1_autorizacao_v1')
 
@@ -277,7 +277,7 @@ class ContextPostgresTests(unittest.TestCase):
                 self.assertNotIn('contextos_assistenciais',inspect(c).get_table_names())
                 self.assertTrue(c.exec_driver_sql("SELECT EXISTS(SELECT FROM pg_extension WHERE extname='btree_gist')").scalar())
                 command.upgrade(config(c),'head')
-                self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar(),'w3_diagnostico_autoria_v1')
+                self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar(),'w3_intervencao_autoria_v1')
         finally:
             engine.dispose()
             with self.admin.connect() as c:c.exec_driver_sql('DROP DATABASE '+name)

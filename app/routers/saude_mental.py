@@ -98,3 +98,30 @@ def create_diagnosis(payload: DiagnosticoMentalCreate,
     except Exception:
         db.rollback()
         raise HTTPException(500, {'code': 'DIAGNOSIS_NOT_SAVED'}) from None
+
+
+from app.schemas.intervencao_mental import IntervencaoMentalCreate, IntervencaoMentalOut
+from app.services.intervencao_mental import IntervencaoMentalService, InterventionDenied
+
+
+@router.post('/pessoas/{pessoa_id}/contextos/{contexto_id}/intervencoes', response_model=IntervencaoMentalOut, status_code=201)
+def create_intervention(payload: IntervencaoMentalCreate,
+                     pessoa_id: int = Path(..., gt=0, le=2147483647),
+                     contexto_id: int = Path(..., gt=0, le=2147483647),
+                     instituicao_id: int = Query(..., gt=0, le=2147483647),
+                     db: Session = Depends(get_db), actor=Depends(get_usuario_atual)):
+    try:
+        result = IntervencaoMentalService().create(db, payload, actor=actor.id, institution=instituicao_id,
+                                                   person=pessoa_id, context=contexto_id)
+        response = IntervencaoMentalOut.model_validate(result).model_dump(mode='json')
+        db.commit()
+        return response
+    except InterventionDenied:
+        db.rollback()
+        raise HTTPException(403, {'code': 'INTERVENTION_UNAVAILABLE'}) from None
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(409, {'code': 'INTERVENTION_NOT_SAVED'}) from None
+    except Exception:
+        db.rollback()
+        raise HTTPException(500, {'code': 'INTERVENTION_NOT_SAVED'}) from None
