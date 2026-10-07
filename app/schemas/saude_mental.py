@@ -36,7 +36,11 @@ from app.schemas.checkin_bem_estar import BemEstarJornada
 from app.services.clinical_reading.models import ClinicalReading
 
 
+from app.schemas.diagnostico_mental import DiagnosticosJornada
+
+
 class JornadaMentalDetalhe(JornadaMental):
+    diagnosticos: DiagnosticosJornada
     bem_estar: BemEstarJornada
     clinical_reading: Optional[ClinicalReading] = None
 

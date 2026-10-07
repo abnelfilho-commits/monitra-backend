@@ -14,7 +14,7 @@ import test_saude_mental as foundation
 
 @unittest.skipUnless(os.getenv('M0_TEST_POSTGRES_URL'),'Disposable PostgreSQL 18 required')
 class CheckinTests(unittest.TestCase):
-    schema_revision='w2b_checkin_v1'  # Includes historical W2B downgrade coverage.
+    schema_revision='head'  # Current HTTP service uses the current schema; historical migration checks remain explicit.
     setUpClass=classmethod(foundation.JourneyTests.setUpClass.__func__)
     tearDownClass=classmethod(foundation.JourneyTests.tearDownClass.__func__)
     command_grant=foundation.JourneyTests.command_grant
@@ -156,15 +156,6 @@ class CheckinTests(unittest.TestCase):
             self.assertEqual(future.result(timeout=8),'DENIED')
         self.assertEqual(self.counts(),(0,0,0))
 
-    def test_downgrade_refuses_clinical_history(self):
-        from alembic import command
-        from test_m0_baseline import config
-        saved=self.post().json()
-        with self.assertRaisesRegex(RuntimeError,'CHECKIN_HISTORY_PRESENT'):
-            with self.engine.begin() as c:command.downgrade(config(c),'w2a_saude_mental_v1')
-        self.assertEqual(self.counts(),(1,9,1))
-        self.assertEqual(self.client.get(self.path()).json()['bem_estar']['checkins'][0]['id'],saved['id'])
-
     def test_provenance_constraint_refuses_fake_recorder(self):
         from sqlalchemy.exc import IntegrityError
         saved=self.post().json()
@@ -243,3 +234,26 @@ class CheckinMigrationTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'CHECKIN_FORM_CONFLICT'):
             with self.engine.begin() as c:command.upgrade(config(c),'head')
         with self.engine.connect() as c:self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar(),'w2a_saude_mental_v1')
+
+
+@unittest.skipUnless(os.getenv('M0_TEST_POSTGRES_URL'), 'Disposable PostgreSQL 18 required')
+class HistoricalCheckinDowngradeTests(unittest.TestCase):
+    schema_revision = 'w2b_checkin_v1'
+    setUpClass = classmethod(CheckinTests.setUpClass.__func__)
+    tearDownClass = classmethod(CheckinTests.tearDownClass.__func__)
+    command_grant = CheckinTests.command_grant
+    setUp = CheckinTests.setUp
+    tearDown = CheckinTests.tearDown
+    path = CheckinTests.path
+    payload = CheckinTests.payload
+    post = CheckinTests.post
+    counts = CheckinTests.counts
+
+    def test_downgrade_refuses_clinical_history(self):
+        from alembic import command
+        from test_m0_baseline import config
+        saved=self.post().json()
+        with self.assertRaisesRegex(RuntimeError,'CHECKIN_HISTORY_PRESENT'):
+            with self.engine.begin() as c:command.downgrade(config(c),'w2a_saude_mental_v1')
+        self.assertEqual(self.counts(),(1,9,1))
+        self.assertEqual(self.db.execute(text('SELECT registro_id FROM registro_proveniencias')).scalar_one(), saved['id'])

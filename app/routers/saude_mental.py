@@ -71,3 +71,30 @@ def create_checkin(payload: CheckinCreate,
     except Exception:
         db.rollback()
         raise HTTPException(500, {'code':'CHECKIN_NOT_SAVED'}) from None
+
+
+from app.schemas.diagnostico_mental import DiagnosticoMentalCreate, DiagnosticoMentalOut
+from app.services.diagnostico_mental import DiagnosticoMentalService, DiagnosisDenied
+
+
+@router.post('/pessoas/{pessoa_id}/contextos/{contexto_id}/diagnosticos', response_model=DiagnosticoMentalOut, status_code=201)
+def create_diagnosis(payload: DiagnosticoMentalCreate,
+                     pessoa_id: int = Path(..., gt=0, le=2147483647),
+                     contexto_id: int = Path(..., gt=0, le=2147483647),
+                     instituicao_id: int = Query(..., gt=0, le=2147483647),
+                     db: Session = Depends(get_db), actor=Depends(get_usuario_atual)):
+    try:
+        result = DiagnosticoMentalService().create(db, payload, actor=actor.id, institution=instituicao_id,
+                                                   person=pessoa_id, context=contexto_id)
+        response = DiagnosticoMentalOut.model_validate(result).model_dump(mode='json')
+        db.commit()
+        return response
+    except DiagnosisDenied:
+        db.rollback()
+        raise HTTPException(403, {'code': 'DIAGNOSIS_UNAVAILABLE'}) from None
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(409, {'code': 'DIAGNOSIS_NOT_SAVED'}) from None
+    except Exception:
+        db.rollback()
+        raise HTTPException(500, {'code': 'DIAGNOSIS_NOT_SAVED'}) from None

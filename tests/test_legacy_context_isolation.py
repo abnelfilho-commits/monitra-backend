@@ -19,11 +19,11 @@ from app.services.timeline import sources
 
 @unittest.skipUnless(os.getenv('M0_TEST_POSTGRES_URL'), 'Disposable PostgreSQL 18 required')
 class IsolationTests(unittest.TestCase):
+    schema_revision = "head"
     @classmethod
     def setUpClass(cls):
         physical.PhysicalTests.setUpClass.__func__(cls)
-        # This fixture also exercises the historical view downgrade.
-        with cls.engine.begin() as c: command.upgrade(config(c), 'w2b_checkin_v1')
+        with cls.engine.begin() as c: command.upgrade(config(c), cls.schema_revision)
 
     tearDownClass = classmethod(physical.PhysicalTests.tearDownClass.__func__)
     seed = physical.PhysicalTests.seed
@@ -235,6 +235,17 @@ class IsolationTests(unittest.TestCase):
         from app.services.timeline_service import TimelineService
         self.assertEqual(len(TimelineService.get_daily_records(self.db,self.patient)),1)
         self.assertEqual(len(TimelineService.get_interventions(self.db,self.patient)),1)
+
+
+@unittest.skipUnless(os.getenv('M0_TEST_POSTGRES_URL'), 'Disposable PostgreSQL 18 required')
+class HistoricalViewTests(unittest.TestCase):
+    schema_revision = 'w2b_checkin_v1'
+    setUpClass = classmethod(IsolationTests.setUpClass.__func__)
+    tearDownClass = classmethod(IsolationTests.tearDownClass.__func__)
+    seed = IsolationTests.seed
+    insert = IsolationTests.insert
+    setUp = IsolationTests.setUp
+    tearDown = IsolationTests.tearDown
 
     def test_view_upgrade_downgrade_reupgrade_and_legacy_equivalence(self):
         migration=importlib.import_module('alembic_canonical.versions.w1c_isolamento_legado_v1')

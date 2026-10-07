@@ -106,7 +106,7 @@ class FinancialPostgresTests(unittest.TestCase):
             self.assertEqual(c.exec_driver_sql("SELECT count(*) FROM pg_trigger WHERE tgname='f1_no_truncate'").scalar(),7)
             self.assertEqual(c.exec_driver_sql("SELECT count(*) FROM pg_trigger WHERE tgname LIKE 'f1_guard_%%'").scalar(),6)
             self.assertEqual(c.exec_driver_sql("SELECT count(*) FROM pg_constraint WHERE conname='ex_paciente_contrato_periodo' AND contype='x'").scalar(),1)
-        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(),['capacidade_reconciliacao_v1'])
+        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(),['w3_diagnostico_autoria_v1'])
 
     def test_indexes_uniques_checks(self):
         i=inspect(self.engine)

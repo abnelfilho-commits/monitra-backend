@@ -18,6 +18,8 @@ from app.database import Base
 class Diagnostico(Base):
     __tablename__ = "diagnosticos"
 
+    registrador_usuario_id = Column(Integer, ForeignKey("usuarios.id", name="fk_diagnosticos_registrador_usuario_id", ondelete="RESTRICT"), nullable=True)
+    registrador_profissional_id = Column(Integer, ForeignKey("profissionais.id", name="fk_diagnosticos_registrador_profissional_id", ondelete="RESTRICT"), nullable=True)
     contexto_assistencial_id = Column(Integer, nullable=True)
     __table_args__ = (
         ForeignKeyConstraint(['contexto_assistencial_id', 'paciente_id'],

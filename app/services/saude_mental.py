@@ -90,5 +90,7 @@ class SaudeMentalService:
                 reading = ClinicalReadingService().get_contextual_reading(
                     pessoa_id=person, contexto_assistencial_id=context,
                     care_line=MENTAL_HEALTH.code, checkins=wellbeing.checkins)
-            return JornadaMentalDetalhe(**self._result(row).model_dump(),bem_estar=wellbeing,
+            from app.services.diagnostico_mental import DiagnosticoMentalService
+            diagnoses = DiagnosticoMentalService().journey(db, actor=actor_id, institution=institution, person=person, context=context)
+            return JornadaMentalDetalhe(**self._result(row).model_dump(),bem_estar=wellbeing, diagnosticos=diagnoses,
                                         clinical_reading=reading)
