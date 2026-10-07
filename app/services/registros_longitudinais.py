@@ -60,11 +60,12 @@ def preencher_resposta(resposta: RespostaRegistro, valor):
 
 
 def proteger_formulario_contextual(db: Session, formulario_id, contexto_assistencial_id=None, modulo_id=None):
-    """PHQ-9 is contextual-only, including generic create/update dispatch paths."""
+    """Standard mental-health assessments require their contextual journey."""
     with db.no_autoflush:
         code = db.query(FormularioModulo.codigo).filter(FormularioModulo.id == formulario_id).scalar()
-    if code == "PHQ9" and (contexto_assistencial_id is None or modulo_id != 3):
-        raise HTTPException(403, "PHQ-9 requer a jornada contextual de Saúde Mental.")
+    if code in {"PHQ9", "GAD7"} and (contexto_assistencial_id is None or modulo_id != 3):
+        label = {"PHQ9": "PHQ-9", "GAD7": "GAD-7"}[code]
+        raise HTTPException(403, f"{label} requer a jornada contextual de Saúde Mental.")
 
 
 def persistir_registro_longitudinal(db: Session, payload, *, contexto_assistencial_id=None, criado_por_usuario_id=None):

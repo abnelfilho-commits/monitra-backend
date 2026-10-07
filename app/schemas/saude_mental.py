@@ -45,7 +45,11 @@ from app.schemas.intervencao_mental import IntervencoesJornada
 from app.schemas.phq9 import PHQ9Jornada
 
 
+from app.schemas.gad7 import GAD7Jornada
+
+
 class JornadaMentalDetalhe(JornadaMental):
+    gad7: GAD7Jornada
     phq9: PHQ9Jornada
     intervencoes: IntervencoesJornada
     diagnosticos: DiagnosticosJornada

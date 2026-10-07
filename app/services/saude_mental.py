@@ -96,5 +96,7 @@ class SaudeMentalService:
             interventions = IntervencaoMentalService().journey(db, actor=actor_id, institution=institution, person=person, context=context)
             from app.services.phq9 import PHQ9Service
             phq9 = PHQ9Service().journey(db, actor=actor_id, institution=institution, person=person, context=context)
-            return JornadaMentalDetalhe(**self._result(row).model_dump(),bem_estar=wellbeing, diagnosticos=diagnoses, intervencoes=interventions, phq9=phq9,
+            from app.services.gad7 import GAD7Service
+            gad7 = GAD7Service().journey(db, actor=actor_id, institution=institution, person=person, context=context)
+            return JornadaMentalDetalhe(**self._result(row).model_dump(),bem_estar=wellbeing, diagnosticos=diagnoses, intervencoes=interventions, phq9=phq9, gad7=gad7,
                                         clinical_reading=reading)

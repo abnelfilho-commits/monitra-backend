@@ -4,7 +4,10 @@ from app.services.clinical_engine.assessments.denver_engine import DenverEngine
 
 from app.services.clinical_engine.assessments.phq9_engine import PHQ9Engine
 
+from app.services.clinical_engine.assessments.gad7_engine import GAD7Engine
+
 ASSESSMENT_ENGINES = {
+    "GAD7": GAD7Engine(),
     "PHQ9": PHQ9Engine(),
     "MCHAT": MChatEngine(),
     "DENVER": DenverEngine(),

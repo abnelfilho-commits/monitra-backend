@@ -155,3 +155,33 @@ def create_phq9(payload: PHQ9Create,
     except Exception:
         db.rollback()
         raise HTTPException(500, {'code': 'PHQ9_NOT_SAVED'}) from None
+
+
+from app.schemas.gad7 import GAD7Create, GAD7Out
+from app.services.gad7 import GAD7Service, GAD7Denied, GAD7Unavailable
+
+
+@router.post('/pessoas/{pessoa_id}/contextos/{contexto_id}/gad7', response_model=GAD7Out, status_code=201)
+def create_gad7(payload: GAD7Create,
+                     pessoa_id: int = Path(..., gt=0, le=2147483647),
+                     contexto_id: int = Path(..., gt=0, le=2147483647),
+                     instituicao_id: int = Query(..., gt=0, le=2147483647),
+                     db: Session = Depends(get_db), actor=Depends(get_usuario_atual)):
+    try:
+        result = GAD7Service().create(db, payload, actor=actor.id, institution=instituicao_id,
+                                                   person=pessoa_id, context=contexto_id)
+        response = GAD7Out.model_validate(result).model_dump(mode='json')
+        db.commit()
+        return response
+    except GAD7Denied:
+        db.rollback()
+        raise HTTPException(403, {'code': 'GAD7_UNAVAILABLE'}) from None
+    except GAD7Unavailable:
+        db.rollback()
+        raise HTTPException(503, {'code': 'GAD7_CATALOG_UNAVAILABLE'}) from None
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(409, {'code': 'GAD7_NOT_SAVED'}) from None
+    except Exception:
+        db.rollback()
+        raise HTTPException(500, {'code': 'GAD7_NOT_SAVED'}) from None
