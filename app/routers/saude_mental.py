@@ -279,3 +279,51 @@ def create_mental_objective(payload: ObjetivoMentalCreate,pts_id: int=Path(...,g
 @router.put('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts/{pts_id}/objetivos/{objetivo_id}',response_model=PTSMentalOut)
 def update_mental_objective(payload: ObjetivoMentalUpdate,pts_id: int=Path(...,gt=0),objetivo_id: int=Path(...,gt=0),scope=Depends(pts_scope),db: Session=Depends(get_db)):
     return pts_write(db,scope,'objective_update',payload,pts_id,objetivo_id)
+
+
+from app.schemas.planejamento_mental import PlanningInput, PlanningPeriod, PlanningOut
+from app.services.planejamento_mental import PlanningService, PlanningInvalid
+
+
+@router.get('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts/catalogo-planejamento')
+def mental_planning_catalog(scope=Depends(pts_scope), db: Session=Depends(get_db)):
+    try:return PlanningService().catalog(db,scope)
+    except PTSDenied:raise HTTPException(404,{'code':'PLANNING_UNAVAILABLE'}) from None
+
+
+@router.post('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts/calcular-quantidade')
+def mental_planning_quantity(payload: PlanningPeriod, scope=Depends(pts_scope), db: Session=Depends(get_db)):
+    try:return PlanningService().quantity(db,scope,payload)
+    except PTSDenied:raise HTTPException(404,{'code':'PLANNING_UNAVAILABLE'}) from None
+    except PlanningInvalid as exc:raise HTTPException(422,{'code':'INVALID_PLANNING','message':str(exc)}) from None
+
+
+@router.get('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts/{pts_id}/objetivos/{objetivo_id}/planejamentos',response_model=list[PlanningOut])
+def mental_plannings(pts_id: int, objetivo_id: int, scope=Depends(pts_scope), db: Session=Depends(get_db)):
+    try:return PlanningService().list(db,scope,pts_id,objetivo_id)
+    except PTSDenied:raise HTTPException(404,{'code':'PLANNING_UNAVAILABLE'}) from None
+
+
+def planning_write(db,scope,pts_id,objective_id,payload,planning_id=None):
+    try:
+        result=PlanningService().save(db,scope,pts_id,objective_id,payload,planning_id)
+        response=PlanningOut.model_validate(result).model_dump(mode='json')
+        db.commit();return response
+    except PTSDenied:
+        db.rollback();raise HTTPException(403,{'code':'PLANNING_UNAVAILABLE'}) from None
+    except PlanningInvalid as exc:
+        db.rollback();raise HTTPException(422,{'code':'INVALID_PLANNING','message':str(exc)}) from None
+    except (PTSConflict,SQLAlchemyError):
+        db.rollback();raise HTTPException(409,{'code':'PLANNING_CONFLICT'}) from None
+    except Exception:
+        db.rollback();raise HTTPException(500,{'code':'PLANNING_NOT_SAVED'}) from None
+
+
+@router.post('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts/{pts_id}/objetivos/{objetivo_id}/planejamentos',response_model=PlanningOut,status_code=201)
+def create_mental_planning(payload: PlanningInput, pts_id: int, objetivo_id: int, scope=Depends(pts_scope), db: Session=Depends(get_db)):
+    return planning_write(db,scope,pts_id,objetivo_id,payload)
+
+
+@router.put('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts/{pts_id}/objetivos/{objetivo_id}/planejamentos/{planejamento_id}',response_model=PlanningOut)
+def update_mental_planning(payload: PlanningInput, pts_id: int, objetivo_id: int, planejamento_id: int, scope=Depends(pts_scope), db: Session=Depends(get_db)):
+    return planning_write(db,scope,pts_id,objetivo_id,payload,planejamento_id)

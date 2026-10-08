@@ -6,6 +6,13 @@ from sqlalchemy import func
 from typing import Optional
 
 from app.database import get_db
+from app.core.deps import get_usuario_atual
+
+def maintain_catalog(usuario=Depends(get_usuario_atual)):
+    if usuario.perfil not in {"ADMIN", "ADMINISTRADOR", "ADMIN_CLINICA", "SUPORTE"}:
+        raise HTTPException(403, "Perfil sem permissão para manter o catálogo.")
+    return usuario
+
 from app.models.atividade_terapeutica import (
     AtividadeTerapeutica,
     OcupacaoProfissional,
@@ -21,7 +28,8 @@ from app.schemas.atividade_terapeutica import (
 
 router = APIRouter(
     prefix="/atividades-terapeuticas",
-    tags=["Atividades Terapêuticas"]
+    tags=["Atividades Terapêuticas"],
+    dependencies=[Depends(get_usuario_atual)]
 )
 
 
@@ -46,7 +54,7 @@ def listar_atividades(
         .all()
     )
 
-@router.post("/", response_model=AtividadeTerapeuticaResponse)
+@router.post("/", response_model=AtividadeTerapeuticaResponse, dependencies=[Depends(maintain_catalog)])
 def criar_atividade(
     atividade: AtividadeTerapeuticaCreate,
     db: Session = Depends(get_db)
@@ -86,7 +94,7 @@ def listar_ocupacoes(db: Session = Depends(get_db)):
     )
 
 
-@router.post("/ocupacoes-profissionais", response_model=OcupacaoProfissionalResponse)
+@router.post("/ocupacoes-profissionais", response_model=OcupacaoProfissionalResponse, dependencies=[Depends(maintain_catalog)])
 def criar_ocupacao(
     ocupacao: OcupacaoProfissionalCreate,
     db: Session = Depends(get_db)
@@ -113,7 +121,7 @@ def criar_ocupacao(
     return nova_ocupacao
 
 
-@router.post("/{atividade_id}/ocupacoes")
+@router.post("/{atividade_id}/ocupacoes", dependencies=[Depends(maintain_catalog)])
 def vincular_ocupacao_atividade(
     atividade_id: int,
     vinculo: AtividadeOcupacaoCreate,
@@ -191,7 +199,7 @@ def listar_ocupacoes_da_atividade(
     )
 
 
-@router.delete("/{atividade_id}/ocupacoes/{ocupacao_id}")
+@router.delete("/{atividade_id}/ocupacoes/{ocupacao_id}", dependencies=[Depends(maintain_catalog)])
 def remover_ocupacao_da_atividade(
     atividade_id: int,
     ocupacao_id: int,
