@@ -130,3 +130,83 @@ def describe_checkins(checkins):
         "descricao": "Relato de bem-estar por dimensão; não representa diagnóstico ou classificação de risco."})
     # A single global trend would collapse distinct dimensions; evidence holds each comparison.
     return result
+
+
+def _assessment_date(application):
+    """Use the persisted timestamp; do not infer a clinical reference period."""
+    value = application.get('recorded_at')
+    return f" em {value[:10]}" if value else ''
+
+
+def _comparable_results(current, previous):
+    return (current.get('instrumento') == previous.get('instrumento')
+            and current.get('versao') is not None
+            and current.get('versao') == previous.get('versao'))
+
+
+def summarize_sources(reading, diagnoses=(), interventions=()):
+    """Derive only narrative/provenance from authorized, independently retained sources.
+
+    No instrument calculation, weighting, clinical change threshold or causal inference.
+    Check-in interpretation is consumed verbatim from describe_checkins.
+    """
+    sources = []
+    parts = []
+    if reading['metadata']['total_registros']:
+        sources.append(dict(source='WELLBEING_CHECKIN', record_ids=list(reading['metadata']['record_ids'])))
+        parts.append(reading['summary'])
+    assessments = reading['evidence'].get('assessments', {})
+    safety = []
+    for key, label in (('phq9', 'PHQ-9'), ('gad7', 'GAD-7'), ('cbi', 'CBI')):
+        group = assessments.get(key, {})
+        latest = group.get('latest')
+        if not latest:
+            continue
+        result = latest['result']
+        history = group.get('applications', [])
+        # Block A supplies deterministic descending date/id order.
+        previous = next((a for a in history if a['application_id'] != latest['application_id']), None)
+        comparable = previous and _comparable_results(result, previous['result'])
+        used = [latest['application_id']]
+        if key != 'cbi':
+            parts.append(f"O {label} mais recente{_assessment_date(latest)} apresentou "
+                         f"{result['score']}/{latest['score_max']}, na faixa {result['classificacao'].lower()} do instrumento.")
+            if comparable:
+                parts.append(f"Entre as duas aplicações mais recentes, o {label} passou de "
+                             f"{previous['result']['score']}/{previous['score_max']} para "
+                             f"{result['score']}/{latest['score_max']}; a diferença numérica não estabelece mudança clínica.")
+                used.append(previous['application_id'])
+        else:
+            domains = result['dominios']
+            values = '; '.join(f"{d['nome']}: {d['score']:g}/{d['score_max']}" for d in domains)
+            parts.append(f"No CBI mais recente{_assessment_date(latest)}, foram registrados {values}.")
+            old_domains = {d['codigo']: d for d in previous['result']['dominios']} if comparable else {}
+            if old_domains and all(d['codigo'] in old_domains and d['itens'] == old_domains[d['codigo']]['itens']
+                                   and d['score_max'] == old_domains[d['codigo']]['score_max'] for d in domains):
+                changes = '; '.join(f"{d['nome']}: {old_domains[d['codigo']]['score']:g} para {d['score']:g}/{d['score_max']}" for d in domains)
+                parts.append(f"Entre as duas aplicações mais recentes do CBI, {changes}; são diferenças numéricas por domínio, sem conclusão de resposta terapêutica.")
+                used.append(previous['application_id'])
+        if key == 'phq9':
+            positive = [a for a in history if a['result'].get('metadata', {}).get('respostas', {}).get('phq9_9') in ('1', '2', '3')]
+            if positive:
+                signal = positive[0]
+                safety.append(f"Houve resposta positiva ao item 9 do PHQ-9{_assessment_date(signal)}, que requer avaliação profissional específica de segurança; "
+                              "essa resposta isolada não determina nível de risco. Não há informação de resolução nesta síntese.")
+                if signal['application_id'] not in used:
+                    used.append(signal['application_id'])
+        sources.append(dict(source=result['instrumento'], application_ids=used))
+    parts.extend(safety)
+    active = sorted((d for d in diagnoses if d.status == 'ATIVO' and d.tipo == 'DIAGNOSTICO'),
+                    key=lambda d: (d.data_diagnostico, d.id), reverse=True)
+    if active:
+        parts.append('Há diagnóstico ativo registrado por profissional nesta jornada.')
+        sources.append(dict(source='DIAGNOSIS', ids=[d.id for d in active]))
+    if interventions:
+        latest_intervention = max(interventions, key=lambda i: (i.data_intervencao, i.id))
+        parts.append(f"Há intervenção de {latest_intervention.tipo} registrada em {latest_intervention.data_intervencao.date().isoformat()} na jornada.")
+        sources.append(dict(source='INTERVENTION', ids=[latest_intervention.id]))
+    additional = any(s['source'] != 'WELLBEING_CHECKIN' for s in sources)
+    if additional:
+        parts.append('A síntese reúne evidências disponíveis para apoio à avaliação profissional, sem estabelecer causalidade, diagnóstico automático ou substituir julgamento clínico.')
+    # With Check-ins only (or no source), preserve the prior narrative exactly.
+    return (' '.join(parts) if additional else reading['summary']), sources

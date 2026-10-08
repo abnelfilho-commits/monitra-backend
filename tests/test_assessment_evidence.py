@@ -65,6 +65,8 @@ class EvidenceHTTPTests(unittest.TestCase):
                 self.assertEqual(before['bem_estar'],after['bem_estar'])
                 old,new=deepcopy(before['clinical_reading']),deepcopy(after['clinical_reading'])
                 old['evidence'].pop('assessments');evidence=new['evidence'].pop('assessments')
+                old.pop('summary');new.pop('summary')
+                old['metadata'].pop('summary_sources');new['metadata'].pop('summary_sources')
                 self.assertEqual(old,new)
                 for key,item in created.items():
                     latest=evidence[key]['latest']
@@ -98,6 +100,8 @@ class EvidenceHTTPTests(unittest.TestCase):
         with patch('app.services.phq9.executar_avaliacao_clinica',side_effect=AssertionError('recalculation')), patch('app.services.gad7.executar_avaliacao_clinica',side_effect=AssertionError('recalculation')), patch('app.services.cbi.executar_avaliacao_clinica',side_effect=AssertionError('recalculation')):
             after=self.client.get(self.path()).json()['clinical_reading']
         evidence=after['evidence'].pop('assessments');before['evidence'].pop('assessments')
+        before.pop('summary');after.pop('summary')
+        before['metadata'].pop('summary_sources');after['metadata'].pop('summary_sources')
         self.assertEqual(before,after)
         self.assertEqual(evidence[key]['latest']['result'],created['resultado'])
         self.assertTrue(all(not value['applications'] for name,value in evidence.items() if name!=key))

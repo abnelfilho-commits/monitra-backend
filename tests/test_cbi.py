@@ -49,6 +49,8 @@ class CBITests(unittest.TestCase):
                 from copy import deepcopy
                 old,new=deepcopy(before[key]),deepcopy(after[key])
                 old['evidence'].pop('assessments');new['evidence'].pop('assessments')
+                old.pop('summary');new.pop('summary')
+                old['metadata'].pop('summary_sources');new['metadata'].pop('summary_sources')
                 self.assertEqual(old,new)
             else:self.assertEqual(before[key],after[key])
 
@@ -201,6 +203,8 @@ class CBITests(unittest.TestCase):
                 from copy import deepcopy
                 old,new=deepcopy(before[key]),deepcopy(after[key])
                 old['evidence'].pop('assessments');new['evidence'].pop('assessments')
+                old.pop('summary');new.pop('summary')
+                old['metadata'].pop('summary_sources');new['metadata'].pop('summary_sources')
                 self.assertEqual(old,new)
             else:self.assertEqual(before[key],after[key])
         self.assertEqual(after['phq9']['itens'][0]['resultado']['score'],18)

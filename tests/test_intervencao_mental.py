@@ -163,11 +163,18 @@ class InterventionTests(unittest.TestCase):
         self.db.commit()
         self.assertEqual(self.post().status_code, 403)
 
-    def test_intervention_does_not_change_reading_or_other_events(self):
+    def test_intervention_changes_only_summary_and_its_provenance(self):
         before = self.client.get(self.path()).json()
         self.assertEqual(self.post().status_code, 201)
         after = self.client.get(self.path()).json()
-        for key in ('clinical_reading', 'bem_estar', 'diagnosticos'):
+        from copy import deepcopy
+        old,new=deepcopy(before['clinical_reading']),deepcopy(after['clinical_reading'])
+        self.assertIn('Há intervenção de',new['summary'])
+        self.assertEqual(new['metadata']['summary_sources'],[dict(source='INTERVENTION',ids=[after['intervencoes']['itens'][0]['id']])])
+        old.pop('summary');new.pop('summary')
+        old['metadata'].pop('summary_sources');new['metadata'].pop('summary_sources')
+        self.assertEqual(old,new)
+        for key in ('bem_estar', 'diagnosticos'):
             self.assertEqual(after[key], before[key])
         self.assertEqual(after['intervencoes']['total'], 1)
 

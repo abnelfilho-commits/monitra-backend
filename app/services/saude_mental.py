@@ -102,6 +102,7 @@ class SaudeMentalService:
                     instituicao_id=institution, applications={'phq9':phq9.itens,'gad7':gad7.itens,'cbi':cbi.itens})
                 reading = ClinicalReadingService().get_contextual_reading(
                     pessoa_id=person, contexto_assistencial_id=context,
-                    care_line=MENTAL_HEALTH.code, checkins=wellbeing.checkins, assessments=assessments)
+                    care_line=MENTAL_HEALTH.code, checkins=wellbeing.checkins, assessments=assessments,
+                    diagnoses=diagnoses.itens, interventions=interventions.itens)
             return JornadaMentalDetalhe(**self._result(row).model_dump(),bem_estar=wellbeing, diagnosticos=diagnoses, intervencoes=interventions, phq9=phq9, gad7=gad7, cbi=cbi,
                                         clinical_reading=reading)

@@ -179,7 +179,7 @@ class ReadingHTTPTests(unittest.TestCase):
         self.db.execute(text('DELETE FROM concessoes_assistenciais WHERE usuario_instituicao_acesso_id=:r'),dict(r=self.roots[0]));self.db.commit()
         self.assertEqual(self.client.get(self.path()).status_code,404)
 
-    def test_diagnosis_and_intervention_do_not_change_checkin_reading(self):
+    def test_diagnosis_and_intervention_preserve_checkin_evidence(self):
         import json
         from urllib.parse import urlsplit, parse_qsl
         self.assertEqual(self.post().status_code, 201)
@@ -192,5 +192,8 @@ class ReadingHTTPTests(unittest.TestCase):
             response = self.client.request('POST',url.path+'/'+endpoint,params=dict(parse_qsl(url.query)),body=json.dumps(payload).encode(),headers={'Content-Type':'application/json'})
             self.assertEqual(response.status_code,201,response.text)
             after = self.client.get(self.path()).json()['clinical_reading']
-            self.assertEqual(after,before)
+            self.assertIn('registrad',after['summary'])
+            after.pop('summary');old=dict(before);old.pop('summary')
+            after['metadata'].pop('summary_sources');old['metadata']=dict(old['metadata']);old['metadata'].pop('summary_sources')
+            self.assertEqual(after,old)
             self.assertEqual(after['metadata']['total_registros'],1)
