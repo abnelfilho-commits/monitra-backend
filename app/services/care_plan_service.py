@@ -3,6 +3,7 @@
 Patient locks serialize active-plan changes. Agenda locks serialize planning
 mutation with scheduling confirmation. Legacy reads never infer historical lines.
 """
+from app.services.atividade_aplicabilidade import activity_applies
 from app.services.legacy_scope import legacy_agenda, legacy_session
 from datetime import date
 from functools import wraps
@@ -181,7 +182,7 @@ class CarePlanService:
         line = self.assigned(pts)
         activity = self.row(db, AtividadeTerapeutica, activity_id)
         occupation = self.row(db, OcupacaoProfissional, occupation_id)
-        if not activity.ativo or activity.modulo_id != line.module_id:
+        if not activity.ativo or not activity_applies(db, activity.id, line.module_id):
             raise HTTPException(400, 'Atividade inativa ou incompatível com a linha do PTS.')
         if not occupation.ativo or not db.query(AtividadeOcupacao.id).filter(
                 AtividadeOcupacao.atividade_id == activity_id,

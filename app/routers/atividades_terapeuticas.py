@@ -1,7 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func
+from app.models.modular import ModuloClinico
+from app.models.atividade_terapeutica import AtividadeModulo
+from app.schemas.atividade_terapeutica import AtividadeLinhas
+from app.services.atividade_aplicabilidade import applicable_to
+from pydantic import ValidationError
 
 from typing import Optional
 
@@ -40,12 +45,13 @@ def listar_atividades(
 ):
     query = (
         db.query(AtividadeTerapeutica)
+        .options(selectinload(AtividadeTerapeutica.linhas))
         .filter(AtividadeTerapeutica.ativo == True)
     )
 
     if modulo_id is not None:
         query = query.filter(
-            AtividadeTerapeutica.modulo_id == modulo_id
+            applicable_to(modulo_id)
         )
 
     return (
@@ -59,11 +65,12 @@ def criar_atividade(
     atividade: AtividadeTerapeuticaCreate,
     db: Session = Depends(get_db)
 ):
+    lines = validated_lines(db, atividade.modulo_ids if atividade.modulo_ids is not None else ([atividade.modulo_id] if atividade.modulo_id is not None else []))
     nova_atividade = AtividadeTerapeutica(
         nome=atividade.nome,
         descricao=atividade.descricao,
         duracao_minutos=atividade.duracao_minutos,
-        modulo_id=atividade.modulo_id,
+        modulo_id=lines[0] if len(lines) == 1 else None,
         ativo=True
     )
     atividade_existente = (
@@ -77,6 +84,7 @@ def criar_atividade(
             status_code=400,
             detail="Esta atividade já está cadastrada."
         )
+    nova_atividade.linhas = [AtividadeModulo(modulo_id=i) for i in lines]
     db.add(nova_atividade)
     db.commit()
     db.refresh(nova_atividade)
@@ -217,3 +225,38 @@ def remover_ocupacao_da_atividade(
     db.commit()
 
     return {"message": "Vínculo removido com sucesso."}
+
+
+@router.get("/linhas")
+def linhas_catalogo(db: Session = Depends(get_db)):
+    return [dict(id=row.id, nome=row.nome, slug=row.slug) for row in
+            db.query(ModuloClinico).filter(ModuloClinico.ativo.is_(True)).order_by(ModuloClinico.id)]
+
+
+def validated_lines(db, values):
+    try:
+        values = AtividadeLinhas(modulo_ids=values).modulo_ids
+    except ValidationError:
+        raise HTTPException(422, 'Selecione uma ou mais linhas distintas válidas.') from None
+    rows = db.query(ModuloClinico.id).filter(ModuloClinico.id.in_(values), ModuloClinico.ativo.is_(True)).all()
+    if len(rows) != len(values):
+        raise HTTPException(422, 'Linha inexistente ou inativa.')
+    return values
+
+
+@router.put("/{atividade_id}/linhas", response_model=AtividadeTerapeuticaResponse, dependencies=[Depends(maintain_catalog)])
+def editar_linhas(atividade_id: int, payload: AtividadeLinhas, db: Session = Depends(get_db)):
+    try:
+        activity = db.query(AtividadeTerapeutica).filter_by(id=atividade_id).with_for_update().first()
+        if activity is None:
+            raise HTTPException(404, 'Atividade não encontrada.')
+        values = validated_lines(db, payload.modulo_ids)
+        current = {link.modulo_id: link for link in activity.linhas}
+        activity.linhas = [current[i] if i in current else AtividadeModulo(modulo_id=i) for i in values]
+        db.flush()
+        result = AtividadeTerapeuticaResponse.model_validate(activity)
+        db.commit()
+        return result
+    except Exception:
+        db.rollback()
+        raise

@@ -23,7 +23,7 @@ class StructuralTests(unittest.TestCase):
         from app.database import Base
         import app.models
         scripts = ScriptDirectory.from_config(config())
-        self.assertEqual(scripts.get_heads(), ['w3_cbi_v1'])
+        self.assertEqual(scripts.get_heads(), ['w3_atividade_linhas_v1'])
         self.assertEqual(scripts.get_revision(REVISION).down_revision, PARENT)
         for name in ('respostas_registro', 'avaliacoes_clinicas', 'pts_objetivos', 'agenda_cuidados', 'sessoes_assistenciais'):
             self.assertNotIn('contexto_assistencial_id', Base.metadata.tables[name].c)

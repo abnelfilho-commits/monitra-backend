@@ -24,7 +24,9 @@ from app.services.care_lines import AmbiguousCareLine, PatientCareLineNotFound, 
 from app.services.scheduling_service import SchedulingService
 
 DAY = date(2026, 1, 10)
-MODELS = (Clinica, OcupacaoProfissional, Profissional, Usuario, Paciente,
+from app.models.atividade_terapeutica import AtividadeModulo
+
+MODELS = (AtividadeModulo, Clinica, OcupacaoProfissional, Profissional, Usuario, Paciente,
     ModuloClinico, PacienteModulo, PTS, PTSObjetivo, AtividadeTerapeutica,
     AtividadeOcupacao, AgendaCuidado, SessaoAssistencial, ProfissionalModulo)
 
@@ -86,6 +88,21 @@ class CarePlanTests(unittest.TestCase):
     def sessions(self, agenda):
         return SchedulingService.confirmar_cronograma(self.db,agenda,
             [SimpleNamespace(numero=1,data=DAY,hora_inicio=None,hora_fim=None)])
+
+    def test_multiline_agenda_and_explicit_removal_overrides_legacy(self):
+        activity = self.db.get(AtividadeTerapeutica, 1)
+        activity.modulo_id = None
+        activity.linhas = [AtividadeModulo(modulo_id=1), AtividadeModulo(modulo_id=2)]
+        self.db.commit()
+        agenda = self.agenda()
+        self.assertEqual(agenda.atividade_id, 1)
+        activity.modulo_id = 1
+        activity.linhas = [link for link in activity.linhas if link.modulo_id == 2]
+        self.db.commit()
+        plan = self.db.get(PTS, agenda.pts_id)
+        with self.assertRaises(HTTPException):
+            self.service.catalog(self.db, plan, 1, 1, 70)
+        self.assertEqual(activity.modulo_id, 1)
 
     def test_neuro_cardio_and_actor(self):
         self.assertEqual(self.create().modulo_id,1)

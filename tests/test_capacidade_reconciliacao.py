@@ -70,9 +70,9 @@ class CapacityReconciliationTests(unittest.TestCase):
 
     def assert_contract(self,c):
         migration.validate_capacity(c)
-        self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar(),'w3_cbi_v1')
+        self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar(),'w3_atividade_linhas_v1')
         self.assertEqual(c.exec_driver_sql('SELECT count(*) FROM information_schema.columns WHERE table_schema=\'public\' AND table_name=\'capacidades_profissionais\'').scalar(),8)
-        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(),['w3_cbi_v1'])
+        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(),['w3_atividade_linhas_v1'])
 
     def test_empty_bootstrap_and_idempotence(self):
         self.upgrade('head')

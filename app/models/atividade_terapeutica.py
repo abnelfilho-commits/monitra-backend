@@ -1,4 +1,4 @@
-from sqlalchemy import text, UniqueConstraint
+from sqlalchemy import text, UniqueConstraint, Index
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -17,6 +17,12 @@ class AtividadeTerapeutica(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     modulo_id = Column(Integer, ForeignKey("modulos_clinicos.id"), nullable=True)
+
+    linhas = relationship("AtividadeModulo", cascade="all, delete-orphan", lazy="select")
+
+    @property
+    def modulo_ids(self):
+        return sorted(link.modulo_id for link in self.linhas) or ([self.modulo_id] if self.modulo_id is not None else [])
 
     ocupacoes = relationship(
         "AtividadeOcupacao",
@@ -66,3 +72,9 @@ class AtividadeOcupacao(Base):
         "OcupacaoProfissional",
         back_populates="atividades",
     )
+
+class AtividadeModulo(Base):
+    __tablename__ = "atividade_modulos"
+    __table_args__ = (Index("ix_atividade_modulos_modulo_atividade", "modulo_id", "atividade_id"),)
+    atividade_id = Column(Integer, ForeignKey("atividades_terapeuticas.id", ondelete="CASCADE"), primary_key=True)
+    modulo_id = Column(Integer, ForeignKey("modulos_clinicos.id", ondelete="RESTRICT"), primary_key=True)

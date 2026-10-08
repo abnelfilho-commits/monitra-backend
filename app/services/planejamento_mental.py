@@ -1,4 +1,5 @@
 """Contextual quantitative planning in canonical AgendaCuidado; no sessions or clinic ACL."""
+from app.services.atividade_aplicabilidade import applicable_to
 from datetime import date
 from sqlalchemy import select, or_
 from app.models.agenda_cuidado import AgendaCuidado
@@ -48,7 +49,7 @@ class PlanningService:
 
     def catalog(self, db, scope):
         self.authorize(db,scope)
-        activities=db.scalars(select(Activity).where(Activity.modulo_id==3,Activity.ativo.is_(True)).order_by(Activity.nome,Activity.id)).all()
+        activities=db.scalars(select(Activity).where(applicable_to(3),Activity.ativo.is_(True)).order_by(Activity.nome,Activity.id)).all()
         occupations=db.scalars(select(Occupation).where(Occupation.ativo.is_(True)).order_by(Occupation.nome,Occupation.id)).all()
         pairs=db.execute(select(Pair.atividade_id,Pair.ocupacao_id).where(Pair.atividade_id.in_([a.id for a in activities]))).all()
         return dict(atividades=[dict(id=a.id,nome=a.nome) for a in activities],
@@ -79,7 +80,7 @@ class PlanningService:
         self.pts._lock(db,Activity,Activity.id==payload.atividade_id)
         self.pts._lock(db,Occupation,Occupation.id==payload.ocupacao_id)
         self.pts._lock(db,Pair,(Pair.atividade_id==payload.atividade_id)&(Pair.ocupacao_id==payload.ocupacao_id))
-        activity=db.scalar(select(Activity).where(Activity.id==payload.atividade_id,Activity.ativo.is_(True),Activity.modulo_id==3))
+        activity=db.scalar(select(Activity).where(Activity.id==payload.atividade_id,Activity.ativo.is_(True),applicable_to(3)))
         occupation=db.scalar(select(Occupation.id).where(Occupation.id==payload.ocupacao_id,Occupation.ativo.is_(True)))
         pair=db.scalar(select(Pair.id).where(Pair.atividade_id==payload.atividade_id,Pair.ocupacao_id==payload.ocupacao_id))
         if activity is None or occupation is None or pair is None:
