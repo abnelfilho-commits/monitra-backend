@@ -73,7 +73,13 @@ class ProximaSessaoResumo(BaseModel):
 
 class AssistentialSessionResponse(BaseModel):
     sessao: SessaoResumo
-    paciente: PacienteResumo
+    paciente: Optional[PacienteResumo] = None
+    pessoa: Optional[PacienteResumo] = None
+    contexto: Optional[dict] = None
+    pode_registrar: Optional[bool] = None
+    narrativa: Optional[str] = None
+    proximos_passos: List[str] = []
+    autor_usuario_id: Optional[int] = None
     objetivo: Optional[ObjetivoResumo] = None
     atividade: Optional[AtividadeResumo] = None
     profissional: Optional[ProfissionalResumo] = None

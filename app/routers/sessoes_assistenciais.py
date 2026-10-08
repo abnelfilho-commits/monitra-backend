@@ -1,5 +1,6 @@
 from app.services.legacy_scope import legacy_session
 from typing import Optional
+from datetime import time
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -34,6 +35,44 @@ from app.services.registro_longitudinal_service import (
 from app.core.deps import get_usuario_atual
 from app.services.session_service import SessionService
 from app.models.sessao_assistencial import SessaoAssistencial
+
+from app.services.sessoes_mentais import SessoesMentaisService
+from app.services.pts_mental import PTSDenied, PTSConflict
+from app.services.planejamento_mental import PlanningInvalid
+from app.schemas.sessoes_mentais import AtendimentoMental
+from sqlalchemy.exc import SQLAlchemyError
+from pydantic import ValidationError
+
+
+def contextual_operation(db, identity, user, *, action=None, attendance=None):
+    """Dispatch only persisted contextual ancestry; legacy path remains unchanged."""
+    write = action is not None or attendance is not None
+    try:
+        service = SessoesMentaisService()
+        if not write:
+            result = service.operational_detail(db, identity, user.id)
+            return AssistentialSessionResponse.model_validate(result) if result is not None else None
+        row = service.operational_mutate(db, identity, user.id, action,
+            AtendimentoMental.model_validate(attendance) if attendance is not None else None)
+        if row is None: return None
+        result = (RegistrarAtendimentoResponse(success=True, sessao_id=row.id,
+            registro_id=row.registro_longitudinal_id, mensagem='Atendimento registrado com sucesso.')
+            if attendance is not None else SessaoAssistencialResponse.model_validate(row))
+        db.commit()
+        return result
+    except PTSDenied:
+        if write: db.rollback()
+        raise HTTPException(403 if write else 404, 'Sessão indisponível.') from None
+    except (PlanningInvalid, ValidationError) as exc:
+        if write: db.rollback()
+        raise HTTPException(422, 'Dados de atendimento inválidos.' if isinstance(exc, ValidationError) else str(exc)) from None
+    except (PTSConflict, SQLAlchemyError):
+        if write: db.rollback()
+        raise HTTPException(409, 'Conflito na sessão assistencial.') from None
+    except Exception:
+        if write: db.rollback()
+        raise
+
 
 router = APIRouter(
     prefix="/sessoes-assistenciais",
@@ -75,9 +114,14 @@ def listar_minhas_sessoes(
     usuario=Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ):
-    sessoes = SessionService().personal_sessions(db, usuario)
+    contextual = SessoesMentaisService().personal_sessions(db, usuario)
+    from app.models.usuario import Usuario
+    native_person = db.query(Usuario.pessoa_id).filter(Usuario.id == usuario.id).scalar()
+    legacy_ready = (getattr(usuario, 'perfil', None) == 'PROFISSIONAL' and getattr(usuario, 'profissional_id', None)
+                    and getattr(usuario, 'clinica_id', None))
+    sessoes = SessionService().personal_sessions(db, usuario) if legacy_ready or native_person is None else []
 
-    return [
+    return sorted([
         {
             "id": sessao.id,
             "paciente_id": sessao.paciente_id,
@@ -110,7 +154,7 @@ def listar_minhas_sessoes(
             ),
         }
         for sessao in sessoes
-    ]
+    ] + contextual, key=lambda row: (row["data_agendada"], row["hora_inicio"] or time.min, row["id"]))
 
 @router.post(
     "/{sessao_id}/confirmar",
@@ -121,6 +165,8 @@ def confirmar_sessao(
     db: Session = Depends(get_db),
     usuario=Depends(get_usuario_atual),
 ):
+    contextual = contextual_operation(db, sessao_id, usuario, action='confirmar')
+    if contextual is not None: return contextual
     sessao = buscar_sessao(sessao_id, db)
 
     try:
@@ -142,6 +188,8 @@ def iniciar_sessao(
     db: Session = Depends(get_db),
     usuario=Depends(get_usuario_atual),
 ):
+    contextual = contextual_operation(db, sessao_id, usuario, action='iniciar')
+    if contextual is not None: return contextual
     sessao = buscar_sessao(sessao_id, db)
 
     try:
@@ -163,6 +211,8 @@ def finalizar_sessao(
     db: Session = Depends(get_db),
     usuario=Depends(get_usuario_atual),
 ):
+    contextual = contextual_operation(db, sessao_id, usuario, action='finalizar')
+    if contextual is not None: return contextual
     sessao = buscar_sessao(sessao_id, db)
 
     try:
@@ -249,6 +299,8 @@ def registrar_atendimento(
     db: Session = Depends(get_db),
     usuario=Depends(get_usuario_atual),
 ):
+    contextual = contextual_operation(db, sessao_id, usuario, attendance=payload.model_dump())
+    if contextual is not None: return contextual
     sessao = buscar_sessao(
         sessao_id=sessao_id,
         db=db,
@@ -324,6 +376,8 @@ def obter_sessao_assistencial(
     Retorna todos os dados da Sessão Assistencial.
     """
 
+    contextual = contextual_operation(db, sessao_id, usuario)
+    if contextual is not None: return contextual
     SessionService().context(db, sessao_id, usuario)
     return AssistentialSessionService.get_session_details(
         db=db,

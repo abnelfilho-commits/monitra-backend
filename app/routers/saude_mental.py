@@ -330,7 +330,7 @@ def update_mental_planning(payload: PlanningInput, pts_id: int, objetivo_id: int
 
 
 from app.services.sessoes_mentais import SessoesMentaisService
-from app.schemas.sessoes_mentais import CronogramaMentalOut, AtendimentoMental, AcaoSessaoMental
+from app.schemas.sessoes_mentais import CronogramaMentalOut, AtendimentoMental, AcaoSessaoMental, ConfirmarCronogramaMental
 
 
 def session_command(db, operation):
@@ -359,8 +359,8 @@ def mental_schedule(pts_id: int, objetivo_id: int, planejamento_id: int, scope=D
 
 
 @router.post('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts/{pts_id}/objetivos/{objetivo_id}/planejamentos/{planejamento_id}/cronograma', response_model=CronogramaMentalOut)
-def generate_mental_schedule(pts_id: int, objetivo_id: int, planejamento_id: int, scope=Depends(pts_scope), db: Session=Depends(get_db)):
-    return session_command(db, lambda: SessoesMentaisService().generate(db, scope, pts_id, objetivo_id, planejamento_id))
+def generate_mental_schedule(pts_id: int, objetivo_id: int, planejamento_id: int, payload: ConfirmarCronogramaMental = None, scope=Depends(pts_scope), db: Session=Depends(get_db)):
+    return session_command(db, lambda: SessoesMentaisService().generate(db, scope, pts_id, objetivo_id, planejamento_id, payload.cronograma if payload else None))
 
 
 @router.post('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts/{pts_id}/objetivos/{objetivo_id}/planejamentos/{planejamento_id}/sessoes/{sessao_id}/estado', response_model=CronogramaMentalOut)

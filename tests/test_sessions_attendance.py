@@ -290,6 +290,15 @@ class BoundaryTests(SessionFixture):
 
 
 class HttpTests(SessionFixture):
+    def setUp(self):
+        super().setUp()
+        # Current HTTP dispatcher inspects both persisted ancestry families.
+        # Legacy fixtures have no contextual memberships; keep all ACL assertions.
+        from app.models.autorizacao_institucional import UsuarioInstituicaoAcesso
+        from app.models.contexto_assistencial import ContextoAssistencial
+        for model in (UsuarioInstituicaoAcesso, ContextoAssistencial):
+            model.__table__.create(self.engine, checkfirst=True)
+
     def request(self, method, path, payload=None, authenticated=True):
         import asyncio
         import json

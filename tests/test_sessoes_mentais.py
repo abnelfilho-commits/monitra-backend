@@ -155,3 +155,102 @@ class AttendanceCatalogueTests(unittest.TestCase):
             c.execute(text("INSERT INTO registros_longitudinais(paciente_id,modulo_id,formulario_id,origem,data_registro) VALUES(:p,3,:f,'PROFISSIONAL',CURRENT_DATE)"),dict(p=patient,f=form))
         with self.assertRaisesRegex(RuntimeError,'MENTAL_ATTENDANCE_RECORDS_PRESENT'):
             with self.engine.begin() as c:command.downgrade(config(c),'w3_atividade_linhas_v1')
+
+
+@unittest.skipUnless(os.getenv('M0_TEST_POSTGRES_URL'), 'Disposable PostgreSQL required')
+class OperationalSessionTests(unittest.TestCase):
+    schema_revision='head'
+    setUpClass=classmethod(MentalSessionTests.setUpClass.__func__)
+    tearDownClass=classmethod(MentalSessionTests.tearDownClass.__func__)
+    tearDown=MentalSessionTests.tearDown
+    command_grant=MentalSessionTests.command_grant
+    path=MentalSessionTests.path
+    request=MentalSessionTests.request
+    create=MentalSessionTests.create
+    generate=MentalSessionTests.generate
+
+    def setUp(self):
+        MentalSessionTests.setUp(self)
+        from app.routers.sessoes_assistenciais import router
+        self.app.include_router(router)
+
+    def reviewed(self):
+        proposal=self.request('GET',self.schedule).json()['proposta']
+        return dict(cronograma=[dict(numero=s['numero'],data=s['data'],hora_inicio='09:00',hora_fim='09:50') for s in proposal])
+
+    def shared(self, method, path, payload=None):
+        import json
+        return self.client.request(method,'/sessoes-assistenciais'+path,
+            body=json.dumps(payload).encode() if payload is not None else None,
+            headers={'Content-Type':'application/json'})
+
+    def test_review_confirm_agenda_session_attendance_timeline(self):
+        payload=self.reviewed()
+        payload['cronograma'][0]['hora_inicio']='10:00';payload['cronograma'][0]['hora_fim']='10:50'
+        result=self.request('POST',self.schedule,payload)
+        self.assertEqual(result.status_code,200,result.text)
+        identity=result.json()['sessoes'][0]['id']
+        self.assertEqual(result.json()['sessoes'][0]['hora_inicio'],'10:00:00')
+        self.assertEqual(self.request('POST',self.schedule,payload).json(),result.json())
+        with patch.object(self.db,'commit',side_effect=AssertionError('GET committed')):
+            agenda=self.shared('GET','/minhas');self.assertEqual(agenda.status_code,200,agenda.text)
+            self.assertIn(identity,[s['id'] for s in agenda.json()])
+            detail=self.shared('GET',f'/{identity}');self.assertEqual(detail.status_code,200,detail.text)
+        self.assertEqual(detail.json()['pessoa']['id'],self.person)
+        self.assertEqual(detail.json()['contexto']['id'],self.open)
+        self.assertIsNone(detail.json()['paciente'])
+        for action in ('confirmar','iniciar'):
+            response=self.shared('POST',f'/{identity}/{action}');self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(self.shared('POST',f'/{identity}/finalizar').status_code,422)
+        response=self.shared('POST',f'/{identity}/registrar-atendimento',dict(narrativa='Atendimento contextual revisado',proximos_passos=['Acompanhar']))
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(self.shared('POST',f'/{identity}/registrar-atendimento',dict(narrativa='Duplicado')).status_code,409)
+        self.assertEqual(self.shared('POST',f'/{identity}/finalizar').status_code,200)
+        refreshed=self.shared('GET',f'/{identity}').json()
+        self.assertEqual(refreshed['sessao']['status'],'REALIZADA')
+        self.assertEqual(refreshed['autor_usuario_id'],self.actor)
+        self.assertEqual(len(self.client.get(self.path()).json()['sessoes']),1)
+
+    def test_invalid_review_no_writes_and_conflicting_replay(self):
+        for change in (dict(hora_fim='09:10'),dict(hora_inicio=''),dict(data='2020-01-01')):
+            payload=self.reviewed();payload['cronograma'][0].update(change)
+            self.assertEqual(self.request('POST',self.schedule,payload).status_code,422)
+        payload=self.reviewed();payload['cronograma'].pop()
+        self.assertEqual(self.request('POST',self.schedule,payload).status_code,422)
+        self.assertEqual(self.db.scalar(text('SELECT count(*) FROM sessoes_assistenciais WHERE agenda_cuidado_id=:a'),dict(a=self.planning)),0)
+        payload=self.reviewed();self.assertEqual(self.request('POST',self.schedule,payload).status_code,200)
+        payload['cronograma'][0].update(hora_inicio='10:00',hora_fim='10:50')
+        self.assertEqual(self.request('POST',self.schedule,payload).status_code,409)
+
+    def test_assignment_and_admin_do_not_bypass_w1b(self):
+        identity=self.generate()['sessoes'][0]['id']
+        self.db.execute(text('DELETE FROM concessoes_assistenciais WHERE id=:id'),dict(id=self.grant_ids[self.open,'ASSISTENCIAL_REGISTRAR']));self.db.commit()
+        self.assertEqual(self.shared('GET',f'/{identity}').json()['pode_registrar'],False)
+        self.assertEqual(self.shared('POST',f'/{identity}/confirmar').status_code,403)
+        self.db.execute(text("UPDATE usuarios SET perfil='ADMIN' WHERE id=:id"),dict(id=self.actor))
+        self.db.execute(text('DELETE FROM concessoes_assistenciais WHERE id=:id'),dict(id=self.grant_ids[self.open,'ASSISTENCIAL_LER']));self.db.commit()
+        self.assertEqual(self.shared('GET','/minhas').json(),[])
+        self.assertEqual(self.shared('GET',f'/{identity}').status_code,404)
+        self.assertEqual(self.shared('POST',f'/{identity}/iniciar').status_code,403)
+
+    def test_personal_agenda_requires_assignment_and_active_line(self):
+        identity=self.generate()['sessoes'][0]['id']
+        self.assertIn(identity,[s['id'] for s in self.shared('GET','/minhas').json()])
+        self.db.execute(text('UPDATE contexto_assistencial_linhas SET ativo=false WHERE contexto_assistencial_id=:c AND modulo_id=3'),dict(c=self.open));self.db.commit()
+        self.assertEqual(self.shared('GET','/minhas').json(),[])
+        self.assertEqual(self.shared('GET',f'/{identity}').status_code,404)
+
+    def test_concurrent_reviewed_confirmation_preserves_times(self):
+        from app.services.sessoes_mentais import SessoesMentaisService
+        from app.schemas.sessoes_mentais import ConfirmarCronogramaMental
+        payload=ConfirmarCronogramaMental(**self.reviewed())
+        barrier=Barrier(2);self.db.commit()
+        def worker(_):
+            with Session(self.engine) as db:
+                barrier.wait(timeout=10)
+                result=SessoesMentaisService().generate(db,self.scope,self.plan,self.objective,self.planning,payload.cronograma)
+                db.commit();return [(s.id,str(s.hora_inicio),str(s.hora_fim)) for s in result.sessoes]
+        with ThreadPoolExecutor(2) as pool:
+            first,second=list(pool.map(worker,range(2)))
+        self.assertEqual(first,second);self.assertEqual(len(first),52)
+        self.assertEqual(first[0][1:],('09:00:00','09:50:00'))

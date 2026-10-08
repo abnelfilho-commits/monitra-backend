@@ -45,3 +45,16 @@ class CronogramaMentalOut(BaseModel):
     pode_registrar: bool
     proposta: list[OcorrenciaMental]
     sessoes: list[SessaoMentalOut]
+
+
+class OcorrenciaRevisada(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    numero: int = Field(gt=0)
+    data: date
+    hora_inicio: time
+    hora_fim: time
+
+
+class ConfirmarCronogramaMental(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    cronograma: list[OcorrenciaRevisada] = Field(min_length=1)

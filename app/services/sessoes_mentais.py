@@ -72,14 +72,35 @@ class SessoesMentaisService:
             proposta=[dict(numero=i.numero, data=i.data_agendada, duracao_minutos=i.duracao_minutos) for i in proposal],
             sessoes=[self.output_session(db, row, plan) for row in rows])
 
-    def generate(self, db, scope, pts_id, objective_id, planning_id):
+    def generate(self, db, scope, pts_id, objective_id, planning_id, reviewed=None):
         agenda, plan = self.origin(db, scope, pts_id, objective_id, planning_id, True)
-        if self.sessions(db, agenda, plan): return self.output(db, scope, agenda, plan)
+        existing = self.sessions(db, agenda, plan)
+        if existing:
+            if reviewed is not None:
+                expected = [(r.numero_sessao, r.data_agendada, r.hora_inicio, r.hora_fim) for r in existing]
+                received = [(r.numero, r.data, r.hora_inicio, r.hora_fim) for r in sorted(reviewed, key=lambda i: i.numero)]
+                if expected != received: raise PTSConflict('Cronograma já confirmado com outros dados.')
+            return self.output(db, scope, agenda, plan)
         # Reuse the canonical executor and quantity validators without editing planning.
         payload = PlanningInput(**{name:getattr(agenda,name) for name in PlanningInput.model_fields})
         self.planning.validate_executor(db, scope, payload)
         self.planning.quantity(db, scope, payload)
         proposed = self.output(db, scope, agenda, plan).proposta
+        if reviewed is not None:
+            if sorted(i.numero for i in reviewed) != list(range(1, agenda.quantidade_sessoes + 1)):
+                raise PlanningInvalid('Quantidade ou numeração incompatível com o planejamento.')
+            ordered = sorted(reviewed, key=lambda i: i.numero)
+            for i, item in enumerate(ordered):
+                if not agenda.data_inicio <= item.data <= agenda.data_fim:
+                    raise PlanningInvalid('Data fora do período do planejamento.')
+                if item.hora_inicio.tzinfo or item.hora_fim.tzinfo:
+                    raise PlanningInvalid('Informe horários locais sem fuso.')
+                start, end = datetime.combine(item.data, item.hora_inicio), datetime.combine(item.data, item.hora_fim)
+                if (end - start).total_seconds() != agenda.duracao_minutos * 60:
+                    raise PlanningInvalid('Os horários devem respeitar a duração planejada.')
+                if i and start < datetime.combine(ordered[i-1].data, ordered[i-1].hora_fim):
+                    raise PlanningInvalid('Ocorrências fora de ordem ou sobrepostas.')
+            proposed = ordered
         SchedulingService.confirmar_cronograma(db, agenda, proposed, commit=False)
         return self.output(db, scope, agenda, plan)
 
@@ -118,3 +139,107 @@ class SessoesMentaisService:
             SessaoAssistencial.status == 'REALIZADA', SessaoAssistencial.registro_longitudinal_id.is_not(None))
             .order_by(SessaoAssistencial.data_realizacao.desc(), SessaoAssistencial.id.desc())).all()
         return [self.output_session(db, row, plan) for row, plan in rows]
+
+
+    def operational_origin(self, db, identity, actor):
+        """Resolve persisted ancestry, never an institution supplied by the client."""
+        from app.models.contexto_assistencial import ContextoAssistencial
+        from app.models.paciente import Paciente
+        row = db.execute(select(SessaoAssistencial, AgendaCuidado, PTS, ContextoAssistencial, Paciente)
+            .join(AgendaCuidado, AgendaCuidado.id == SessaoAssistencial.agenda_cuidado_id)
+            .join(PTS, PTS.id == AgendaCuidado.pts_id)
+            .join(ContextoAssistencial, ContextoAssistencial.id == PTS.contexto_assistencial_id)
+            .join(Paciente, Paciente.id == ContextoAssistencial.paciente_id)
+            .where(SessaoAssistencial.id == identity)).one_or_none()
+        if row is None: return None
+        session, agenda, plan, context, patient = row
+        if plan.modulo_id != 3 or plan.paciente_id != context.paciente_id:
+            raise PTSDenied('SESSION_UNAVAILABLE')
+        scope = dict(actor=actor, institution=context.instituicao_id, person=patient.pessoa_id, context=context.id)
+        self.origin(db, scope, plan.id, agenda.objetivo_id, agenda.id)
+        self.sessions(db, agenda, plan)
+        return session, agenda, plan, scope
+
+    def personal_sessions(self, db, user):
+        from app.models.usuario import Usuario
+        from app.models.paciente import Paciente
+        from app.models.pessoa import Pessoa
+        from app.models.profissional import Profissional
+        from app.services.autorizacao_contextual import AutorizacaoContextualService
+        from app.models.autorizacao_institucional import UsuarioInstituicaoAcesso
+        from app.models.contexto_assistencial import ContextoAssistencialLinha
+        from app.models.modular import ModuloClinico
+        from sqlalchemy import union_all
+        institutions = db.scalars(select(UsuarioInstituicaoAcesso.instituicao_id).where(
+            UsuarioInstituicaoAcesso.usuario_id == user.id, UsuarioInstituicaoAcesso.ativo.is_(True))).all()
+        if not institutions: return []
+        allowed = union_all(*(AutorizacaoContextualService().authorized_context_query(
+            actor_id=user.id, capability='ASSISTENCIAL_LER', instituicao_id=i).order_by(None) for i in institutions))
+        rows = db.scalars(select(SessaoAssistencial).join(AgendaCuidado, AgendaCuidado.id == SessaoAssistencial.agenda_cuidado_id)
+            .join(PTS, PTS.id == AgendaCuidado.pts_id)
+            .join(Paciente, Paciente.id == PTS.paciente_id)
+            .join(Pessoa, Pessoa.id == Paciente.pessoa_id)
+            .join(ContextoAssistencialLinha, (ContextoAssistencialLinha.contexto_assistencial_id == PTS.contexto_assistencial_id)
+                  & (ContextoAssistencialLinha.modulo_id == PTS.modulo_id))
+            .join(ModuloClinico, ModuloClinico.id == PTS.modulo_id)
+            .join(Profissional, Profissional.id == SessaoAssistencial.profissional_id)
+            .join(Usuario, Usuario.pessoa_id == Profissional.pessoa_id)
+            .where(Usuario.id == user.id, Pessoa.ativo.is_(True), PTS.modulo_id == 3, ContextoAssistencialLinha.ativo.is_(True),
+                   ModuloClinico.ativo.is_(True), ModuloClinico.slug == 'saude_mental', PTS.contexto_assistencial_id.in_(allowed))
+            .order_by(SessaoAssistencial.data_agendada, SessaoAssistencial.hora_inicio, SessaoAssistencial.id)).all()
+        from app.models.institucional import Instituicao
+        result, agendas = [], {}
+        for row in rows:
+            if row.agenda_cuidado_id not in agendas:
+                session, agenda, plan, scope = self.operational_origin(db, row.id, user.id)
+                display = self.planning.outputs(db, [AgendaCuidado.id == agenda.id])[0]
+                context = dict(id=scope['context'], instituicao_id=scope['institution'],
+                    instituicao=db.get(Instituicao, scope['institution']).razao_social, modulo_id=3, pts_id=plan.id)
+                name = db.get(Pessoa, scope['person']).nome_completo
+                writable = self.planning.pts.allowed(db, **scope, capability='ASSISTENCIAL_REGISTRAR') is not None
+                agendas[agenda.id] = plan, scope, display, context, name, writable
+            plan, scope, display, context, name, writable = agendas[row.agenda_cuidado_id]
+            self.output_session(db, row, plan)
+            result.append(dict(id=row.id, pessoa_id=scope['person'], pessoa=name,
+                paciente=name, contexto=context, pode_registrar=writable,
+                agenda_cuidado_id=row.agenda_cuidado_id, profissional_id=row.profissional_id, numero_sessao=row.numero_sessao,
+                data_agendada=row.data_agendada, hora_inicio=row.hora_inicio, hora_fim=row.hora_fim,
+                duracao_minutos=row.duracao_minutos, status=row.status, atividade=display.atividade_nome))
+        return result
+
+    def operational_detail(self, db, identity, actor):
+        from app.models.pessoa import Pessoa
+        from app.models.institucional import Instituicao
+        from app.services.assistential_session_service import AssistentialSessionService
+        origin = self.operational_origin(db, identity, actor)
+        if origin is None: return None
+        row, agenda, plan, scope = origin
+        person = db.get(Pessoa, scope['person'])
+        display = self.planning.outputs(db, [AgendaCuidado.id == agenda.id])[0]
+        rows = self.sessions(db, agenda, plan)
+        output = self.output_session(db, row, plan)
+        record = db.get(RegistroLongitudinal, row.registro_longitudinal_id) if row.registro_longitudinal_id else None
+        following = next((s for s in rows if s.numero_sessao > row.numero_sessao and s.status == 'AGENDADA'), None)
+        objective = db.get(PTSObjetivo, agenda.objetivo_id)
+        return dict(sessao=dict(id=row.id, numero=row.numero_sessao, status=row.status, data=row.data_agendada,
+                hora_inicio=row.hora_inicio, hora_fim=row.hora_fim, duracao_minutos=row.duracao_minutos),
+            pessoa=dict(id=person.id, nome=person.nome_completo), paciente=None,
+            contexto=dict(id=scope['context'], instituicao_id=scope['institution'],
+                instituicao=db.get(Instituicao, scope['institution']).razao_social, modulo_id=3, pts_id=plan.id),
+            pode_registrar=self.planning.pts.allowed(db, **scope, capability='ASSISTENCIAL_REGISTRAR') is not None,
+            objetivo=dict(id=objective.id, descricao=objective.descricao, status=objective.status, prioridade=objective.prioridade),
+            atividade=dict(id=agenda.atividade_id, nome=display.atividade_nome),
+            profissional=dict(id=agenda.profissional_id, nome=display.profissional_nome, ocupacao=display.ocupacao_nome),
+            registro_longitudinal=dict(id=record.id, data=record.data_registro, origem=record.origem) if record else None,
+            narrativa=output.narrativa, proximos_passos=output.proximos_passos, autor_usuario_id=output.autor_usuario_id,
+            proxima_sessao=dict(id=following.id, numero=following.numero_sessao, data=following.data_agendada, status=following.status) if following else None,
+            resumo=AssistentialSessionService.montar_resumo_sessao(row, SimpleNamespace(nome=person.nome_completo),
+                SimpleNamespace(nome=display.atividade_nome), record, [], [], following,
+                sum(s.status == 'REALIZADA' for s in rows), len(rows)))
+
+    def operational_mutate(self, db, identity, actor, action=None, attendance=None):
+        origin = self.operational_origin(db, identity, actor)
+        if origin is None: return None
+        row, agenda, plan, scope = origin
+        result = self.mutate(db, scope, plan.id, agenda.objetivo_id, agenda.id, identity, action, attendance)
+        return next(s for s in result.sessoes if s.id == identity)
