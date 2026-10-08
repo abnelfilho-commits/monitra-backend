@@ -45,7 +45,12 @@ class CBITests(unittest.TestCase):
         after=self.client.get(self.path()).json()
         self.assertEqual(len(after['cbi']['itens']),2)
         for key in ('clinical_reading','bem_estar','diagnosticos','intervencoes','phq9','gad7'):
-            self.assertEqual(before[key],after[key])
+            if key == 'clinical_reading':
+                from copy import deepcopy
+                old,new=deepcopy(before[key]),deepcopy(after[key])
+                old['evidence'].pop('assessments');new['evidence'].pop('assessments')
+                self.assertEqual(old,new)
+            else:self.assertEqual(before[key],after[key])
 
     def test_generic_paths_cannot_create_or_relabel_cbi_without_context(self):
         from app.services.registros_longitudinais import criar_registro_longitudinal, atualizar_registro_longitudinal
@@ -192,7 +197,12 @@ class CBITests(unittest.TestCase):
         self.assertEqual(self.post().status_code,201)
         after=self.client.get(self.path()).json()
         for key in ('phq9','gad7','bem_estar','clinical_reading','diagnosticos','intervencoes'):
-            self.assertEqual(before[key],after[key])
+            if key == 'clinical_reading':
+                from copy import deepcopy
+                old,new=deepcopy(before[key]),deepcopy(after[key])
+                old['evidence'].pop('assessments');new['evidence'].pop('assessments')
+                self.assertEqual(old,new)
+            else:self.assertEqual(before[key],after[key])
         self.assertEqual(after['phq9']['itens'][0]['resultado']['score'],18)
         self.assertEqual([x['score'] for x in after['cbi']['itens'][0]['resultado']['dominios']],[25,32.14,25])
         self.assertTrue(all(key.startswith('cbi_') for key in after['cbi']['itens'][0]['resultado']['metadata']['respostas']))

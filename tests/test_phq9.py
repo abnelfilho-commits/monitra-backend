@@ -42,7 +42,12 @@ class PHQ9Tests(unittest.TestCase):
         after=self.client.get(self.path()).json()
         self.assertEqual(len(after['phq9']['itens']),2)
         for key in ('clinical_reading','bem_estar','diagnosticos','intervencoes'):
-            self.assertEqual(before[key],after[key])
+            if key == 'clinical_reading':
+                from copy import deepcopy
+                old,new=deepcopy(before[key]),deepcopy(after[key])
+                old['evidence'].pop('assessments');new['evidence'].pop('assessments')
+                self.assertEqual(old,new)
+            else:self.assertEqual(before[key],after[key])
 
     def test_generic_paths_cannot_create_or_relabel_phq9_without_context(self):
         from app.services.registros_longitudinais import criar_registro_longitudinal, atualizar_registro_longitudinal

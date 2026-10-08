@@ -84,12 +84,6 @@ class SaudeMentalService:
                 return None
             from app.services.checkin_bem_estar import CheckinBemEstarService
             wellbeing=CheckinBemEstarService().journey(db,actor=actor_id,institution=institution,person=person,context=context)
-            from app.services.clinical_reading import ClinicalReadingService
-            reading = None
-            if row['line_active'] is True:
-                reading = ClinicalReadingService().get_contextual_reading(
-                    pessoa_id=person, contexto_assistencial_id=context,
-                    care_line=MENTAL_HEALTH.code, checkins=wellbeing.checkins)
             from app.services.diagnostico_mental import DiagnosticoMentalService
             diagnoses = DiagnosticoMentalService().journey(db, actor=actor_id, institution=institution, person=person, context=context)
             from app.services.intervencao_mental import IntervencaoMentalService
@@ -100,5 +94,14 @@ class SaudeMentalService:
             cbi = CBIService().journey(db, actor=actor_id, institution=institution, person=person, context=context)
             from app.services.gad7 import GAD7Service
             gad7 = GAD7Service().journey(db, actor=actor_id, institution=institution, person=person, context=context)
+            from app.services.clinical_reading import ClinicalReadingService
+            from app.services.clinical_reading.providers.assessment_evidence import assessment_evidence
+            reading = None
+            if row['line_active'] is True:
+                assessments = assessment_evidence(pessoa_id=person, contexto_assistencial_id=context,
+                    instituicao_id=institution, applications={'phq9':phq9.itens,'gad7':gad7.itens,'cbi':cbi.itens})
+                reading = ClinicalReadingService().get_contextual_reading(
+                    pessoa_id=person, contexto_assistencial_id=context,
+                    care_line=MENTAL_HEALTH.code, checkins=wellbeing.checkins, assessments=assessments)
             return JornadaMentalDetalhe(**self._result(row).model_dump(),bem_estar=wellbeing, diagnosticos=diagnoses, intervencoes=interventions, phq9=phq9, gad7=gad7, cbi=cbi,
                                         clinical_reading=reading)
