@@ -215,3 +215,67 @@ def create_cbi(payload: CBICreate,
     except Exception:
         db.rollback()
         raise HTTPException(500, {'code': 'CBI_NOT_SAVED'}) from None
+
+
+from app.schemas.pts_mental import (PTSMentalCreate, PTSMentalUpdate, PTSMentalOut,
+    PTSMentalJornada, ObjetivoMentalCreate, ObjetivoMentalUpdate)
+from app.services.pts_mental import PTSMentalService, PTSDenied, PTSConflict
+
+
+def pts_scope(pessoa_id: int = Path(...,gt=0,le=2147483647),
+              contexto_id: int = Path(...,gt=0,le=2147483647),
+              instituicao_id: int = Query(...,gt=0,le=2147483647), actor=Depends(get_usuario_atual)):
+    return dict(actor=actor.id,person=pessoa_id,context=contexto_id,institution=instituicao_id)
+
+
+def pts_write(db, scope, action, payload=None, pts_id=None, objective_id=None):
+    try:
+        result=PTSMentalService().mutate(db,payload,**scope,action=action,pts_id=pts_id,objective_id=objective_id)
+        response=PTSMentalOut.model_validate(result).model_dump(mode='json')
+        db.commit()
+        return response
+    except PTSDenied:
+        db.rollback()
+        raise HTTPException(403,{'code':'PTS_UNAVAILABLE'}) from None
+    except (PTSConflict,SQLAlchemyError):
+        db.rollback()
+        raise HTTPException(409,{'code':'PTS_CONFLICT'}) from None
+    except Exception:
+        db.rollback()
+        raise HTTPException(500,{'code':'PTS_NOT_SAVED'}) from None
+
+
+@router.get('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts',response_model=PTSMentalJornada)
+def list_mental_pts(scope=Depends(pts_scope),db: Session=Depends(get_db)):
+    try:return PTSMentalService().journey(db,**scope)
+    except PTSDenied:raise HTTPException(404,{'code':'PTS_UNAVAILABLE'}) from None
+
+
+@router.post('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts',response_model=PTSMentalOut,status_code=201)
+def create_mental_pts(payload: PTSMentalCreate,scope=Depends(pts_scope),db: Session=Depends(get_db)):
+    return pts_write(db,scope,'create',payload)
+
+
+@router.put('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts/{pts_id}',response_model=PTSMentalOut)
+def update_mental_pts(payload: PTSMentalUpdate,pts_id: int=Path(...,gt=0),scope=Depends(pts_scope),db: Session=Depends(get_db)):
+    return pts_write(db,scope,'update',payload,pts_id)
+
+
+@router.put('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts/{pts_id}/encerrar',response_model=PTSMentalOut)
+def close_mental_pts(pts_id: int=Path(...,gt=0),scope=Depends(pts_scope),db: Session=Depends(get_db)):
+    return pts_write(db,scope,'close',pts_id=pts_id)
+
+
+@router.put('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts/{pts_id}/reabrir',response_model=PTSMentalOut)
+def reopen_mental_pts(pts_id: int=Path(...,gt=0),scope=Depends(pts_scope),db: Session=Depends(get_db)):
+    return pts_write(db,scope,'reopen',pts_id=pts_id)
+
+
+@router.post('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts/{pts_id}/objetivos',response_model=PTSMentalOut,status_code=201)
+def create_mental_objective(payload: ObjetivoMentalCreate,pts_id: int=Path(...,gt=0),scope=Depends(pts_scope),db: Session=Depends(get_db)):
+    return pts_write(db,scope,'objective_create',payload,pts_id)
+
+
+@router.put('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts/{pts_id}/objetivos/{objetivo_id}',response_model=PTSMentalOut)
+def update_mental_objective(payload: ObjetivoMentalUpdate,pts_id: int=Path(...,gt=0),objetivo_id: int=Path(...,gt=0),scope=Depends(pts_scope),db: Session=Depends(get_db)):
+    return pts_write(db,scope,'objective_update',payload,pts_id,objetivo_id)
