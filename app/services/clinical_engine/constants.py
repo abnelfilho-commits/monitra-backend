@@ -1,4 +1,5 @@
 ASSESSMENT_LABELS = {
+    "CBI": "CBI",
     "GAD7": "GAD-7",
     "PHQ9": "PHQ-9",
     "MCHAT": "M-CHAT",

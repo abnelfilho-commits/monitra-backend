@@ -23,7 +23,7 @@ URL = os.getenv('M0_TEST_POSTGRES_URL')
 class StructuralTests(unittest.TestCase):
     def test_head(self):
         scripts = ScriptDirectory.from_config(config())
-        self.assertEqual(scripts.get_heads(), ['w3_gad7_v1'])
+        self.assertEqual(scripts.get_heads(), ['w3_cbi_v1'])
         self.assertEqual(scripts.get_revision('w1b_permissoes_v1').down_revision, 'w1a_contexto_v1')
 
     def test_no_legacy_or_operational_fields(self):
@@ -264,7 +264,7 @@ class PhysicalTests(unittest.TestCase):
                 for model in MODELS:self.assertNotIn(model.__tablename__,inspect(c).get_table_names())
                 self.assertTrue(c.exec_driver_sql("SELECT EXISTS(SELECT FROM pg_extension WHERE extname='btree_gist')").scalar())
                 command.upgrade(config(c),'head')
-                self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar(),'w3_gad7_v1')
+                self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar(),'w3_cbi_v1')
         finally:
             engine.dispose()
             with self.admin.connect() as c:c.exec_driver_sql('DROP DATABASE '+name)

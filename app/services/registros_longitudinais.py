@@ -63,8 +63,8 @@ def proteger_formulario_contextual(db: Session, formulario_id, contexto_assisten
     """Standard mental-health assessments require their contextual journey."""
     with db.no_autoflush:
         code = db.query(FormularioModulo.codigo).filter(FormularioModulo.id == formulario_id).scalar()
-    if code in {"PHQ9", "GAD7"} and (contexto_assistencial_id is None or modulo_id != 3):
-        label = {"PHQ9": "PHQ-9", "GAD7": "GAD-7"}[code]
+    if code in {"PHQ9", "GAD7", "CBI"} and (contexto_assistencial_id is None or modulo_id != 3):
+        label = {"PHQ9": "PHQ-9", "GAD7": "GAD-7", "CBI": "CBI"}[code]
         raise HTTPException(403, f"{label} requer a jornada contextual de Saúde Mental.")
 
 

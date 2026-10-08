@@ -6,7 +6,10 @@ from app.services.clinical_engine.assessments.phq9_engine import PHQ9Engine
 
 from app.services.clinical_engine.assessments.gad7_engine import GAD7Engine
 
+from app.services.clinical_engine.assessments.cbi_engine import CBIEngine
+
 ASSESSMENT_ENGINES = {
+    "CBI": CBIEngine(),
     "GAD7": GAD7Engine(),
     "PHQ9": PHQ9Engine(),
     "MCHAT": MChatEngine(),
