@@ -77,6 +77,18 @@ class PlanningService:
             if row is None:raise PTSDenied('PLANNING_UNAVAILABLE')
             if db.scalar(select(SessaoAssistencial.id).where(SessaoAssistencial.agenda_cuidado_id==row.id).limit(1)):
                 raise PTSConflict('PLANNING_HAS_SESSIONS')
+        self.validate_executor(db, scope, payload)
+        try:q=planned_quantity(payload.data_inicio,payload.data_fim,payload.frequencia_semanal,payload.duracao_minutos,payload.quantidade_sessoes)
+        except ValueError as exc:raise PlanningInvalid(str(exc)) from None
+        values=payload.model_dump();values['quantidade_sessoes']=q['quantidade_sessoes']
+        if row is None:
+            row=AgendaCuidado(pts_id=pts_id,objetivo_id=objective_id,status='PLANEJADO',**values);db.add(row)
+        else:
+            for field,value in values.items():setattr(row,field,value)
+        db.flush()
+        return self.outputs(db,[AgendaCuidado.id==row.id])[0]
+
+    def validate_executor(self, db, scope, payload):
         self.pts._lock(db,Activity,Activity.id==payload.atividade_id)
         self.pts._lock(db,Occupation,Occupation.id==payload.ocupacao_id)
         self.pts._lock(db,Pair,(Pair.atividade_id==payload.atividade_id)&(Pair.ocupacao_id==payload.ocupacao_id))
@@ -93,12 +105,3 @@ class PlanningService:
                   and l.ocupacao_id==payload.ocupacao_id and l.data_inicio<=payload.data_inicio
                   and (l.data_fim is None or l.data_fim>=payload.data_fim)]
         if not eligible:raise PlanningInvalid('Executor sem vínculo institucional ativo que cubra a ocupação e todo o período.')
-        try:q=planned_quantity(payload.data_inicio,payload.data_fim,payload.frequencia_semanal,payload.duracao_minutos,payload.quantidade_sessoes)
-        except ValueError as exc:raise PlanningInvalid(str(exc)) from None
-        values=payload.model_dump();values['quantidade_sessoes']=q['quantidade_sessoes']
-        if row is None:
-            row=AgendaCuidado(pts_id=pts_id,objetivo_id=objective_id,status='PLANEJADO',**values);db.add(row)
-        else:
-            for field,value in values.items():setattr(row,field,value)
-        db.flush()
-        return self.outputs(db,[AgendaCuidado.id==row.id])[0]

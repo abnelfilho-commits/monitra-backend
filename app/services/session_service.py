@@ -85,6 +85,13 @@ class SessionService:
     @transaction
     def transition(self, db, identity, user, action, reason: Optional[str] = None):
         session, _, _ = self.context(db, identity, user, lock=True)
+        self.apply_transition(session, action, reason)
+        db.flush()
+        # Validate/materialize the legacy response before committing.
+        return SessaoAssistencialResponse.model_validate(session).model_dump()
+
+    @staticmethod
+    def apply_transition(session, action, reason=None):
         allowed = {'confirmar': ('AGENDADA',), 'iniciar': ('CONFIRMADA',),
                    'finalizar': ('EM_ANDAMENTO',), 'reagendar': ('AGENDADA', 'CONFIRMADA')}
         if action not in allowed or session.status not in allowed[action]:
@@ -102,9 +109,6 @@ class SessionService:
         else:
             session.status = 'REAGENDADA'
             session.motivo_reagendamento = reason
-        db.flush()
-        # Validate/materialize the legacy response before committing.
-        return SessaoAssistencialResponse.model_validate(session).model_dump()
 
     @staticmethod
     def form(db, line):

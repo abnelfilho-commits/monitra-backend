@@ -104,5 +104,7 @@ class SaudeMentalService:
                     pessoa_id=person, contexto_assistencial_id=context,
                     care_line=MENTAL_HEALTH.code, checkins=wellbeing.checkins, assessments=assessments,
                     diagnoses=diagnoses.itens, interventions=interventions.itens)
-            return JornadaMentalDetalhe(**self._result(row).model_dump(),bem_estar=wellbeing, diagnosticos=diagnoses, intervencoes=interventions, phq9=phq9, gad7=gad7, cbi=cbi,
+            from app.services.sessoes_mentais import SessoesMentaisService
+            sessions = SessoesMentaisService().journey(db, dict(actor=actor_id,institution=institution,person=person,context=context)) if row["line_active"] is True else []
+            return JornadaMentalDetalhe(sessoes=sessions, **self._result(row).model_dump(),bem_estar=wellbeing, diagnosticos=diagnoses, intervencoes=interventions, phq9=phq9, gad7=gad7, cbi=cbi,
                                         clinical_reading=reading)

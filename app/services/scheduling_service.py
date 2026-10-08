@@ -20,6 +20,7 @@ class SchedulingService:
         db: Session,
         agenda: AgendaCuidado,
         cronograma: Sequence[Any],
+        *, commit: bool = True,
     ) -> List[SessaoAssistencial]:
         if not cronograma:
             raise ValueError(
@@ -109,10 +110,12 @@ class SchedulingService:
                 db.add(sessao)
                 sessoes.append(sessao)
 
-            db.commit()
-
-            for sessao in sessoes:
-                db.refresh(sessao)
+            if commit:
+                db.commit()
+                for sessao in sessoes:
+                    db.refresh(sessao)
+            else:
+                db.flush()
 
             return sessoes
 

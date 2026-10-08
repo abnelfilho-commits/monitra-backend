@@ -327,3 +327,47 @@ def create_mental_planning(payload: PlanningInput, pts_id: int, objetivo_id: int
 @router.put('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts/{pts_id}/objetivos/{objetivo_id}/planejamentos/{planejamento_id}',response_model=PlanningOut)
 def update_mental_planning(payload: PlanningInput, pts_id: int, objetivo_id: int, planejamento_id: int, scope=Depends(pts_scope), db: Session=Depends(get_db)):
     return planning_write(db,scope,pts_id,objetivo_id,payload,planejamento_id)
+
+
+from app.services.sessoes_mentais import SessoesMentaisService
+from app.schemas.sessoes_mentais import CronogramaMentalOut, AtendimentoMental, AcaoSessaoMental
+
+
+def session_command(db, operation):
+    try:
+        result = operation()
+        output = CronogramaMentalOut.model_validate(result).model_dump(mode='json')
+        db.commit()
+        return output
+    except PTSDenied:
+        db.rollback(); raise HTTPException(403, {'code':'SESSION_UNAVAILABLE'}) from None
+    except (PlanningInvalid, HTTPException) as exc:
+        db.rollback()
+        if isinstance(exc, HTTPException): raise
+        raise HTTPException(422, {'message':str(exc)}) from None
+    except (PTSConflict, SQLAlchemyError) as exc:
+        db.rollback(); raise HTTPException(409, {'code':'SESSION_CONFLICT'}) from None
+    except Exception:
+        db.rollback(); raise HTTPException(500, {'code':'SESSION_NOT_SAVED'}) from None
+
+
+@router.get('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts/{pts_id}/objetivos/{objetivo_id}/planejamentos/{planejamento_id}/cronograma', response_model=CronogramaMentalOut)
+def mental_schedule(pts_id: int, objetivo_id: int, planejamento_id: int, scope=Depends(pts_scope), db: Session=Depends(get_db)):
+    try: return SessoesMentaisService().read(db, scope, pts_id, objetivo_id, planejamento_id)
+    except PTSDenied: raise HTTPException(404, {'code':'SESSION_UNAVAILABLE'}) from None
+    except (PlanningInvalid, PTSConflict): raise HTTPException(409, {'code':'SESSION_CONFLICT'}) from None
+
+
+@router.post('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts/{pts_id}/objetivos/{objetivo_id}/planejamentos/{planejamento_id}/cronograma', response_model=CronogramaMentalOut)
+def generate_mental_schedule(pts_id: int, objetivo_id: int, planejamento_id: int, scope=Depends(pts_scope), db: Session=Depends(get_db)):
+    return session_command(db, lambda: SessoesMentaisService().generate(db, scope, pts_id, objetivo_id, planejamento_id))
+
+
+@router.post('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts/{pts_id}/objetivos/{objetivo_id}/planejamentos/{planejamento_id}/sessoes/{sessao_id}/estado', response_model=CronogramaMentalOut)
+def transition_mental_session(payload: AcaoSessaoMental, pts_id: int, objetivo_id: int, planejamento_id: int, sessao_id: int, scope=Depends(pts_scope), db: Session=Depends(get_db)):
+    return session_command(db, lambda: SessoesMentaisService().mutate(db, scope, pts_id, objetivo_id, planejamento_id, sessao_id, action=payload.acao))
+
+
+@router.post('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts/{pts_id}/objetivos/{objetivo_id}/planejamentos/{planejamento_id}/sessoes/{sessao_id}/atendimento', response_model=CronogramaMentalOut)
+def attend_mental_session(payload: AtendimentoMental, pts_id: int, objetivo_id: int, planejamento_id: int, sessao_id: int, scope=Depends(pts_scope), db: Session=Depends(get_db)):
+    return session_command(db, lambda: SessoesMentaisService().mutate(db, scope, pts_id, objetivo_id, planejamento_id, sessao_id, attendance=payload))

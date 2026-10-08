@@ -1,7 +1,7 @@
 """Contextual journey read models; no onboarding payload."""
 from datetime import date
 from typing import Literal, Optional
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, field_serializer, Field
 
 
 class InstituicaoDisponivel(BaseModel):
@@ -49,7 +49,11 @@ from app.schemas.cbi import CBIJornada
 from app.schemas.gad7 import GAD7Jornada
 
 
+from app.schemas.sessoes_mentais import SessaoMentalOut
+
+
 class JornadaMentalDetalhe(JornadaMental):
+    sessoes: list[SessaoMentalOut] = Field(default_factory=list)
     gad7: GAD7Jornada
     cbi: CBIJornada
     phq9: PHQ9Jornada
