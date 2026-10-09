@@ -1,4 +1,4 @@
-from datetime import date, time
+from datetime import date, time, datetime
 from typing import Optional, Literal
 from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.sessao_assistencial import SessaoAssistencialResponse
@@ -19,6 +19,9 @@ class SessaoMentalOut(SessaoAssistencialResponse):
     narrativa: Optional[str] = None
     proximos_passos: list[str] = Field(default_factory=list)
     autor_usuario_id: Optional[int] = None
+    registrado_em: Optional[datetime] = None
+    profissional_nome: Optional[str] = None
+    autor_nome: Optional[str] = None
 
 
 class OcorrenciaMental(BaseModel):

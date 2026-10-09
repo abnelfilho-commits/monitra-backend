@@ -72,6 +72,30 @@ class MentalSessionTests(unittest.TestCase):
         self.assertEqual(journey['bem_estar'],before['bem_estar']);self.assertEqual(journey['intervencoes'],before['intervencoes'])
         self.assertEqual(journey['clinical_reading'],before['clinical_reading'])
 
+    def test_timeline_registration_instant_is_record_creation_not_session_update(self):
+        from datetime import datetime
+        from app.models import Profissional, Usuario
+        session = self.generate()['sessoes'][0]['id']
+        self.action(session, 'confirmar')
+        self.action(session, 'iniciar')
+        endpoint = f'{self.suffix}/{self.planning}/sessoes/{session}/atendimento'
+        self.assertEqual(self.request('POST', endpoint, dict(narrativa='Data clínica distinta')).status_code, 200)
+        self.assertEqual(self.action(session, 'finalizar').status_code, 200)
+        # Synthetic historical instants: presentation must not use finalization/update time.
+        self.db.execute(text("UPDATE sessoes_assistenciais SET data_agendada='2026-10-12', data_realizacao='2026-10-09', updated_at='2026-10-09 15:00:00' WHERE id=:s"), dict(s=session))
+        self.db.execute(text("UPDATE registros_longitudinais SET criado_em='2026-10-09 14:55:47' WHERE id=(SELECT registro_longitudinal_id FROM sessoes_assistenciais WHERE id=:s)"), dict(s=session))
+        self.db.commit()
+        result = self.client.get(self.path()).json()['sessoes'][0]
+        self.assertEqual(result['data_agendada'], '2026-10-12')
+        self.assertEqual(result['data_realizacao'], '2026-10-09')
+        instant = datetime.fromisoformat(result['registrado_em'].replace('Z', '+00:00'))
+        self.assertEqual(instant.isoformat(), '2026-10-09T14:55:47+00:00')
+        self.assertEqual(result['profissional_nome'], self.db.get(Profissional,self.executor).nome)
+        self.assertEqual(result['autor_nome'], self.db.get(Usuario,self.actor).nome)
+        self.assertEqual(result['autor_usuario_id'],self.actor)
+        self.assertEqual(result['proximos_passos'],[])
+        self.assertEqual(result['narrativa'],'Data clínica distinta')
+
     def test_wrong_scope_and_ancestry(self):
         for scope in [dict(person=self.person+999),dict(context=self.contexts[1]),dict(institution=self.institutions[1])]:
             self.assertEqual(self.request('GET',self.schedule,**scope).status_code,404)

@@ -13,6 +13,8 @@ from app.services.scheduling_models import PlanejamentoAssistencial
 from app.services.scheduling_engine import SchedulingEngine
 from app.services.scheduling_service import SchedulingService
 from app.services.session_service import SessionService
+from app.services.timeline_service import TimelineService
+from app.models import Profissional, Usuario
 from app.services.registros_longitudinais import persistir_registro_longitudinal, extrair_valor
 from app.schemas.registros_longitudinais import RegistroLongitudinalCreate, CampoResposta
 from app.schemas.sessoes_mentais import CronogramaMentalOut, SessaoMentalOut
@@ -42,11 +44,16 @@ class SessoesMentaisService:
         if row.paciente_id != plan.paciente_id:
             raise PTSConflict('SESSION_ANCESTRY_CONFLICT')
         result = SessaoMentalOut.model_validate(row)
+        professional = db.get(Profissional, row.profissional_id) if row.profissional_id else None
+        result.profissional_nome = professional.nome if professional else None
         if row.registro_longitudinal_id is not None:
             record = db.get(RegistroLongitudinal, row.registro_longitudinal_id)
             if record is None or record.contexto_assistencial_id != plan.contexto_assistencial_id or record.modulo_id != 3 or record.paciente_id != plan.paciente_id:
                 raise PTSConflict('SESSION_RECORD_CONFLICT')
             result.autor_usuario_id = record.criado_por_usuario_id
+            result.registrado_em = datetime.fromisoformat(TimelineService._iso_timestamp_utc(record.criado_em)) if record.criado_em else None
+            author = db.get(Usuario, record.criado_por_usuario_id) if record.criado_por_usuario_id else None
+            result.autor_nome = author.nome if author else None
             for name, answer in db.execute(select(CampoFormulario.nome_campo, RespostaRegistro)
                 .join(RespostaRegistro, RespostaRegistro.campo_id == CampoFormulario.id)
                 .where(RespostaRegistro.registro_id == record.id)):
