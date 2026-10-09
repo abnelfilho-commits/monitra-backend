@@ -39,6 +39,7 @@ from app.routers import sessoes_assistenciais
 from app.routers import diagnosticos
 
 from app.routers import whatsapp
+from app.routers import economia
 from app.routers import financeiro_institucional
 
 from app.routers.identidades import router as identidades_router
@@ -122,6 +123,7 @@ app.include_router(diagnosticos.router)
 
 app.include_router(whatsapp.router)
 app.include_router(financeiro_institucional.router)
+app.include_router(economia.router)
 
 app.include_router(saude_mental.router)
 

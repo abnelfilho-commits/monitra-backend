@@ -3,11 +3,12 @@
 No endpoint, access grant, clinical write, price resolver or implicit commit.
 """
 from functools import wraps
-from sqlalchemy import text
+from sqlalchemy import text, or_
 from sqlalchemy.exc import IntegrityError
 from app.models.financeiro import (ServicoEconomico, TabelaPreco, TabelaPrecoVersao,
     PrecoServico, ContratoFinanceiro, PacienteContrato, MapeamentoAgendaServico)
 from app.models.usuario import Usuario
+from app.models.atividade_terapeutica import OcupacaoProfissional
 from app.schemas.financeiro import (ServicoCreate, TabelaCreate, VersaoCreate,
     PrecoCreate, ContratoCreate, PacienteContratoCreate, MapeamentoCreate)
 
@@ -104,6 +105,34 @@ class FinanceiroConfiguracaoService:
             setattr(row, key, value)
         db.flush()
         return row
+
+    def list_services(self, db, *, identity=None, ativo=None):
+        used = or_(
+            db.query(PrecoServico.id).filter(PrecoServico.servico_id == ServicoEconomico.id).exists(),
+            db.query(MapeamentoAgendaServico.id).filter(MapeamentoAgendaServico.servico_id == ServicoEconomico.id).exists(),
+        )
+        query = db.query(ServicoEconomico, OcupacaoProfissional.nome, used).join(
+            OcupacaoProfissional, OcupacaoProfissional.id == ServicoEconomico.ocupacao_id)
+        if identity is not None:
+            query = query.filter(ServicoEconomico.id == identity)
+        if ativo is not None:
+            query = query.filter(ServicoEconomico.ativo == ativo)
+        return [dict({field: getattr(row, field) for field in ServicoCreate.model_fields},
+                     id=row.id, ocupacao_nome=name, em_uso=in_use)
+                for row, name, in_use in query.populate_existing().order_by(ServicoEconomico.codigo, ServicoEconomico.id).all()]
+
+    def get_service(self, db, identity):
+        rows = self.list_services(db, identity=identity)
+        if not rows:
+            raise FinanceiroErro('NOT_FOUND')
+        return rows[0]
+
+    @atomic
+    def set_service_active(self, db, identity, active):
+        row = self._row(db, ServicoEconomico, identity)
+        payload = {field: getattr(row, field) for field in ServicoCreate.model_fields}
+        payload['ativo'] = active
+        return self.update_service(db, identity, payload)
 
     @atomic
     def update_price(self, db, identity, payload):

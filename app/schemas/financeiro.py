@@ -19,6 +19,16 @@ class ServicoCreate(Command):
     ativo: StrictBool = True
 
 
+class ServicoResponse(ServicoCreate):
+    id: int
+    ocupacao_nome: str
+    em_uso: bool
+
+
+class ServicoEstado(Command):
+    ativo: StrictBool
+
+
 class TabelaCreate(Command):
     proprietario_instituicao_id: PositiveInt
     codigo: str = Field(min_length=1, max_length=64)
