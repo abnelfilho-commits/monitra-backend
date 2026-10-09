@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from app.models.financeiro import (ServicoEconomico, TabelaPreco, TabelaPrecoVersao,
     PrecoServico, ContratoFinanceiro, PacienteContrato, MapeamentoAgendaServico)
 from app.models.usuario import Usuario
+from app.models.institucional import Instituicao
 from app.models.atividade_terapeutica import OcupacaoProfissional
 from app.schemas.financeiro import (ServicoCreate, TabelaCreate, VersaoCreate,
     PrecoCreate, ContratoCreate, PacienteContratoCreate, MapeamentoCreate)
@@ -208,3 +209,64 @@ class FinanceiroConfiguracaoService:
         row.servico_id = data.servico_id
         db.flush()
         return row
+
+
+    @staticmethod
+    def read_row(db, model, identity):
+        row = db.query(model).filter_by(id=identity).populate_existing().first()
+        if row is None:
+            raise FinanceiroErro('NOT_FOUND')
+        return row
+
+    def list_tables(self, db, *, identity=None):
+        query = db.query(TabelaPreco, Instituicao).join(
+            Instituicao, Instituicao.id == TabelaPreco.proprietario_instituicao_id)
+        if identity is not None:
+            query = query.filter(TabelaPreco.id == identity)
+        return [dict({c.name: getattr(row, c.name) for c in TabelaPreco.__table__.columns},
+                     proprietario_nome=owner.nome_fantasia or owner.razao_social)
+                for row, owner in query.populate_existing().order_by(TabelaPreco.nome, TabelaPreco.id)]
+
+    def get_table(self, db, identity):
+        rows = self.list_tables(db, identity=identity)
+        if not rows:
+            raise FinanceiroErro('NOT_FOUND')
+        return rows[0]
+
+    def list_versions(self, db, table_id):
+        self.read_row(db, TabelaPreco, table_id)
+        return db.query(TabelaPrecoVersao).filter_by(tabela_id=table_id).populate_existing().order_by(
+            TabelaPrecoVersao.vigente_desde.desc(), TabelaPrecoVersao.id.desc()).all()
+
+    def list_prices(self, db, version_id):
+        version = self.read_row(db, TabelaPrecoVersao, version_id)
+        previous = db.query(TabelaPrecoVersao.id).filter(
+            TabelaPrecoVersao.tabela_id == version.tabela_id,
+            TabelaPrecoVersao.estado == 'PUBLISHED',
+            TabelaPrecoVersao.vigente_desde < version.vigente_desde).order_by(
+                TabelaPrecoVersao.vigente_desde.desc()).limit(1).scalar()
+        rows = db.query(PrecoServico, ServicoEconomico, OcupacaoProfissional.nome).join(
+            ServicoEconomico, ServicoEconomico.id == PrecoServico.servico_id).join(
+            OcupacaoProfissional, OcupacaoProfissional.id == ServicoEconomico.ocupacao_id).filter(
+                PrecoServico.versao_id == version_id).populate_existing().order_by(
+                    ServicoEconomico.codigo, PrecoServico.id).all()
+        prices = [dict({c.name: getattr(price, c.name) for c in PrecoServico.__table__.columns},
+                       servico_codigo=service.codigo, servico_descricao=service.descricao,
+                       ocupacao_nome=occupation, duracao_minutos=service.duracao_minutos,
+                       servico_ativo=service.ativo) for price, service, occupation in rows]
+        current = db.query(PrecoServico.servico_id).filter(PrecoServico.versao_id == version_id)
+        omitted = (db.query(PrecoServico.id).filter(PrecoServico.versao_id == previous,
+                    ~PrecoServico.servico_id.in_(current)).count() if previous is not None else 0)
+        active = sum(p['servico_ativo'] for p in prices)
+        return dict(precos=prices, quantidade_precos=len(prices), servicos_ativos=active,
+                    servicos_inativos=len(prices)-active, versao_anterior_id=previous,
+                    servicos_anteriores_sem_preco=omitted)
+
+    def price_output(self, db, row):
+        # One joined query for the written price, without loading a version's entire grid.
+        s, occupation = db.query(ServicoEconomico, OcupacaoProfissional.nome).join(
+            OcupacaoProfissional, OcupacaoProfissional.id == ServicoEconomico.ocupacao_id).filter(
+                ServicoEconomico.id == row.servico_id).one()
+        return dict({c.name: getattr(row, c.name) for c in PrecoServico.__table__.columns},
+                    servico_codigo=s.codigo, servico_descricao=s.descricao, ocupacao_nome=occupation,
+                    duracao_minutos=s.duracao_minutos, servico_ativo=s.ativo)

@@ -1,5 +1,5 @@
 """Strict configuration commands, without financial calculation or access grants."""
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional, Literal
 from pydantic import BaseModel, Field, PositiveInt, StrictBool, model_validator
@@ -297,3 +297,52 @@ class InstitutionalContextContract(PreviewValue):
 class InstitutionalContextResult(PreviewValue):
     instituicoes: tuple[InstitutionalContextInstitution, ...]
     contratos: tuple[InstitutionalContextContract, ...]
+
+
+# AE2 administrative contracts; parent identities come from the route/persisted row.
+class VersaoAdministrativaInput(Command):
+    numero: PositiveInt
+    vigente_desde: date
+
+
+class PrecoAdministrativoUpdate(Command):
+    valor_base: Decimal = Field(ge=0, max_digits=14, decimal_places=2, allow_inf_nan=False)
+    codigo_externo: Optional[str] = Field(default=None, min_length=1, max_length=128)
+
+
+class PrecoAdministrativoInput(PrecoAdministrativoUpdate):
+    servico_id: PositiveInt
+
+
+class TabelaResponse(TabelaCreate):
+    id: int
+    criado_em: datetime
+    proprietario_nome: str
+
+
+class VersaoResponse(VersaoCreate):
+    model_config = {'from_attributes': True}
+    id: int
+    criado_em: datetime
+    estado: Literal['DRAFT', 'PUBLISHED']
+    publicado_em: Optional[datetime]
+    publicado_por_usuario_id: Optional[int]
+
+
+class PrecoResponse(PrecoCreate):
+    id: int
+    criado_em: datetime
+    servico_codigo: str
+    servico_descricao: str
+    ocupacao_nome: str
+    duracao_minutos: int
+    servico_ativo: bool
+
+
+class GradePrecosResponse(BaseModel):
+    precos: list[PrecoResponse]
+    quantidade_precos: int
+    servicos_ativos: int
+    servicos_inativos: int
+    versao_anterior_id: Optional[int]
+    servicos_anteriores_sem_preco: int
