@@ -73,6 +73,46 @@ class PacienteContratoCreate(Periodo):
     identificador_beneficiario: Optional[str] = Field(default=None, min_length=1, max_length=128)
 
 
+class ContratoAdminResponse(ContratoCreate):
+    id: int
+    estado: Literal['DRAFT', 'PUBLISHED']
+    publicado_em: Optional[datetime]
+    publicado_por_usuario_id: Optional[int]
+    criado_em: datetime
+    pagador_nome: str
+    tabela_codigo: str
+    tabela_nome: str
+
+
+class BeneficiarioCreate(Periodo):
+    paciente_id: PositiveInt
+    identificador_beneficiario: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+    )
+
+
+class BeneficiarioResponse(Periodo):
+    id: int
+    paciente_id: int
+    contrato_id: int
+    identificador_beneficiario: Optional[str]
+    criado_em: datetime
+    paciente_nome: str
+    data_nascimento: Optional[date]
+
+
+class BeneficiarioCandidateResponse(BaseModel):
+    paciente_id: int
+    paciente_nome: str
+    data_nascimento: Optional[date]
+
+
+class BeneficiarioClose(Command):
+    fim: date
+
+
 class MapeamentoCreate(Command):
     agenda_cuidado_id: PositiveInt
     servico_id: PositiveInt

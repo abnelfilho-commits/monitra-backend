@@ -51,7 +51,15 @@ class FinancialPostgresTests(unittest.TestCase):
             self.owner=c.exec_driver_sql("INSERT INTO instituicoes(razao_social,tipo_instituicao) VALUES ('A','OPERADORA_SAUDE') RETURNING id").scalar()
             self.other=c.exec_driver_sql("INSERT INTO instituicoes(razao_social,tipo_instituicao) VALUES ('B','EMPRESA') RETURNING id").scalar()
             self.occupation=c.exec_driver_sql("INSERT INTO ocupacoes_profissionais(nome) VALUES ('Synthetic') RETURNING id").scalar()
-            self.patient=c.exec_driver_sql("INSERT INTO pacientes(nome) VALUES ('Synthetic') RETURNING id").scalar()
+            self.patient=c.exec_driver_sql("INSERT INTO pacientes(nome,ativo) VALUES ('Synthetic',true) RETURNING id").scalar()
+            c.execute(
+                text(
+                    "INSERT INTO paciente_instituicoes"
+                    "(paciente_id,instituicao_id,tipo_vinculo,data_inicio,ativo) "
+                    "VALUES (:p,:i,'BENEFICIARIO',CURRENT_DATE,true)"
+                ),
+                {"p": self.patient, "i": self.owner},
+            )
             module=c.exec_driver_sql("INSERT INTO modulos_clinicos(nome,slug) VALUES ('Synthetic','test-f1') RETURNING id").scalar()
             pts=c.execute(text('INSERT INTO pts(paciente_id,modulo_id) VALUES (:p,:m) RETURNING id'),dict(p=self.patient,m=module)).scalar()
             obj=c.execute(text("INSERT INTO pts_objetivos(pts_id,descricao) VALUES (:p,'Synthetic') RETURNING id"),dict(p=pts)).scalar()
@@ -195,13 +203,23 @@ class FinancialPostgresTests(unittest.TestCase):
             self.reject_sql(sql,dict(i=self.cid))
 
     def test_inclusive_patient_periods_and_distinct_contracts(self):
+        with self.engine.connect() as c:
+            institutional_links_before = c.exec_driver_sql(
+                'SELECT count(*) FROM paciente_instituicoes'
+            ).scalar()
         data=dict(paciente_id=self.patient,contrato_id=self.cid,inicio=self.today,fim=self.today+timedelta(days=7))
         self.service.create(self.db,PacienteContrato,data);self.db.commit()
         with self.assertRaises(IntegrityError):self.service.create(self.db,PacienteContrato,dict(data,inicio=data['fim']))
         self.service.create(self.db,PacienteContrato,dict(data,inicio=data['fim']+timedelta(days=1),fim=None));self.db.commit()
         other=self.service.create(self.db,ContratoFinanceiro,dict(pagador_instituicao_id=self.owner,codigo='OTHER',edicao=1,tabela_preco_id=self.tid,inicio=self.today));self.db.commit()
         self.service.create(self.db,PacienteContrato,dict(data,contrato_id=other.id));self.db.commit()
-        with self.engine.connect() as c:self.assertEqual(c.exec_driver_sql('SELECT count(*) FROM paciente_instituicoes').scalar(),0)
+        with self.engine.connect() as c:
+            self.assertEqual(
+                c.exec_driver_sql(
+                    'SELECT count(*) FROM paciente_instituicoes'
+                ).scalar(),
+                institutional_links_before,
+            )
 
     def test_mapping_idempotence_explicit_change_restrict(self):
         data=dict(agenda_cuidado_id=self.agenda,servico_id=self.sid)

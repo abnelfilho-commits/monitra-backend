@@ -8,7 +8,8 @@ from sqlalchemy.exc import IntegrityError
 from app.models.financeiro import (ServicoEconomico, TabelaPreco, TabelaPrecoVersao,
     PrecoServico, ContratoFinanceiro, PacienteContrato, MapeamentoAgendaServico)
 from app.models.usuario import Usuario
-from app.models.institucional import Instituicao
+from app.models.institucional import Instituicao, PacienteInstituicao
+from app.models.paciente import Paciente
 from app.models.atividade_terapeutica import OcupacaoProfissional
 from app.schemas.financeiro import (ServicoCreate, TabelaCreate, VersaoCreate,
     PrecoCreate, ContratoCreate, PacienteContratoCreate, MapeamentoCreate)
@@ -62,6 +63,39 @@ class FinanceiroConfiguracaoService:
         if table.proprietario_instituicao_id != data.pagador_instituicao_id:
             raise FinanceiroErro('PAYER_TABLE_MISMATCH')
 
+    def _beneficiary(self, db, data):
+        contract = self._row(db, ContratoFinanceiro, data.contrato_id)
+
+        if data.inicio < contract.inicio:
+            raise FinanceiroErro('BENEFICIARY_OUTSIDE_CONTRACT_PERIOD')
+
+        if contract.fim is not None:
+            if data.fim is None or data.fim > contract.fim:
+                raise FinanceiroErro('BENEFICIARY_OUTSIDE_CONTRACT_PERIOD')
+
+        patient = (
+            db.query(Paciente)
+            .filter(
+                Paciente.id == data.paciente_id,
+                Paciente.ativo.is_(True),
+            )
+            .first()
+        )
+        if patient is None:
+            raise FinanceiroErro('INVALID_BENEFICIARY')
+
+        institutional_link = (
+            db.query(PacienteInstituicao.id)
+            .filter(
+                PacienteInstituicao.paciente_id == data.paciente_id,
+                PacienteInstituicao.instituicao_id == contract.pagador_instituicao_id,
+                PacienteInstituicao.ativo.is_(True),
+            )
+            .first()
+        )
+        if institutional_link is None:
+            raise FinanceiroErro('BENEFICIARY_PAYER_MISMATCH')
+
     @atomic
     def create(self, db, model, payload):
         if model not in self.SCHEMAS:
@@ -69,6 +103,8 @@ class FinanceiroConfiguracaoService:
         data = self.SCHEMAS[model].model_validate(payload)
         if model is ContratoFinanceiro:
             self._payer(db, data)
+        if model is PacienteContrato:
+            self._beneficiary(db, data)
         if model is PrecoServico:
             self._draft(self._row(db, TabelaPrecoVersao, data.versao_id))
         if model is MapeamentoAgendaServico:
@@ -229,6 +265,133 @@ class FinanceiroConfiguracaoService:
 
     def get_table(self, db, identity):
         rows = self.list_tables(db, identity=identity)
+        if not rows:
+            raise FinanceiroErro('NOT_FOUND')
+        return rows[0]
+
+    def close_beneficiary(self, db, identity, *, fim):
+        link = self._row(db, PacienteContrato, identity)
+
+        if link.fim is not None:
+            raise FinanceiroErro('BENEFICIARY_ALREADY_CLOSED')
+
+        if fim < link.inicio:
+            raise FinanceiroErro('INVALID_PERIOD')
+
+        contract = self._row(db, ContratoFinanceiro, link.contrato_id)
+        if contract.fim is not None and fim > contract.fim:
+            raise FinanceiroErro('BENEFICIARY_OUTSIDE_CONTRACT_PERIOD')
+
+        link.fim = fim
+        db.flush()
+        db.refresh(link)
+        return link
+
+    def list_beneficiaries(self, db, contract_id):
+        self._row(db, ContratoFinanceiro, contract_id)
+
+        rows = (
+            db.query(PacienteContrato, Paciente)
+            .join(
+                Paciente,
+                Paciente.id == PacienteContrato.paciente_id,
+            )
+            .filter(PacienteContrato.contrato_id == contract_id)
+            .populate_existing()
+            .order_by(
+                Paciente.nome,
+                PacienteContrato.inicio.desc(),
+                PacienteContrato.id.desc(),
+            )
+            .all()
+        )
+
+        return [
+            dict(
+                {c.name: getattr(link, c.name) for c in PacienteContrato.__table__.columns},
+                paciente_nome=paciente.nome,
+                data_nascimento=paciente.data_nascimento,
+            )
+            for link, paciente in rows
+        ]
+
+    def get_beneficiary(self, db, identity):
+        rows = (
+            db.query(PacienteContrato, Paciente)
+            .join(
+                Paciente,
+                Paciente.id == PacienteContrato.paciente_id,
+            )
+            .filter(PacienteContrato.id == identity)
+            .populate_existing()
+            .all()
+        )
+
+        if not rows:
+            raise FinanceiroErro('NOT_FOUND')
+
+        link, paciente = rows[0]
+        return dict(
+            {c.name: getattr(link, c.name) for c in PacienteContrato.__table__.columns},
+            paciente_nome=paciente.nome,
+            data_nascimento=paciente.data_nascimento,
+        )
+
+    def list_beneficiary_candidates(self, db, contract_id):
+        contract = self._row(db, ContratoFinanceiro, contract_id)
+
+        rows = (
+            db.query(Paciente.id, Paciente.nome, Paciente.data_nascimento)
+            .join(
+                PacienteInstituicao,
+                PacienteInstituicao.paciente_id == Paciente.id,
+            )
+            .filter(
+                Paciente.ativo.is_(True),
+                PacienteInstituicao.instituicao_id == contract.pagador_instituicao_id,
+                PacienteInstituicao.ativo.is_(True),
+            )
+            .distinct()
+            .order_by(Paciente.nome, Paciente.id)
+            .all()
+        )
+
+        return [
+            dict(
+                paciente_id=paciente_id,
+                paciente_nome=nome,
+                data_nascimento=data_nascimento,
+            )
+            for paciente_id, nome, data_nascimento in rows
+        ]
+
+    def list_contracts(self, db, *, identity=None):
+        query = db.query(ContratoFinanceiro, Instituicao, TabelaPreco).join(
+            Instituicao,
+            Instituicao.id == ContratoFinanceiro.pagador_instituicao_id,
+        ).join(
+            TabelaPreco,
+            TabelaPreco.id == ContratoFinanceiro.tabela_preco_id,
+        )
+        if identity is not None:
+            query = query.filter(ContratoFinanceiro.id == identity)
+        return [
+            dict(
+                {c.name: getattr(row, c.name) for c in ContratoFinanceiro.__table__.columns},
+                pagador_nome=instituicao.nome_fantasia or instituicao.razao_social,
+                tabela_codigo=tabela.codigo,
+                tabela_nome=tabela.nome,
+            )
+            for row, instituicao, tabela in query.populate_existing().order_by(
+                Instituicao.nome_fantasia,
+                ContratoFinanceiro.codigo,
+                ContratoFinanceiro.edicao,
+                ContratoFinanceiro.id,
+            ).all()
+        ]
+
+    def get_contract(self, db, identity):
+        rows = self.list_contracts(db, identity=identity)
         if not rows:
             raise FinanceiroErro('NOT_FOUND')
         return rows[0]
