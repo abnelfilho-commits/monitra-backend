@@ -435,3 +435,53 @@ class FinanceiroConfiguracaoService:
         return dict({c.name: getattr(row, c.name) for c in PrecoServico.__table__.columns},
                     servico_codigo=s.codigo, servico_descricao=s.descricao, ocupacao_nome=occupation,
                     duracao_minutos=s.duracao_minutos, servico_ativo=s.ativo)
+
+
+    def list_mapping_agendas(self, db, *, modulo_id=None, situacao='TODOS', busca=None, agenda_id=None):
+        from app.models.agenda_cuidado import AgendaCuidado as A
+        from app.models.pts import PTS
+        from app.models.modular import ModuloClinico
+        from app.models.atividade_terapeutica import AtividadeTerapeutica
+        M, S = MapeamentoAgendaServico, ServicoEconomico
+        query = db.query(
+            A.id.label('agenda_cuidado_id'), PTS.paciente_id,
+            Paciente.nome.label('paciente_nome'), A.atividade_id,
+            AtividadeTerapeutica.nome.label('atividade_nome'), A.ocupacao_id,
+            OcupacaoProfissional.nome.label('ocupacao_nome'), A.duracao_minutos,
+            PTS.modulo_id, ModuloClinico.nome.label('modulo_nome'),
+            PTS.contexto_assistencial_id, A.data_inicio, A.data_fim,
+            A.status, M.id.label('mapeamento_id'), S.id.label('servico_id'),
+            S.codigo.label('servico_codigo'), S.descricao.label('servico_descricao'),
+            S.ativo.label('servico_ativo'),
+        ).join(PTS, PTS.id == A.pts_id).join(Paciente, Paciente.id == PTS.paciente_id).join(
+            AtividadeTerapeutica, AtividadeTerapeutica.id == A.atividade_id).join(
+            OcupacaoProfissional, OcupacaoProfissional.id == A.ocupacao_id).outerjoin(
+            ModuloClinico, ModuloClinico.id == PTS.modulo_id).outerjoin(
+            M, M.agenda_cuidado_id == A.id).outerjoin(S, S.id == M.servico_id)
+        if modulo_id is not None:
+            query = query.filter(PTS.modulo_id == modulo_id)
+        if agenda_id is not None:
+            query = query.filter(A.id == agenda_id)
+        if situacao == 'MAPEADOS':
+            query = query.filter(M.id.isnot(None))
+        elif situacao == 'NAO_MAPEADOS':
+            query = query.filter(M.id.is_(None))
+        if busca and busca.strip():
+            query = query.filter(or_(Paciente.nome.icontains(busca.strip(), autoescape=True),
+                                    AtividadeTerapeutica.nome.icontains(busca.strip(), autoescape=True)))
+        return [dict(row._mapping) for row in query.order_by(Paciente.nome, A.id).all()]
+
+    @atomic
+    def administer_mapping(self, db, *, payload=None, identity=None, servico_id=None):
+        """AE4 active-service policy over the existing canonical commands."""
+        from app.models.agenda_cuidado import AgendaCuidado
+        if identity is None:
+            data = MapeamentoCreate.model_validate(payload)
+            self.read_row(db, AgendaCuidado, data.agenda_cuidado_id)
+            servico_id = data.servico_id
+        service = self._row(db, ServicoEconomico, servico_id)
+        if not service.ativo:
+            raise FinanceiroErro('INACTIVE_SERVICE')
+        row = (self.create(db, MapeamentoAgendaServico, data) if identity is None
+               else self.change_mapping(db, identity, servico_id=servico_id))
+        return self.list_mapping_agendas(db, agenda_id=row.agenda_cuidado_id)[0]
