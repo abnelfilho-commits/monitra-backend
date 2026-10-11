@@ -371,7 +371,7 @@ class ContractsHttpTests(unittest.TestCase):
             "INVALID_PERIOD",
         )
 
-        # 2. Encerramento válido.
+        # 2. Cobertura aberta pode receber uma data de término.
         close_date = self.today + timedelta(days=10)
 
         closed = self.ok(
@@ -384,8 +384,8 @@ class ContractsHttpTests(unittest.TestCase):
 
         self.assertEqual(closed["fim"], str(close_date))
 
-        # 3. Cobertura já encerrada não pode ser encerrada novamente.
-        already_closed = self.req(
+        # 3. O endpoint de encerramento não pode prorrogar a cobertura.
+        extension = self.req(
             "POST",
             f"/beneficiarios/{open_link['id']}/encerrar",
             {
@@ -393,13 +393,23 @@ class ContractsHttpTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(already_closed.status_code, 409, already_closed.text)
+        self.assertEqual(extension.status_code, 409, extension.text)
         self.assertEqual(
-            already_closed.json()["detail"]["code"],
+            extension.json()["detail"]["code"],
             "BENEFICIARY_ALREADY_CLOSED",
         )
 
-        # 4. Contrato finito: encerramento não pode ultrapassar sua vigência.
+        unchanged = self.req(
+            "POST",
+            f"/beneficiarios/{open_link['id']}/encerrar",
+            {"fim": str(close_date)},
+        )
+        self.assertEqual(unchanged.status_code, 409, unchanged.text)
+        self.assertEqual(
+            unchanged.json()["detail"]["code"], "BENEFICIARY_ALREADY_CLOSED"
+        )
+
+        # 4. Contrato finito: término programado pode ser antecipado.
         contract_end = self.today + timedelta(days=30)
 
         finite_contract = self.ok(
@@ -423,18 +433,19 @@ class ContractsHttpTests(unittest.TestCase):
             },
         )
 
-        # Para exercitar close_beneficiary, reabre apenas o registro
-        # dentro da transação de teste; a API não possui operação de reabertura.
-        self.db.execute(
-            text(
-                "UPDATE paciente_contratos "
-                "SET fim = NULL "
-                "WHERE id = :id"
-            ),
-            {"id": finite_link["id"]},
-        )
-        self.db.flush()
+        anticipated_end = self.today + timedelta(days=20)
 
+        anticipated = self.ok(
+            "POST",
+            f"/beneficiarios/{finite_link['id']}/encerrar",
+            {
+                "fim": str(anticipated_end),
+            },
+        )
+
+        self.assertEqual(anticipated["fim"], str(anticipated_end))
+
+        # 5. Encerramento nunca pode ultrapassar a vigência do contrato.
         beyond_contract = self.req(
             "POST",
             f"/beneficiarios/{finite_link['id']}/encerrar",

@@ -272,15 +272,17 @@ class FinanceiroConfiguracaoService:
     def close_beneficiary(self, db, identity, *, fim):
         link = self._row(db, PacienteContrato, identity)
 
-        if link.fim is not None:
-            raise FinanceiroErro('BENEFICIARY_ALREADY_CLOSED')
-
         if fim < link.inicio:
             raise FinanceiroErro('INVALID_PERIOD')
 
         contract = self._row(db, ContratoFinanceiro, link.contrato_id)
         if contract.fim is not None and fim > contract.fim:
             raise FinanceiroErro('BENEFICIARY_OUTSIDE_CONTRACT_PERIOD')
+
+        # ``fim`` representa o término da vigência da cobertura.
+        # Quando já existe, encerrar significa antecipar esse término.
+        if link.fim is not None and fim >= link.fim:
+            raise FinanceiroErro('BENEFICIARY_ALREADY_CLOSED')
 
         link.fim = fim
         db.flush()
