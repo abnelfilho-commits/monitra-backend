@@ -1,11 +1,12 @@
-"""Read persisted Neuro sessions only. No scheduling, money or clinical writes."""
+"""Read persisted eligible care sessions only. No scheduling, money or clinical writes."""
 
 from sqlalchemy import or_, select
 from app.models.agenda_cuidado import AgendaCuidado as Agenda
 from app.models.pts import PTS, PTSObjetivo
 from app.models.paciente import Paciente
 from app.models.sessao_assistencial import SessaoAssistencial as Sessao
-from app.services.care_lines.registry import NEURO
+from app.services.care_lines.registry import NEURO, MENTAL_HEALTH
+from app.models.contexto_assistencial import ContextoAssistencial, ContextoAssistencialLinha
 
 
 from app.services.financeiro.contracts import PlannedSession, NeuroPlan
@@ -16,6 +17,34 @@ def read_neuro(db, request):
 
 
 def read_neuro_batch(db, patient_ids, request):
+    # Preserve the legacy Neuro boundary, including the objective's ancestry.
+    return _read_batch(db, patient_ids, request, (
+        PTS.contexto_assistencial_id.is_(None),
+        ~PTSObjetivo.pts.has(PTS.contexto_assistencial_id.is_not(None)),
+        PTS.modulo_id == NEURO.module_id,
+    ))
+
+
+def read_mental_health_batch(db, patient_ids, request):
+    # EXISTS avoids multiplying sessions; foreign contexts and inactive lines
+    # produce neither financial items nor gaps. No legacy institution inference.
+    eligible_context = select(ContextoAssistencial.id).join(
+        ContextoAssistencialLinha,
+        ContextoAssistencialLinha.contexto_assistencial_id == ContextoAssistencial.id,
+    ).where(
+        ContextoAssistencial.id == PTS.contexto_assistencial_id,
+        ContextoAssistencial.paciente_id == PTS.paciente_id,
+        ContextoAssistencial.instituicao_id == request.instituicao_id,
+        ContextoAssistencialLinha.modulo_id == MENTAL_HEALTH.module_id,
+        ContextoAssistencialLinha.ativo.is_(True),
+    ).exists()
+    return _read_batch(db, patient_ids, request, (
+        PTS.modulo_id == MENTAL_HEALTH.module_id,
+        PTS.contexto_assistencial_id.is_not(None), eligible_context,
+    ))
+
+
+def _read_batch(db, patient_ids, request, eligibility):
     patient_ids = tuple(sorted(set(patient_ids)))
     if not patient_ids:
         return {}
@@ -34,8 +63,7 @@ def read_neuro_batch(db, patient_ids, request):
         .join(Agenda, Sessao.agenda_cuidado_id == Agenda.id)
         .join(PTS, Agenda.pts_id == PTS.id)
         .outerjoin(PTSObjetivo, Agenda.objetivo_id == PTSObjetivo.id)
-        .where(PTS.contexto_assistencial_id.is_(None),
-               ~PTSObjetivo.pts.has(PTS.contexto_assistencial_id.is_not(None)), PTS.modulo_id == NEURO.module_id,
+        .where(*eligibility,
                or_(PTS.paciente_id.in_(patient_ids), Sessao.paciente_id.in_(patient_ids)),
                Sessao.status.in_(('AGENDADA', 'CONFIRMADA')),
                Sessao.data_agendada.between(request.data_inicio, request.data_fim))
@@ -57,8 +85,7 @@ def read_neuro_batch(db, patient_ids, request):
         select(Agenda.id, Agenda.pts_id, PTS.paciente_id, PTSObjetivo.pts_id.label('objetivo_pts_id'))
         .join(PTS, Agenda.pts_id == PTS.id)
         .outerjoin(PTSObjetivo, Agenda.objetivo_id == PTSObjetivo.id)
-        .where(PTS.contexto_assistencial_id.is_(None),
-               ~PTSObjetivo.pts.has(PTS.contexto_assistencial_id.is_not(None)), PTS.paciente_id.in_(patient_ids), PTS.modulo_id == NEURO.module_id,
+        .where(*eligibility, PTS.paciente_id.in_(patient_ids),
                Agenda.data_inicio <= request.data_fim,
                or_(Agenda.data_fim.is_(None), Agenda.data_fim >= request.data_inicio))
         .order_by(Agenda.id)).all()

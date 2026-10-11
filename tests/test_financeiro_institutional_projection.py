@@ -136,8 +136,8 @@ class InstitutionalPostgresTests(unittest.TestCase):
         for changes in (dict(instituicao_id=self.other),dict(contrato_id=99999)):
             with self.assertRaises(ValueError):self.run_preview(**changes)
 
-    def test_module_explicit_and_no_mental_health_placeholder(self):
-        for module in (2,3,999):
+    def test_module_explicit_and_unsupported_modules_rejected(self):
+        for module in (2,999):
             with self.assertRaises(ValueError):self.run_preview(modulo_id=module)
         with self.engine.begin() as c:
             c.execute(text('UPDATE pts SET modulo_id=NULL WHERE paciente_id=:p'),dict(p=self.patient))

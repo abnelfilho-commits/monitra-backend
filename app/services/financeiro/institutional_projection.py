@@ -16,9 +16,9 @@ from app.schemas.financeiro import (
     InstitutionalItem, ResolutionEvidence, LinkEvidence, PatientTotal,
     MonthTotal, ServiceTotal, PendingTotal,
 )
-from app.services.care_lines.registry import NEURO
+from app.services.care_lines.registry import NEURO, MENTAL_HEALTH
 from app.services.financeiro.contracts import NeuroPlan
-from app.services.financeiro.neuro_reader import read_neuro_batch
+from app.services.financeiro.neuro_reader import read_neuro_batch, read_mental_health_batch
 from app.services.financeiro.resolution import economic_context, economic_inputs, resolve_items, rows
 from app.services.financeiro.calculator import summarize
 from app.services.financeiro.projection import require_snapshot
@@ -41,7 +41,7 @@ class InstitutionalProjectionService:
         request = InstitutionalPreviewRequest.model_validate(payload)
         if type(batch_size) is not int or batch_size < 1:
             raise ValueError('batch_size must be a positive integer')
-        if request.modulo_id != NEURO.module_id:
+        if request.modulo_id not in (NEURO.module_id, MENTAL_HEALTH.module_id):
             raise ValueError('Módulo sem contrato assistencial de projeção implementado')
         with db.no_autoflush:
             require_snapshot(db)
@@ -61,7 +61,8 @@ class InstitutionalProjectionService:
         details, patients = [], []
         for offset in range(0, len(population), batch_size):
             ids = population[offset:offset + batch_size]
-            plans = read_neuro_batch(db, ids, request)
+            reader = read_neuro_batch if request.modulo_id == NEURO.module_id else read_mental_health_batch
+            plans = reader(db, ids, request)
             links = defaultdict(list)
             for link in sorted(rows(db, PacienteContrato,
                                     PacienteContrato.contrato_id == request.contrato_id,
