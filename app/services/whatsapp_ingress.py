@@ -78,7 +78,8 @@ def process_message(db, identity, recipient, sender, content):
                 raise HTTPException(409, 'Webhook identity conflict.')
             response = receipt.resposta
         else:
-            response = processar_mensagem(db, sender, content)
+            from app.services.whatsapp_mental import dispatch
+            response = dispatch(db, sender, content, processar_mensagem)
             db.query(WhatsAppMensagem).filter_by(message_id=identity).update({'resposta': response})
         db.commit()
         return response

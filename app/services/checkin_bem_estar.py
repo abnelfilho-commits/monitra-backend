@@ -122,25 +122,50 @@ class CheckinBemEstarService:
             # Fresh predicate after every lock wait: no identity-map eligibility.
             if payload.paciente_id!=c.paciente_id or not self.can_write(db,actor=actor,institution=institution,person=person,context=context):
                 raise CheckinDenied('CHECKIN_UNAVAILABLE')
-            form,fields=self._catalog(db,lock=True)
-            if payload.formulario_id!=form.id or payload.modulo_id!=3:raise CheckinInvalid('INVALID_CHECKIN')
-            answers=payload.respostas
-            required={n for n,_,opts in FIELDS if opts}
-            if not required.issubset(answers) or set(answers)-{n for n,_,_ in FIELDS}:raise CheckinInvalid('INVALID_CHECKIN')
-            for name,_,opts in FIELDS:
-                if opts and answers[name] not in {v for v,_ in opts}:raise CheckinInvalid('INVALID_CHECKIN')
-            description=answers.get('evento_descricao','').strip()
-            if len(description)>2000 or (description and answers['evento_relevante']!='SIM'):raise CheckinInvalid('INVALID_CHECKIN')
-            now=db.execute(select(func.timezone('UTC',func.clock_timestamp()))).scalar_one()
-            canonical=RegistroLongitudinalCreate(paciente_id=c.paciente_id,modulo_id=3,formulario_id=form.id,
-                data_registro=now.date(),origem='PROFISSIONAL',respostas=[CampoResposta(campo_id=f.id,valor=description if f.nome_campo=='evento_descricao' else answers[f.nome_campo]) for f in fields if f.nome_campo!='evento_descricao' or description])
+        return self._persist(db, payload, actor=actor, person=person, context=context,
+            patient=c.paciente_id, actor_person=actor_person, professional_id=professional.id,
+            origin='PROFISSIONAL', channel='PORTAL_PROFISSIONAL', modality='ASSISTIDO')
+
+    def create_self_report(self, db, *, conversation_id):
+        # No enabling-professional authorization is used for self-report.
+        from app.services.whatsapp_mental import lock_execution_scope, valid_scope
+        from app.schemas.checkin_bem_estar import CheckinCreate
+        a, conversation, c, patient, person, now = lock_execution_scope(db, conversation_id)
+        if (not valid_scope(db, a, c, patient, person, now)
+                or a.consentimento_status != 'CONSENTIDO'
+                or conversation.status != 'EM_ANDAMENTO' or conversation.expires_at <= now):
+            raise CheckinDenied('CHECKIN_UNAVAILABLE')
+        form, _ = self._catalog(db, lock=True)
+        payload = CheckinCreate(paciente_id=patient.id, modulo_id=3, formulario_id=form.id,
+                               respostas=conversation.respostas_json)
+        result = self._persist(db, payload, actor=None, person=person.id, context=c.id,
+            patient=patient.id, actor_person=person.id, professional_id=None,
+            origin='WHATSAPP', channel='WHATSAPP', modality='AUTORRELATO')
+        conversation.status = 'CONCLUIDA'
+        db.flush()
+        return result
+
+    def _persist(self, db, payload, *, actor, person, context, patient, actor_person,
+                 professional_id, origin, channel, modality):
+        form,fields=self._catalog(db,lock=True)
+        if payload.formulario_id!=form.id or payload.modulo_id!=3:raise CheckinInvalid('INVALID_CHECKIN')
+        answers=payload.respostas
+        required={n for n,_,opts in FIELDS if opts}
+        if not required.issubset(answers) or set(answers)-{n for n,_,_ in FIELDS}:raise CheckinInvalid('INVALID_CHECKIN')
+        for name,_,opts in FIELDS:
+            if opts and answers[name] not in {v for v,_ in opts}:raise CheckinInvalid('INVALID_CHECKIN')
+        description=answers.get('evento_descricao','').strip()
+        if len(description)>2000 or (description and answers['evento_relevante']!='SIM'):raise CheckinInvalid('INVALID_CHECKIN')
+        now=db.execute(select(func.timezone('UTC',func.clock_timestamp()))).scalar_one()
+        canonical=RegistroLongitudinalCreate(paciente_id=patient,modulo_id=3,formulario_id=form.id,
+            data_registro=now.date(),origem=origin,respostas=[CampoResposta(campo_id=f.id,valor=description if f.nome_campo=='evento_descricao' else answers[f.nome_campo]) for f in fields if f.nome_campo!='evento_descricao' or description])
         record=criar_registro_longitudinal(db,canonical,commit=False,contexto_assistencial_id=context,criado_por_usuario_id=actor)
         record.criado_em=now
         db.add(RegistroProveniencia(registro_id=record.id,respondente_pessoa_id=person,
-            registrador_pessoa_id=actor_person,registrador_profissional_id=professional.id,canal='PORTAL_PROFISSIONAL',modalidade='ASSISTIDO'))
+        registrador_pessoa_id=actor_person,registrador_profissional_id=professional_id,canal=channel,modalidade=modality))
         db.flush()
         # Write and read capabilities are independent: return only this command's result.
         first=db.execute(select(RegistroLongitudinal.id).where(RegistroLongitudinal.contexto_assistencial_id==context,RegistroLongitudinal.modulo_id==3,RegistroLongitudinal.formulario_id==form.id).order_by(RegistroLongitudinal.criado_em,RegistroLongitudinal.id).limit(1)).scalar_one()
         return CheckinOut(id=record.id,data_hora=now.replace(tzinfo=timezone.utc),baseline=first==record.id,
-            respondente_pessoa_id=person,registrador_profissional_id=professional.id,canal='PORTAL_PROFISSIONAL',modalidade='ASSISTIDO',
-            respostas={r.nome_campo:description if r.nome_campo=='evento_descricao' else answers[r.nome_campo] for r in fields if r.nome_campo!='evento_descricao' or description})
+        respondente_pessoa_id=person,registrador_profissional_id=professional_id,canal=channel,modalidade=modality,
+        respostas={r.nome_campo:description if r.nome_campo=='evento_descricao' else answers[r.nome_campo] for r in fields if r.nome_campo!='evento_descricao' or description})

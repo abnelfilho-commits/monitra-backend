@@ -46,3 +46,5 @@ from .contexto_assistencial import ContextoAssistencial, ContextoAssistencialLin
 from .permissao_assistencial import ContextoProfissional, ConcessaoAssistencial, AutoridadeDelegacao
 
 from .registro_proveniencia import RegistroProveniencia
+
+from .whatsapp_contextual import AcompanhamentoWhatsApp, WhatsAppConversaContextual

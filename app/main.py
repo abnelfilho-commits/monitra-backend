@@ -132,3 +132,6 @@ app.include_router(saude_mental.router)
 
 from app.routers import operacao_assistencial
 app.include_router(operacao_assistencial.router)
+
+from app.routers import whatsapp_mental
+app.include_router(whatsapp_mental.router)
