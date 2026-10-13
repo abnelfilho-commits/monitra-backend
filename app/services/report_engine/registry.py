@@ -5,7 +5,7 @@ from .sections.base_section import BaseSectionBuilder
 from .base_provider import BaseProvider
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Type
+from typing import Callable, Dict, List, Optional, Type
 
 from .base_engine import BaseReportEngine
 from .constants import REPORT_STATUS_ACTIVE
@@ -38,6 +38,8 @@ class ReportDefinition:
     template: Optional[str] = None
     renderer: Optional[str] = None
     required_parameters: List[str] = field(default_factory=list)
+    # Optional contextual boundary; legacy definitions retain the existing resolver.
+    scope_resolver: Optional[Callable] = None
 
 
 class ReportRegistry:

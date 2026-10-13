@@ -88,7 +88,8 @@ class ReportService:
 
         self._validate_context(context)
         from app.services.care_lines import care_line_resolver
-        context.care_line = care_line_resolver.resolve(context.db, context.subject_id, context.module, 'report')
+        context.care_line = (definition.scope_resolver(context) if definition.scope_resolver else
+                             care_line_resolver.resolve(context.db, context.subject_id, context.module, 'report'))
         context.module = context.care_line.code
         if context.definition.care_line != context.care_line.code:
             raise ValueError('Report definition does not match the requested care line.')
@@ -256,6 +257,9 @@ class ReportService:
 
         if not context.requested_by:
             raise ValueError("requested_by é obrigatório.")
+
+        if context.period_start is None or context.period_end is None:
+            raise ValueError("period_start e period_end são obrigatórios.")
 
         if context.period_start > context.period_end:
             raise ValueError(

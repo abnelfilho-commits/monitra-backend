@@ -51,7 +51,8 @@ CARDIO = CareLineDefinition(
 MENTAL_HEALTH = CareLineDefinition(
     code="MENTAL_HEALTH", slug="saude_mental", module_id=3,
     display_name="Saúde Mental",
-    capabilities={"contextual_journey": CareLineCapabilityStatus.ACTIVE},
+    capabilities={"contextual_journey": CareLineCapabilityStatus.ACTIVE,
+                  CAP_REPORT: CareLineCapabilityStatus.ACTIVE},
 )
 
 

@@ -28,7 +28,8 @@ class RegistryTests(unittest.TestCase):
         self.assertIs(care_line_registry.get('saude_mental'), MENTAL_HEALTH)
         self.assertEqual(MENTAL_HEALTH.module_id, 3)
         self.assertTrue(MENTAL_HEALTH.supports('contextual_journey'))
-        for cap in ('daily_record','clinical_engine','timeline','report','whatsapp','cockpit'):
+        self.assertTrue(MENTAL_HEALTH.supports('report'))
+        for cap in ('daily_record','clinical_engine','timeline','whatsapp','cockpit'):
             self.assertFalse(MENTAL_HEALTH.supports(cap))
 
     def test_registered_routes(self):
