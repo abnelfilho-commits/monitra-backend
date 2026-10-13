@@ -291,6 +291,7 @@ def baixar_relatorio_paciente_pdf(
     period_end: Optional[date] = None,
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_atual),
+    contexto_assistencial_id: Optional[int] = None,
 ):
     from app.services.care_lines.access import authorized_patient
     from app.services.care_lines import care_line_resolver
@@ -299,22 +300,35 @@ def baixar_relatorio_paciente_pdf(
     if role not in {'ADMIN', 'ADMINISTRADOR', 'ADMIN_CLINICA', 'PROFISSIONAL', 'SUPORTE'}:
         raise HTTPException(403, 'Perfil sem acesso assistencial.')
     query = db.query(Paciente).filter(Paciente.id == paciente_id, Paciente.ativo.is_(True))
-    if role not in {'ADMIN', 'ADMINISTRADOR'}:
-        if usuario.clinica_id is None:
-            raise HTTPException(403, 'Usuário sem clínica vinculada.')
-        query = query.filter(Paciente.clinica_id == usuario.clinica_id)
-    if query.first() is None:
-        raise HTTPException(404, 'Paciente não encontrado.')
-    try:
-        line = care_line_resolver.resolve(db, paciente_id, care_line, 'report')
-        paciente, line = authorized_patient(db, usuario, paciente_id, line.code)
-    except CareLineError as exc:
-        raise HTTPException(409 if exc.code=='AMBIGUOUS_CARE_LINE' else 400, exc.code) from exc
+
+    mental_health = (care_line or '').strip().upper() == 'MENTAL_HEALTH'
+
+    if mental_health:
+        if contexto_assistencial_id is None:
+            raise HTTPException(422, 'contexto_assistencial_id é obrigatório para Saúde Mental.')
+        paciente = query.first()
+        if paciente is None:
+            raise HTTPException(404, 'Paciente não encontrado.')
+        line_code = 'MENTAL_HEALTH'
+    else:
+        if role not in {'ADMIN', 'ADMINISTRADOR'}:
+            if usuario.clinica_id is None:
+                raise HTTPException(403, 'Usuário sem clínica vinculada.')
+            query = query.filter(Paciente.clinica_id == usuario.clinica_id)
+        if query.first() is None:
+            raise HTTPException(404, 'Paciente não encontrado.')
+        try:
+            line = care_line_resolver.resolve(db, paciente_id, care_line, 'report')
+            paciente, line = authorized_patient(db, usuario, paciente_id, line.code)
+        except CareLineError as exc:
+            raise HTTPException(409 if exc.code=='AMBIGUOUS_CARE_LINE' else 400, exc.code) from exc
+        line_code = line.code
+
     period_start = period_start or (paciente.created_at.date() if paciente.created_at else date.today())
     period_end = period_end or date.today()
     if period_start > period_end:
         raise HTTPException(422, 'Período inválido.')
-    definition = ReportService().registry.for_care_line(line.code)
+    definition = ReportService().registry.for_care_line(line_code)
 
     temp_path = None
 
@@ -327,7 +341,11 @@ def baixar_relatorio_paciente_pdf(
             requested_by=usuario.id,
             period_start=period_start,
             period_end=period_end,
-            module=line.code,
+            module=line_code,
+            parameters=(
+                {'contexto_assistencial_id': contexto_assistencial_id}
+                if mental_health else None
+            ),
             db=db,
         )
 

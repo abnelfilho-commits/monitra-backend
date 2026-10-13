@@ -109,3 +109,58 @@ class PresentationTests(unittest.TestCase):
                     self.assertEqual(kw['period_end'],end or date.today())
                     self.assertIsInstance(kw['period_start'],date)
         db.execute.assert_not_called()
+
+    def test_endpoint_mental_health_forwards_context_without_legacy_resolver(self):
+        from unittest.mock import MagicMock, patch
+        from fastapi import HTTPException
+        from app.routers.pacientes import baixar_relatorio_paciente_pdf
+
+        patient = SimpleNamespace(id=19, created_at=datetime(2026, 10, 1))
+        user = SimpleNamespace(id=10, perfil='PROFISSIONAL', clinica_id=None)
+
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = patient
+
+        definition = SimpleNamespace(code='CLN-MENTAL-001')
+
+        with patch(
+            'app.services.care_lines.care_line_resolver.resolve',
+            side_effect=AssertionError('legacy resolver must not be used for MENTAL_HEALTH'),
+        ), patch(
+            'app.services.care_lines.access.authorized_patient',
+            side_effect=AssertionError('legacy patient authorization must not be used for MENTAL_HEALTH'),
+        ), patch('app.routers.pacientes.ReportService') as service:
+            service.return_value.registry.for_care_line.return_value = definition
+            service.return_value.render.side_effect = (
+                lambda **kw: Path(kw['output_path']).write_bytes(b'%PDF-mental')
+            )
+
+            result = baixar_relatorio_paciente_pdf(
+                19,
+                'MENTAL_HEALTH',
+                date(2026, 10, 1),
+                date(2026, 10, 13),
+                db,
+                user,
+                contexto_assistencial_id=1,
+            )
+
+            self.assertEqual(result.media_type, 'application/pdf')
+
+            kw = service.return_value.generate.call_args.kwargs
+            self.assertEqual(kw['report_code'], 'CLN-MENTAL-001')
+            self.assertEqual(kw['subject_id'], 19)
+            self.assertEqual(kw['requested_by'], 10)
+            self.assertEqual(kw['module'], 'MENTAL_HEALTH')
+            self.assertEqual(kw['parameters'], {'contexto_assistencial_id': 1})
+
+        with self.assertRaises(HTTPException) as exc:
+            baixar_relatorio_paciente_pdf(
+                19,
+                'MENTAL_HEALTH',
+                date(2026, 10, 1),
+                date(2026, 10, 13),
+                db,
+                user,
+            )
+        self.assertEqual(exc.exception.status_code, 422)
