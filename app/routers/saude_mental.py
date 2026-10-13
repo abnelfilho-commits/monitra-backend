@@ -371,3 +371,22 @@ def transition_mental_session(payload: AcaoSessaoMental, pts_id: int, objetivo_i
 @router.post('/pessoas/{pessoa_id}/contextos/{contexto_id}/pts/{pts_id}/objetivos/{objetivo_id}/planejamentos/{planejamento_id}/sessoes/{sessao_id}/atendimento', response_model=CronogramaMentalOut)
 def attend_mental_session(payload: AtendimentoMental, pts_id: int, objetivo_id: int, planejamento_id: int, sessao_id: int, scope=Depends(pts_scope), db: Session=Depends(get_db)):
     return session_command(db, lambda: SessoesMentaisService().mutate(db, scope, pts_id, objetivo_id, planejamento_id, sessao_id, attendance=payload))
+
+
+from datetime import date
+from app.schemas.cockpit_mental import CockpitMentalOut
+from app.services.cockpit_mental import CockpitMentalService
+
+
+@router.get('/cockpit/profissional', response_model=CockpitMentalOut)
+def professional_mental_cockpit(
+    instituicao_id: int = Query(None, gt=0, le=2147483647),
+    data_referencia: date = Query(None),
+    limit: int = Query(10, ge=1, le=100),
+    db: Session = Depends(get_db), actor=Depends(get_usuario_atual),
+):
+    try:
+        return read(lambda: CockpitMentalService().compose(db, user=actor,
+            institution=instituicao_id, reference_date=data_referencia, limit=limit))
+    except SQLAlchemyError:
+        raise HTTPException(500, {'code': 'COCKPIT_UNAVAILABLE'}) from None

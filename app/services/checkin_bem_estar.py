@@ -59,26 +59,47 @@ class CheckinBemEstarService:
         q=self._scope(actor,institution,person,context,'ASSISTENCIAL_REGISTRAR').join(Linha,Linha.contexto_assistencial_id==Contexto.id).where(Linha.modulo_id==3,Linha.ativo.is_(True))
         return db.execute(q).scalar_one_or_none() is not None
 
+    @staticmethod
+    def read_query():
+        return (select(RegistroLongitudinal, RegistroProveniencia, CampoFormulario.nome_campo, RespostaRegistro.valor_texto)
+            .join(RegistroProveniencia, RegistroProveniencia.registro_id == RegistroLongitudinal.id)
+            .join(FormularioModulo, FormularioModulo.id == RegistroLongitudinal.formulario_id)
+            .join(RespostaRegistro, RespostaRegistro.registro_id == RegistroLongitudinal.id)
+            .join(CampoFormulario, CampoFormulario.id == RespostaRegistro.campo_id)
+            .where(RegistroLongitudinal.modulo_id == 3, FormularioModulo.codigo == CODE)
+            .order_by(RegistroLongitudinal.criado_em, RegistroLongitudinal.id, CampoFormulario.ordem))
+
+    @staticmethod
+    def read_outputs(rows):
+        groups = {}
+        for r, p, name, value in rows:
+            items = groups.setdefault(r.contexto_assistencial_id, {})
+            if r.id not in items:
+                items[r.id] = CheckinOut(id=r.id, data_hora=r.criado_em.replace(tzinfo=timezone.utc), baseline=not items,
+                    respondente_pessoa_id=p.respondente_pessoa_id, registrador_profissional_id=p.registrador_profissional_id,
+                    canal=p.canal, modalidade=p.modalidade, respostas={})
+            items[r.id].respostas[name] = value
+        return {context: list(items.values()) for context, items in groups.items()}
+
     def read(self, db, *, actor, institution, person, context):
-        # Authorization participates in the clinical query itself, before loading answers.
-        scope=self._scope(actor,institution,person,context,'ASSISTENCIAL_LER').with_only_columns(Contexto.id)
-        q=(select(RegistroLongitudinal,RegistroProveniencia,CampoFormulario.nome_campo,RespostaRegistro.valor_texto)
-           .join(RegistroProveniencia,RegistroProveniencia.registro_id==RegistroLongitudinal.id)
-           .join(FormularioModulo,FormularioModulo.id==RegistroLongitudinal.formulario_id)
-           .join(RespostaRegistro,RespostaRegistro.registro_id==RegistroLongitudinal.id)
-           .join(CampoFormulario,CampoFormulario.id==RespostaRegistro.campo_id)
-           .where(RegistroLongitudinal.contexto_assistencial_id.in_(scope),RegistroLongitudinal.modulo_id==3,
-                  FormularioModulo.codigo==CODE,RegistroProveniencia.respondente_pessoa_id==person)
-           .order_by(RegistroLongitudinal.criado_em,RegistroLongitudinal.id,CampoFormulario.ordem))
-        items={}
+        scope = self._scope(actor, institution, person, context, 'ASSISTENCIAL_LER').with_only_columns(Contexto.id)
+        q = self.read_query().where(RegistroLongitudinal.contexto_assistencial_id.in_(scope),
+                                  RegistroProveniencia.respondente_pessoa_id == person)
         with db.no_autoflush:
-            for r,p,name,value in db.execute(q):
-                if r.id not in items:
-                    items[r.id]=CheckinOut(id=r.id,data_hora=r.criado_em.replace(tzinfo=timezone.utc),baseline=not items,
-                        respondente_pessoa_id=p.respondente_pessoa_id,registrador_profissional_id=p.registrador_profissional_id,
-                        canal=p.canal,modalidade=p.modalidade,respostas={})
-                items[r.id].respostas[name]=value
-        return list(items.values())
+            return self.read_outputs(db.execute(q)).get(context, [])
+
+    def read_authorized_batch(self, db, contexts, *, before):
+        """Internal reader over an already-authorized context/person/patient subquery.
+
+        Complete ordinal history is needed by the official reading; free text is
+        excluded for the cockpit. No clinical interpretation is performed here.
+        """
+        q = self.read_query().join(contexts, contexts.c.id == RegistroLongitudinal.contexto_assistencial_id).where(
+            RegistroLongitudinal.paciente_id == contexts.c.paciente_id,
+            RegistroProveniencia.respondente_pessoa_id == contexts.c.pessoa_id,
+            RegistroLongitudinal.criado_em < before, CampoFormulario.nome_campo != 'evento_descricao')
+        with db.no_autoflush:
+            return self.read_outputs(db.execute(q))
 
     def journey(self, db, **scope):
         with db.no_autoflush:

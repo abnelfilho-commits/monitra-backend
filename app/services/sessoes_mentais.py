@@ -167,7 +167,8 @@ class SessoesMentaisService:
         self.sessions(db, agenda, plan)
         return session, agenda, plan, scope
 
-    def personal_sessions(self, db, user):
+    def personal_query(self, db, user):
+        """Canonical authorized, assigned MH session query; callers may project/limit."""
         from app.models.usuario import Usuario
         from app.models.paciente import Paciente
         from app.models.pessoa import Pessoa
@@ -179,10 +180,10 @@ class SessoesMentaisService:
         from sqlalchemy import union_all
         institutions = db.scalars(select(UsuarioInstituicaoAcesso.instituicao_id).where(
             UsuarioInstituicaoAcesso.usuario_id == user.id, UsuarioInstituicaoAcesso.ativo.is_(True))).all()
-        if not institutions: return []
-        allowed = union_all(*(AutorizacaoContextualService().authorized_context_query(
+        allowed = (union_all(*(AutorizacaoContextualService().authorized_context_query(
             actor_id=user.id, capability='ASSISTENCIAL_LER', instituicao_id=i).order_by(None) for i in institutions))
-        rows = db.scalars(select(SessaoAssistencial).join(AgendaCuidado, AgendaCuidado.id == SessaoAssistencial.agenda_cuidado_id)
+            if institutions else select(PTS.contexto_assistencial_id).where(False))
+        return (select(SessaoAssistencial).join(AgendaCuidado, AgendaCuidado.id == SessaoAssistencial.agenda_cuidado_id)
             .join(PTS, PTS.id == AgendaCuidado.pts_id)
             .join(Paciente, Paciente.id == PTS.paciente_id)
             .join(Pessoa, Pessoa.id == Paciente.pessoa_id)
@@ -193,7 +194,11 @@ class SessoesMentaisService:
             .join(Usuario, Usuario.pessoa_id == Profissional.pessoa_id)
             .where(Usuario.id == user.id, Pessoa.ativo.is_(True), PTS.modulo_id == 3, ContextoAssistencialLinha.ativo.is_(True),
                    ModuloClinico.ativo.is_(True), ModuloClinico.slug == 'saude_mental', PTS.contexto_assistencial_id.in_(allowed))
-            .order_by(SessaoAssistencial.data_agendada, SessaoAssistencial.hora_inicio, SessaoAssistencial.id)).all()
+            .order_by(SessaoAssistencial.data_agendada, SessaoAssistencial.hora_inicio, SessaoAssistencial.id))
+
+    def personal_sessions(self, db, user):
+        from app.models.pessoa import Pessoa
+        rows = db.scalars(self.personal_query(db, user)).all()
         from app.models.institucional import Instituicao
         result, agendas = [], {}
         for row in rows:
