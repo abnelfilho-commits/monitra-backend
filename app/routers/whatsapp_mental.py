@@ -1,4 +1,5 @@
 """Context-authorized management and controlled proactive execution."""
+import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Path
 from sqlalchemy import select
@@ -9,9 +10,12 @@ from app.models.whatsapp_contextual import AcompanhamentoWhatsApp, WhatsAppConve
 from app.schemas.whatsapp_mental import WhatsAppConfig, WhatsAppState
 from app.services.whatsapp_mental import WhatsAppMentalService, OPEN
 from app.services.checkin_bem_estar import CheckinDenied, CheckinInvalid
+from app.services.whatsapp_sender_service import invitation_diagnostics
 
 router = APIRouter(prefix='/saude-mental/pessoas/{pessoa_id}/contextos/{contexto_id}/whatsapp', tags=['Saúde Mental'])
 service = WhatsAppMentalService()
+
+logger = logging.getLogger(__name__)
 
 
 def scope(pessoa_id: int = Path(gt=0), contexto_id: int = Path(gt=0),
@@ -87,14 +91,23 @@ def invitation(db, context, retry=False):
         db.rollback()
         raise HTTPException(409, {'code':'WHATSAPP_DISPATCH_FAILED'}) from None
     if identity is None: return {'status':'NAO_ELEGIVEL', 'conversa_id':None}
-    try:
-        sent = service.deliver_invitation(db, identity)
-        db.commit()
-        return {'status':'ENVIADO' if sent else 'SEM_NOVO_ENVIO', 'conversa_id':identity}
-    except Exception:
-        db.rollback()
-        # Deliberately retain the execution; operator retries the same invitation.
-        return {'status':'ENVIO_PENDENTE', 'conversa_id':identity}
+    with invitation_diagnostics() as diagnostic:
+        try:
+            sent = service.deliver_invitation(db, identity)
+            diagnostic['stage'] = 'local_commit'
+            db.commit()
+            return {'status':'ENVIADO' if sent else 'SEM_NOVO_ENVIO', 'conversa_id':identity}
+        except Exception:
+            # Do not log exception strings, tracebacks, requests or response bodies.
+            logger.warning(
+                'WhatsApp invitation failed conversation_id=%s stage=%s category=%s '
+                'graph_http_status=%s meta_code=%s meta_subcode=%s meta_trace_id=%s meta_accepted=%s',
+                identity, diagnostic['stage'], diagnostic['category'],
+                diagnostic['graph_http_status'], diagnostic['meta_code'],
+                diagnostic['meta_subcode'], diagnostic['meta_trace_id'], diagnostic['meta_accepted'])
+            db.rollback()
+            # Deliberately retain the execution; operator retries the same invitation.
+            return {'status':'ENVIO_PENDENTE', 'conversa_id':identity}
 
 
 @router.post('/disparar')
