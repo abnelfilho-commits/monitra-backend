@@ -1,5 +1,5 @@
 """Authenticated Mental Health boundary. No global-role bypass."""
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from sqlalchemy.orm import Session
 from app.core.deps import get_usuario_atual
 from app.database import get_db
@@ -390,3 +390,29 @@ def professional_mental_cockpit(
             institution=instituicao_id, reference_date=data_referencia, limit=limit))
     except SQLAlchemyError:
         raise HTTPException(500, {'code': 'COCKPIT_UNAVAILABLE'}) from None
+
+
+from app.schemas.cockpit_gestao_mental import CockpitGestaoMentalOut
+from app.services.cockpit_gestao_mental import (
+    CockpitGestaoMentalService, ManagementDenied, ManagementPeriodInvalid,
+)
+
+
+@router.get('/cockpit/gestao', response_model=CockpitGestaoMentalOut)
+def management_mental_cockpit(
+    request: Request,
+    instituicao_id: int = Query(None, gt=0, le=2147483647),
+    semanas: int = Query(4),
+    db: Session = Depends(get_db), actor=Depends(get_usuario_atual),
+):
+    try:
+        if set(request.query_params) - {'instituicao_id', 'semanas'}:
+            raise ManagementPeriodInvalid('COMPLETE_WEEKS_REQUIRED')
+        return read(lambda: CockpitGestaoMentalService().compose(db, actor_id=actor.id,
+            institution=instituicao_id, weeks=semanas))
+    except ManagementDenied:
+        raise HTTPException(403, {'code': 'MANAGEMENT_UNAVAILABLE'}) from None
+    except ManagementPeriodInvalid:
+        raise HTTPException(422, {'code': 'COMPLETE_WEEKS_REQUIRED'}) from None
+    except SQLAlchemyError:
+        raise HTTPException(500, {'code': 'MANAGEMENT_UNAVAILABLE'}) from None
