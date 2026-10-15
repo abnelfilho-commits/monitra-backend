@@ -66,3 +66,9 @@ class ProfissionalEstadoOut(BaseModel):
     profissional_id: int
     pessoa_id: int
     ativo: bool
+
+
+class PacienteEstadoOut(BaseModel):
+    paciente_id: int
+    pessoa_id: int
+    ativo: bool

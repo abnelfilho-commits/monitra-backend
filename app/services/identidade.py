@@ -27,6 +27,24 @@ PERSON_FIELDS = ("nome_completo", "nome_social", "data_nascimento", "sexo", "cpf
 
 
 class IdentidadeService:
+    def activate_patient(self, db, actor, pessoa_id):
+        """Explicit native role activation only; caller owns commit/rollback."""
+        self._admin(db, actor)
+        person = db.query(Pessoa).filter_by(id=pessoa_id).populate_existing().with_for_update().first()
+        if person is None:
+            raise IdentidadeErro("PERSON_NOT_FOUND", status=404)
+        role = db.query(Paciente).filter_by(pessoa_id=person.id).populate_existing().with_for_update().first()
+        if role is None:
+            raise IdentidadeErro("PATIENT_ROLE_NOT_FOUND", status=404)
+        native = db.query(IdentidadeOperacao.id).filter_by(
+            pessoa_id=person.id, paciente_id=role.id,
+            tipo_operacao='ADICIONAR_PAPEL', resultado='PAPEL_CRIADO').first()
+        if role.clinica_id is not None or native is None:
+            raise IdentidadeErro("LEGACY_PATIENT_NOT_SUPPORTED")
+        role.ativo = True
+        db.flush()
+        return dict(paciente_id=role.id, pessoa_id=role.pessoa_id, ativo=role.ativo)
+
     def set_profissional_active(self, db, actor, pessoa_id, active):
         """Native role lifecycle only; the caller owns the transaction."""
         self._admin(db, actor)

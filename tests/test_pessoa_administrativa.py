@@ -28,7 +28,7 @@ class PersonReadTests(unittest.TestCase):
         p = Pessoa(nome_completo='No roles', ativo=True)
         self.db.add(p); self.db.commit()
         self.assertEqual(self.read('acessos', p.id).json(), dict(pessoa_id=p.id, usuario=None, autorizacoes=[]))
-        self.assertEqual(self.read('vinculos', p.id).json(), dict(pessoa_id=p.id, paciente_id=None,
+        self.assertEqual(self.read('vinculos', p.id).json(), dict(pessoa_id=p.id, paciente_id=None, paciente_ativo=None,
             profissional_id=None, profissional_ativo=None, pacientes=[], profissionais=[]))
 
     def test_canonical_professional_state_without_links_survives_fresh_read(self):
@@ -48,7 +48,7 @@ class PersonReadTests(unittest.TestCase):
             self.db.close()
             response = self.read('vinculos', person)
             self.assertEqual(response.status_code, 200, response.text)
-            self.assertEqual(response.json(), dict(pessoa_id=person, paciente_id=None,
+            self.assertEqual(response.json(), dict(pessoa_id=person, paciente_id=None, paciente_ativo=None,
                 profissional_id=professional, profissional_ativo=active, pacientes=[], profissionais=[]))
 
     def test_professional_state_independent_of_link_state(self):

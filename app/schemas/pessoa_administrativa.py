@@ -45,6 +45,7 @@ class VinculoProfissionalOut(VinculoPessoaOut):
 class PessoaVinculosOut(BaseModel):
     pessoa_id: int
     paciente_id: Optional[int]
+    paciente_ativo: Optional[bool] = None
     profissional_id: Optional[int]
     profissional_ativo: Optional[bool]
     pacientes: list[VinculoPacienteOut]

@@ -1,16 +1,42 @@
 """Administrative identity only. No digital-account creation endpoint."""
 from uuid import UUID
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from app.database import get_db
 from app.core.permissoes import exigir_admin
 from app.schemas.identidade import CpfConsulta, IdentidadeComando, AdicionarPapel, AssociarPapelLegado, AssociarContaLegada
-from app.schemas.identidade import ProfissionalEstadoOut
+from app.schemas.identidade import ProfissionalEstadoOut, PacienteEstadoOut
 from app.services.identidade import IdentidadeService, IdentidadeErro, constraint_violation
 
 router = APIRouter(prefix="/admin/identidades", tags=["Identidade administrativa"])
 service = IdentidadeService()
+logger = logging.getLogger('uvicorn.error.identidades')
+
+
+@router.post("/pessoas/{pessoa_id}/paciente/ativar", response_model=PacienteEstadoOut)
+def activate_patient(pessoa_id: int = Path(..., gt=0, le=2147483647),
+                     db: Session = Depends(get_db), admin=Depends(exigir_admin)):
+    try:
+        actor_id = admin.id
+        result = service.activate_patient(db, actor_id, pessoa_id)
+        output = PacienteEstadoOut.model_validate(result)
+        db.commit()
+    except IdentidadeErro as exc:
+        db.rollback()
+        raise HTTPException(exc.status, {"code": exc.code}) from None
+    except Exception:
+        db.rollback()
+        raise HTTPException(500, {"code": "IDENTITY_OPERATION_FAILED"}) from None
+    # Confirmed operation only; no credentials, names, CPF or clinical content.
+    try:
+        logger.info('event=canonical_patient_activation actor_usuario_id=%s pessoa_id=%s paciente_id=%s ativo=true',
+                    actor_id, output.pessoa_id, output.paciente_id)
+    except Exception:
+        # Logging cannot undo a committed activation or change its HTTP outcome.
+        pass
+    return output
 
 
 def professional_state(db, actor, pessoa_id, active):

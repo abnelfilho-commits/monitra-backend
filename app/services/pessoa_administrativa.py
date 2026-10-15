@@ -55,6 +55,8 @@ class PessoaAdministrativaService:
                 record = db.query(role.id, role.ativo).filter(role.pessoa_id == person_id).one_or_none()
                 identity = record.id if record is not None else None
                 result[key] = identity
+                if role is Paciente:
+                    result['paciente_ativo'] = record.ativo if record is not None else None
                 if role is Profissional:
                     result['profissional_ativo'] = record.ativo if record is not None else None
                 rows = []
