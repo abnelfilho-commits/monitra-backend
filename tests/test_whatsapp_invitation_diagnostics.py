@@ -2,6 +2,8 @@
 import test_whatsapp_security  # Existing isolated application bootstrap.
 import os
 import unittest
+import re
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 import requests
@@ -38,6 +40,9 @@ class InvitationDiagnosticsTests(unittest.TestCase):
             self.assertNotIn(secret, log)
         self.assertTrue(all(r.exc_info is None for r in captured.records))
         self.assertIn('conversation_id=1', log)
+        self.assertIn('graph_version=v25.0', log)
+        stamp = re.search(r'observed_at_utc=(\S+)', log).group(1)
+        self.assertEqual(datetime.fromisoformat(stamp).utcoffset(), timedelta(0))
         return log, post
 
     def test_missing_configuration(self):
@@ -108,3 +113,30 @@ class InvitationDiagnosticsTests(unittest.TestCase):
                     patch.object(api.logger, 'warning') as warning:
                 self.assertEqual(api.invitation(db, {'context': 1}), {'status': status, 'conversa_id': 1})
                 warning.assert_not_called()
+
+    def test_success_logs_http_and_utc_without_sensitive_data(self):
+        for retry in (False, True):
+            db = Mock(); db.scalar.side_effect = [SimpleNamespace(id=7), SimpleNamespace(id=1)] if retry else [SimpleNamespace(id=7)]
+            response = Mock(ok=True, status_code=200)
+            response.json.return_value = {'messages': [{'id': PRIVATE}]}
+            def delivery(*_):
+                WhatsAppSenderService.enviar_template(PHONE)
+                return True
+            with patch.dict(os.environ, ENV, clear=True), \
+                    patch.object(api.service, 'authorized'), \
+                    patch.object(api.service, 'prepare', return_value=SimpleNamespace(id=1)) as prepare, \
+                    patch.object(api.service, 'deliver_invitation', side_effect=delivery), \
+                    patch('app.services.whatsapp_sender_service.requests.post', return_value=response) as post, \
+                    self.assertLogs(api.logger, level='INFO') as captured:
+                result = api.invitation(db, {'context': 1}, retry=retry)
+            self.assertEqual(result, {'status': 'ENVIADO', 'conversa_id': 1})
+            self.assertEqual(post.call_count, 1)
+            if retry: prepare.assert_not_called()
+            log = '\n'.join(captured.output)
+            self.assertIn('graph_version=v25.0', log)
+            self.assertIn('graph_http_status=200 meta_accepted=True', log)
+            stamp = re.search(r'observed_at_utc=(\S+)', log).group(1)
+            self.assertEqual(datetime.fromisoformat(stamp).utcoffset(), timedelta(0))
+            for secret in (PHONE, PRIVATE, ENV['WHATSAPP_ACCESS_TOKEN'], 'Authorization'):
+                self.assertNotIn(secret, log)
+            self.assertEqual(db.commit.call_count, 2)

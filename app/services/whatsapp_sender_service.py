@@ -3,6 +3,7 @@ import requests
 import re
 from contextlib import contextmanager
 from contextvars import ContextVar
+from datetime import datetime, timezone
 
 
 _invitation_diagnostic = ContextVar('whatsapp_invitation_diagnostic', default=None)
@@ -11,7 +12,7 @@ _invitation_diagnostic = ContextVar('whatsapp_invitation_diagnostic', default=No
 @contextmanager
 def invitation_diagnostics():
     """Request-local, allowlisted metadata only; never retain exception contents."""
-    diagnostic = dict(stage='delivery_preparation', category='other',
+    diagnostic = dict(graph_version='v25.0', observed_at_utc=datetime.now(timezone.utc).isoformat(), stage='delivery_preparation', category='other',
                       graph_http_status=None, meta_code=None, meta_subcode=None,
                       meta_trace_id=None, meta_accepted=False)
     token = _invitation_diagnostic.set(diagnostic)
@@ -116,7 +117,7 @@ class WhatsAppSenderService:
         _diagnose(stage='meta_request', category='other')
         try:
             response = requests.post(
-                f'https://graph.facebook.com/v23.0/{phone_id}/messages',
+                f'https://graph.facebook.com/v25.0/{phone_id}/messages',
                 headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
                 json={'messaging_product': 'whatsapp', 'to': telefone, 'type': 'template',
                       'template': {'name': name, 'language': {'code': language}}}, timeout=15)
@@ -126,7 +127,8 @@ class WhatsAppSenderService:
         except requests.exceptions.ConnectionError:
             _diagnose(category='connection')
             raise
-        _diagnose(stage='meta_response', graph_http_status=_integer(response.status_code))
+        _diagnose(stage='meta_response', graph_http_status=_integer(response.status_code),
+                  observed_at_utc=datetime.now(timezone.utc).isoformat())
         if not response.ok:
             _diagnose(category='http_rejection')
             _meta_error(response, (token, telefone, phone_id))

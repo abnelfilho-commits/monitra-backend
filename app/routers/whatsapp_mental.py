@@ -15,7 +15,8 @@ from app.services.whatsapp_sender_service import invitation_diagnostics
 router = APIRouter(prefix='/saude-mental/pessoas/{pessoa_id}/contextos/{contexto_id}/whatsapp', tags=['Saúde Mental'])
 service = WhatsAppMentalService()
 
-logger = logging.getLogger(__name__)
+# Inherit the server's INFO handler so successful diagnostics are visible too.
+logger = logging.getLogger('uvicorn.error.whatsapp_mental')
 
 
 def scope(pessoa_id: int = Path(gt=0), contexto_id: int = Path(gt=0),
@@ -96,15 +97,23 @@ def invitation(db, context, retry=False):
             sent = service.deliver_invitation(db, identity)
             diagnostic['stage'] = 'local_commit'
             db.commit()
+            if sent:
+                logger.info(
+                    'WhatsApp invitation confirmed conversation_id=%s graph_version=%s '
+                    'observed_at_utc=%s graph_http_status=%s meta_accepted=%s',
+                    identity, diagnostic['graph_version'], diagnostic['observed_at_utc'],
+                    diagnostic['graph_http_status'], diagnostic['meta_accepted'])
             return {'status':'ENVIADO' if sent else 'SEM_NOVO_ENVIO', 'conversa_id':identity}
         except Exception:
             # Do not log exception strings, tracebacks, requests or response bodies.
             logger.warning(
                 'WhatsApp invitation failed conversation_id=%s stage=%s category=%s '
-                'graph_http_status=%s meta_code=%s meta_subcode=%s meta_trace_id=%s meta_accepted=%s',
+                'graph_http_status=%s meta_code=%s meta_subcode=%s meta_trace_id=%s meta_accepted=%s '
+                'graph_version=%s observed_at_utc=%s',
                 identity, diagnostic['stage'], diagnostic['category'],
                 diagnostic['graph_http_status'], diagnostic['meta_code'],
-                diagnostic['meta_subcode'], diagnostic['meta_trace_id'], diagnostic['meta_accepted'])
+                diagnostic['meta_subcode'], diagnostic['meta_trace_id'], diagnostic['meta_accepted'],
+                diagnostic['graph_version'], diagnostic['observed_at_utc'])
             db.rollback()
             # Deliberately retain the execution; operator retries the same invitation.
             return {'status':'ENVIO_PENDENTE', 'conversa_id':identity}

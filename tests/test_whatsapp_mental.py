@@ -25,7 +25,9 @@ class SenderTests(unittest.TestCase):
             post.return_value.ok=True
             WhatsAppSenderService.enviar_texto('5511999999999','Synthetic')
             self.assertEqual(post.call_args.kwargs['json']['type'],'text')
+            self.assertEqual(post.call_args.args[0], 'https://graph.facebook.com/v23.0/123/messages')
             WhatsAppSenderService.enviar_template('5511999999999')
+            self.assertEqual(post.call_args.args[0], 'https://graph.facebook.com/v25.0/123/messages')
             self.assertEqual(post.call_args.kwargs['json']['template'],{'name':'approved_synthetic','language':{'code':'pt_BR'}})
             self.assertEqual(post.call_args.kwargs['timeout'],15)
         for key in env:
