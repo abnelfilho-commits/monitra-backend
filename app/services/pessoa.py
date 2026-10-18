@@ -3,6 +3,7 @@
 No router, automatic association, deduplication, or legacy synchronization.
 """
 from datetime import datetime, timezone
+from sqlalchemy import func, literal_column, or_
 from app.models.pessoa import Pessoa
 from app.schemas.pessoa import PessoaCreate, PessoaDados
 
@@ -38,5 +39,21 @@ class PessoaService:
         return db.query(Pessoa).filter(Pessoa.id == identity).one_or_none()
 
     @staticmethod
-    def list(db, *, offset=0, limit=50):
-        return db.query(Pessoa).order_by(Pessoa.id).offset(offset).limit(limit).all()
+    def list(db, *, offset=0, limit=50, nome=None, cpf=None):
+        query = db.query(Pessoa)
+        if nome:
+            # Native PostgreSQL UTF8 functions; no unaccent extension required.
+            # NFD separates accents from letters, including decomposed input.
+            def folded(value):
+                return func.lower(func.regexp_replace(
+                    func.normalize(value, literal_column("NFD")),
+                    "[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]", "", "g"))
+
+            term = folded(nome)
+            # strpos treats %, _ and backslashes literally (no wildcard input).
+            query = query.filter(or_(
+                func.strpos(folded(Pessoa.nome_completo), term) > 0,
+                func.strpos(folded(Pessoa.nome_social), term) > 0))
+        if cpf:
+            query = query.filter(Pessoa.cpf == cpf)
+        return query.order_by(Pessoa.id).offset(offset).limit(limit).all()

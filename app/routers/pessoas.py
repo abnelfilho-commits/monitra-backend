@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 from app.database import get_db
 from app.core.permissoes import exigir_admin
-from app.schemas.pessoa import PessoaUpdate, PessoaOut
+from app.schemas.pessoa import PessoaUpdate, PessoaOut, normalize_cpf
 from app.services.pessoa import PessoaService
 from app.schemas.acesso_pessoa import AcessoPessoaCreate, AcessoPessoaOut
 from app.services.acesso_pessoa import AcessoPessoaService, AcessoPessoaErro
@@ -72,8 +72,17 @@ def enable_access(payload: AcessoPessoaCreate, pessoa_id: int = Path(..., gt=0),
 
 @router.get('/', response_model=list[PessoaOut])
 def list_pessoas(offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100),
-                 db: Session = Depends(get_db), admin=Depends(exigir_admin)):
-    return [PessoaOut.model_validate(row) for row in service.list(db, offset=offset, limit=limit)]
+                 db: Session = Depends(get_db), admin=Depends(exigir_admin),
+                 nome: str = Query(None), cpf: str = Query(None)):
+    nome = nome.strip() if nome is not None else None
+    if nome and not 2 <= len(nome) <= 100:
+        raise HTTPException(422, {'code': 'INVALID_PAYLOAD'})
+    try:
+        cpf = normalize_cpf(cpf)
+    except ValueError:
+        raise HTTPException(422, {'code': 'INVALID_PAYLOAD'}) from None
+    return [PessoaOut.model_validate(row) for row in service.list(
+        db, offset=offset, limit=limit, nome=nome or None, cpf=cpf)]
 
 
 @router.get('/{pessoa_id}', response_model=PessoaOut)
