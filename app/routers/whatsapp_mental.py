@@ -94,7 +94,7 @@ def invitation(db, context, retry=False):
     if identity is None: return {'status':'NAO_ELEGIVEL', 'conversa_id':None}
     with invitation_diagnostics() as diagnostic:
         try:
-            sent = service.deliver_invitation(db, identity)
+            sent = service.deliver_invitation(db, identity, context=context, explicit_retry=retry)
             diagnostic['stage'] = 'local_commit'
             db.commit()
             if sent:
@@ -115,7 +115,7 @@ def invitation(db, context, retry=False):
                 diagnostic['meta_subcode'], diagnostic['meta_trace_id'], diagnostic['meta_accepted'],
                 diagnostic['graph_version'], diagnostic['observed_at_utc'])
             db.rollback()
-            # Deliberately retain the execution; operator retries the same invitation.
+            # Durable attempts block repetition of uncertain or interrupted sends.
             return {'status':'ENVIO_PENDENTE', 'conversa_id':identity}
 
 
@@ -127,3 +127,14 @@ def send(db: Session = Depends(get_db), context=Depends(scope)):
 @router.post('/reenviar-convite')
 def retry(db: Session = Depends(get_db), context=Depends(scope)):
     return invitation(db, context, retry=True)
+
+
+@router.get('/diagnostico')
+def diagnostic(db: Session = Depends(get_db), context=Depends(scope)):
+    from app.services.whatsapp_diagnostico import diagnose
+    try:
+        return diagnose(db, **context)
+    except CheckinDenied:
+        raise HTTPException(403, {'code': 'CHECKIN_UNAVAILABLE'}) from None
+    except Exception:
+        raise HTTPException(500, {'code': 'WHATSAPP_OPERATION_FAILED'}) from None

@@ -180,16 +180,9 @@ class WhatsAppMentalService:
         db.flush()
         return conversation
 
-    def deliver_invitation(self, db, identity):
-        """Transport retry for the same committed execution. No exactly-once claim."""
-        from app.services.whatsapp_sender_service import WhatsAppSenderService
-        a, conversation, c, patient, person, now = lock_execution_scope(db, identity)
-        if conversation.convite_enviado_em is not None: return False
-        if conversation.status != 'AGUARDANDO_ACEITE' or conversation.expires_at <= now or not valid_scope(db,a,c,patient,person,now): return False
-        WhatsAppSenderService.enviar_template(conversation.telefone)
-        conversation.convite_enviado_em = now_utc(db)
-        db.flush()
-        return True
+    def deliver_invitation(self, db, identity, *, context, explicit_retry=False):
+        from app.services.whatsapp_convite_envio import deliver
+        return deliver(db, identity, context, explicit_retry=explicit_retry)
 
     def receive(self, db, identity, content):
         a, conversation, c, patient, person, now = lock_execution_scope(db, identity)

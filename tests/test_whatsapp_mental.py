@@ -196,13 +196,15 @@ class MentalWhatsAppTests(unittest.TestCase):
 
     def test_transport_failure_retry_does_not_recreate_execution(self):
         self.prepare()
+        from test_whatsapp_invitation_diagnostics import ENV
+        self.env_patch = patch.dict(os.environ, ENV); self.env_patch.start(); self.addCleanup(self.env_patch.stop)
         with patch.object(WhatsAppSenderService,'enviar_template',side_effect=RuntimeError('transport')):
-            with self.assertRaises(RuntimeError):self.w.deliver_invitation(self.db,self.cid)
+            with self.assertRaises(RuntimeError):self.w.deliver_invitation(self.db,self.cid,context=self.scope)
             self.db.rollback()
         with patch.object(WhatsAppSenderService,'enviar_template') as sender:
-            self.assertTrue(self.w.deliver_invitation(self.db,self.cid));self.db.commit()
-            self.assertFalse(self.w.deliver_invitation(self.db,self.cid));self.db.commit()
-            sender.assert_called_once()
+            self.assertFalse(self.w.deliver_invitation(self.db,self.cid,context=self.scope));self.db.commit()
+            self.assertFalse(self.w.deliver_invitation(self.db,self.cid,context=self.scope));self.db.commit()
+            sender.assert_not_called()
         self.assertEqual(self.counts(),(0,0,0))
 
     def test_api_lifecycle_and_controlled_dispatch(self):
@@ -215,7 +217,8 @@ class MentalWhatsAppTests(unittest.TestCase):
         self.assertEqual(req('PUT',payload={'telefone':self.phone}).status_code,200)
         self.assertEqual(req('POST','/pausar').json()['status'],'PAUSADO')
         self.assertEqual(req('POST','/reativar').json()['status'],'ATIVO')
-        with patch.object(WhatsAppSenderService,'enviar_template'):
+        from test_whatsapp_invitation_diagnostics import ENV
+        with patch.dict(os.environ, ENV), patch.object(WhatsAppSenderService,'enviar_template', return_value={'messages':[{'id':'wamid.synthetic'+str(self.open)}]}):
             r=req('POST','/disparar');self.assertEqual(r.status_code,200,r.text);self.assertEqual(r.json()['status'],'ENVIADO')
         self.assertEqual(req('POST','/encerrar').json()['consentimento_status'],'REVOGADO')
         self.assertEqual(req('POST','/reativar').status_code,409)
@@ -266,6 +269,16 @@ class MentalWhatsAppTests(unittest.TestCase):
             for name in ('uq_wcc_aberta_acompanhamento','uq_wcc_aberta_telefone'):
                 self.assertTrue(indexes[name]['unique'])
                 self.assertIn('AGUARDANDO_ACEITE',str(indexes[name]['dialect_options']))
+            revision = c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar_one()
+            if revision == 'd92a_whatsapp_persistencia':
+                # The new additive evidence migration deliberately forbids destructive rollback.
+                # Keep the historical roundtrip below for fixtures pinned to the W3 revision.
+                before = set(inspect(c).get_table_names())
+                with self.assertRaisesRegex(RuntimeError, 'delivery evidence must be preserved'):
+                    command.downgrade(config(c), 'w3_atendimento_mental_v1')
+                self.assertEqual(set(inspect(c).get_table_names()), before)
+                self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar_one(), revision)
+                return
             command.downgrade(config(c),'w3_atendimento_mental_v1')
             self.assertNotIn('acompanhamentos_whatsapp',inspect(c).get_table_names())
             command.upgrade(config(c),'w3_whatsapp_mental_v1')

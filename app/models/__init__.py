@@ -48,3 +48,5 @@ from .permissao_assistencial import ContextoProfissional, ConcessaoAssistencial,
 from .registro_proveniencia import RegistroProveniencia
 
 from .whatsapp_contextual import AcompanhamentoWhatsApp, WhatsAppConversaContextual
+
+from .whatsapp_convite import WhatsAppConviteEnvio, WhatsAppConviteStatusEvento

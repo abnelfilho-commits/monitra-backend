@@ -21,7 +21,7 @@ class InvitationDiagnosticsTests(unittest.TestCase):
         db = Mock()
         db.scalar.return_value = SimpleNamespace(id=7)
         db.commit.side_effect = [None, RuntimeError(PRIVATE)] if local_failure == 'commit' else None
-        def delivery(*_):
+        def delivery(*_, **__):
             WhatsAppSenderService.enviar_template(PHONE)
             if local_failure == 'flush':
                 raise RuntimeError(PRIVATE)
@@ -119,7 +119,7 @@ class InvitationDiagnosticsTests(unittest.TestCase):
             db = Mock(); db.scalar.side_effect = [SimpleNamespace(id=7), SimpleNamespace(id=1)] if retry else [SimpleNamespace(id=7)]
             response = Mock(ok=True, status_code=200)
             response.json.return_value = {'messages': [{'id': PRIVATE}]}
-            def delivery(*_):
+            def delivery(*_, **__):
                 WhatsAppSenderService.enviar_template(PHONE)
                 return True
             with patch.dict(os.environ, ENV, clear=True), \

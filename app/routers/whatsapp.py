@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.services.whatsapp_ingress import authenticated_messages, process_message, deliver_reply
+from app.services.whatsapp_ingress import authenticated_events, process_message, deliver_reply
+from app.services.whatsapp_convite_status import persist_statuses
 from starlette.concurrency import run_in_threadpool
 
 router = APIRouter(prefix='/whatsapp', tags=['WhatsApp'])
@@ -45,17 +46,18 @@ def verificar_webhook(
 @router.post('/webhook')
 async def receber_webhook(request: Request, db: Session = Depends(get_db)):
     # get_db only creates a Session; no query occurs before authentication/validation.
-    messages = authenticated_messages(await request.body(), request.headers.get('X-Hub-Signature-256'))
-    return await run_in_threadpool(process_validated, db, messages)
+    messages, statuses = authenticated_events(await request.body(), request.headers.get('X-Hub-Signature-256'))
+    return await run_in_threadpool(process_validated, db, messages, statuses)
 
 
-def process_validated(db, messages):
+def process_validated(db, messages, statuses=()):
     try:
+        persist_statuses(db, statuses)
         for identity, recipient, sender, content in messages:
             process_message(db, identity, recipient, sender, content)
             if os.getenv('WHATSAPP_ACCESS_TOKEN'):
                 deliver_reply(db, identity, sender)
-        return {'status': 'processed' if messages else 'ignored'}
+        return {'status': 'processed' if messages or statuses else 'ignored'}
     except HTTPException:
         raise
     except Exception:

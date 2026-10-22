@@ -114,7 +114,7 @@ class IngressSecurityTests(unittest.TestCase):
         payload['entry'].extend(envelope(recipient='wrong')['entry'])
         self.rejected_without_effect(self.post(payload),403)
 
-    def test_signed_non_text_and_status_events_ignored(self):
+    def test_signed_non_text_and_empty_status_events_ignored(self):
         payload=envelope();value=payload['entry'][0]['changes'][0]['value']
         value['messages'][0]['type']='image'
         self.assertEqual(self.post(payload).json(),{'status':'ignored'})

@@ -10,7 +10,7 @@ from app.models.whatsapp_mensagem import WhatsAppMensagem
 from app.services.whatsapp_conversation_service import processar_mensagem, normalizar_telefone
 
 
-def authenticated_messages(body, signature):
+def authenticated_events(body, signature):
     secret = os.getenv('WHATSAPP_APP_SECRET', '')
     recipient = os.getenv('WHATSAPP_PHONE_NUMBER_ID', '')
     if not secret.strip() or not recipient.strip():
@@ -26,6 +26,7 @@ def authenticated_messages(body, signature):
         if not isinstance(entries, list) or not entries:
             raise ValueError()
         messages = []
+        statuses = []
         for entry in entries:
             changes = entry['changes']
             if not isinstance(changes, list) or not changes:
@@ -36,6 +37,8 @@ def authenticated_messages(body, signature):
                 value = change['value']
                 if value['metadata']['phone_number_id'] != recipient:
                     raise HTTPException(403, 'Unexpected webhook recipient.')
+                from app.services.whatsapp_convite_status import parse_statuses
+                statuses.extend(parse_statuses(value, recipient))
                 incoming = value.get('messages', [])
                 if not isinstance(incoming, list):
                     raise ValueError()
@@ -49,7 +52,7 @@ def authenticated_messages(body, signature):
                             or not isinstance(content, str) or not content.strip() or len(content) > 4096):
                         raise ValueError()
                     messages.append((identity, recipient, sender, content))
-        return messages
+        return messages, statuses
     except HTTPException:
         raise
     except (ValueError, TypeError, KeyError, AttributeError):

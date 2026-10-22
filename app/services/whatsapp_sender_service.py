@@ -49,6 +49,15 @@ def _meta_error(response, sensitive):
         pass
 
 
+class MetaInvitationRejected(RuntimeError):
+    """Confirmed HTTP rejection with numeric, allowlisted metadata only."""
+    def __init__(self, http_status, code=None, subcode=None):
+        super().__init__('Meta rejected invitation')
+        self.http_status = http_status
+        self.code = _integer(code)
+        self.subcode = _integer(subcode)
+
+
 class WhatsAppSenderService:
 
     @staticmethod
@@ -106,7 +115,7 @@ class WhatsAppSenderService:
         return response.json()
 
     @staticmethod
-    def enviar_template(telefone: str):
+    def enviar_template(telefone: str, *, expected_phone_id=None):
         _diagnose(stage='configuration', category='configuration')
         token = os.getenv('WHATSAPP_ACCESS_TOKEN')
         phone_id = os.getenv('WHATSAPP_PHONE_NUMBER_ID')
@@ -114,6 +123,8 @@ class WhatsAppSenderService:
         language = os.getenv('WHATSAPP_MENTAL_TEMPLATE_LANGUAGE')
         if not all(value and value.strip() for value in (token, phone_id, name, language)):
             raise ValueError('Configuração do convite WhatsApp indisponível.')
+        if expected_phone_id is not None and phone_id != expected_phone_id:
+            raise ValueError('Invitation emitter changed')
         _diagnose(stage='meta_request', category='other')
         try:
             response = requests.post(
@@ -132,8 +143,16 @@ class WhatsAppSenderService:
         if not response.ok:
             _diagnose(category='http_rejection')
             _meta_error(response, (token, telefone, phone_id))
-            raise RuntimeError(f'Falha no convite WhatsApp: {response.status_code}')
+            try:
+                error = response.json().get('error')
+            except Exception:
+                error = None
+            if 400 <= response.status_code < 500 and isinstance(error, dict) and _integer(error.get('code')) is not None:
+                raise MetaInvitationRejected(response.status_code, error.get('code'), error.get('error_subcode'))
+            raise RuntimeError('Uncertain Meta invitation response')
         _diagnose(meta_accepted=True)
+        if expected_phone_id is not None and response.status_code != 200:
+            raise RuntimeError('Unexpected Meta invitation success status')
         result = response.json()
         # Includes the service timestamp/flush, not only the router commit.
         _diagnose(stage='local_confirmation', category='other')
