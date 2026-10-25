@@ -60,16 +60,33 @@ def deliver(db, identity, context, explicit_retry=False):
             or not valid_scope(db, a, c, patient, person, now)):
         db.rollback()
         return False
+    from app.services.whatsapp_manual import blocking_attempt, require_prior_authorization
+    from app.models.whatsapp_manual import WhatsAppSolicitacaoManual as Manual
+    if blocking_attempt(db, conversation.telefone, identity, follow_id=a.id):
+        db.rollback()
+        return False
+    manual = db.scalar(select(Manual).where(Manual.conversa_id == identity))
+    authorization = require_prior_authorization(db, a)
+    if manual is not None:
+        if (manual.usuario_id != context['actor'] or manual.instituicao_id != context['institution']
+                or manual.acompanhamento_id != a.id or manual.tentativa_id is not None
+                or manual.template_nome != required[2] or manual.template_idioma != required[3]):
+            db.rollback()
+            return False
     previous = db.scalar(select(Envio).where(Envio.conversa_id == identity)
                          .order_by(Envio.tentativa.desc()).limit(1))
     if previous is not None and (previous.estado != 'REJEITADO' or not explicit_retry):
         db.rollback()
         return False
     attempt = Envio(conversa_id=identity, tentativa=previous.tentativa+1 if previous else 1,
-                    correlacao_id=str(uuid4()), phone_number_id=emitter, estado='PREPARADO')
+                    correlacao_id=str(uuid4()), phone_number_id=emitter, estado='PREPARADO',
+                    autorizacao_comunicacao_id=authorization.id)
     db.add(attempt)
     db.flush()
     attempt_id = attempt.id
+    if manual is not None:
+        manual.tentativa_id = attempt_id
+        manual.estado = 'VINCULADO'
     db.commit()  # PREPARADO must survive process failure.
 
     # Reacquire canonical locks and eligibility after the preparation commit.
@@ -81,13 +98,17 @@ def deliver(db, identity, context, explicit_retry=False):
             or not valid_scope(db, a, c, patient, person, now)):
         db.rollback()
         return False
+    authorization = require_prior_authorization(db, a)
+    if authorization.id != attempt.autorizacao_comunicacao_id:
+        db.rollback()
+        return False
     phone = conversation.telefone
     attempt.estado = 'EM_EXECUCAO'
     attempt.iniciado_em = now
     db.commit()  # No DB transaction/locks remain across the network call.
 
     try:
-        result = WhatsAppSenderService.enviar_template(phone, expected_phone_id=emitter)
+        result = WhatsAppSenderService.enviar_template(phone, expected_phone_id=emitter, **({'expected_template': (required[2], required[3])} if manual is not None else {}))
         wamid = capture_wamid(result)
         # Record acceptance even if consent/state changed during the network call.
         # Only the transport timestamp changes; never overwrite clinical state.

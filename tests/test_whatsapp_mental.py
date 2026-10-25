@@ -56,7 +56,10 @@ class MentalWhatsAppTests(unittest.TestCase):
 
     def config(self):
         a=self.w.configure(self.db,self.phone,**self.scope);self.db.commit()
-        self.aid=a.id;return a
+        self.aid=a.id
+        from whatsapp_authorization_fixture import authorize_follow
+        authorize_follow(self.db,self.scope)
+        return a
 
     def prepare(self):
         a=self.config()
@@ -217,6 +220,8 @@ class MentalWhatsAppTests(unittest.TestCase):
         self.assertEqual(req('PUT',payload={'telefone':self.phone}).status_code,200)
         self.assertEqual(req('POST','/pausar').json()['status'],'PAUSADO')
         self.assertEqual(req('POST','/reativar').json()['status'],'ATIVO')
+        from whatsapp_authorization_fixture import authorize_follow
+        authorize_follow(self.db,self.scope)
         from test_whatsapp_invitation_diagnostics import ENV
         with patch.dict(os.environ, ENV), patch.object(WhatsAppSenderService,'enviar_template', return_value={'messages':[{'id':'wamid.synthetic'+str(self.open)}]}):
             r=req('POST','/disparar');self.assertEqual(r.status_code,200,r.text);self.assertEqual(r.json()['status'],'ENVIADO')
@@ -270,11 +275,11 @@ class MentalWhatsAppTests(unittest.TestCase):
                 self.assertTrue(indexes[name]['unique'])
                 self.assertIn('AGUARDANDO_ACEITE',str(indexes[name]['dialect_options']))
             revision = c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar_one()
-            if revision == 'd92a_whatsapp_persistencia':
+            if revision in ('d92a_whatsapp_persistencia', 'd92e12_whatsapp_manual', 'd92e12c_autorizacao_whatsapp'):
                 # The new additive evidence migration deliberately forbids destructive rollback.
                 # Keep the historical roundtrip below for fixtures pinned to the W3 revision.
                 before = set(inspect(c).get_table_names())
-                with self.assertRaisesRegex(RuntimeError, 'delivery evidence must be preserved'):
+                with self.assertRaisesRegex(RuntimeError, 'delivery evidence must be preserved|Manual request evidence requires separately approved removal|Channel authorization evidence requires separately approved removal'):
                     command.downgrade(config(c), 'w3_atendimento_mental_v1')
                 self.assertEqual(set(inspect(c).get_table_names()), before)
                 self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar_one(), revision)

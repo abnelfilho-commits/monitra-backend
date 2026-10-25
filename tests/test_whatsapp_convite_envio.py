@@ -43,6 +43,9 @@ class DeliveryTests(unittest.TestCase):
         self.wamid = 'wamid.'+uuid4().hex
         self.env = patch.dict(os.environ, ENV); self.env.start(); self.addCleanup(self.env.stop)
         self.service = WhatsAppMentalService()
+        if getattr(self, 'create_prior_authorization', True):
+            from whatsapp_authorization_fixture import authorize_follow
+            authorize_follow(self.db, self.scope)
 
     def send(self, db=None, retry=False):
         return self.service.deliver_invitation(db or self.db,self.cid,context=self.scope,explicit_retry=retry)

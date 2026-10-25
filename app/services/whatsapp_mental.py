@@ -115,6 +115,8 @@ class WhatsAppMentalService:
         elif a.telefone != phone:
             if db.scalar(select(Conversation.id).where(Conversation.acompanhamento_whatsapp_id == a.id, Conversation.status.in_(OPEN))):
                 raise CheckinInvalid('OPEN_CONVERSATION')
+            from app.services.whatsapp_autorizacao import revoke_internal
+            revoke_internal(db, a, origin='TROCA_TELEFONE', reason='TROCA_TELEFONE', actor=scope['actor'])
             a.telefone = phone
             a.consentimento_status = 'PENDENTE'
             a.consentido_em = None
@@ -133,6 +135,8 @@ class WhatsAppMentalService:
             a.status = 'ATIVO'
         else:
             if action == 'encerrar':
+                from app.services.whatsapp_autorizacao import revoke_internal
+                revoke_internal(db, a, origin='ENCERRAMENTO', reason='ENCERRAMENTO', actor=scope['actor'])
                 a.status, a.consentimento_status, a.revogado_em = 'ENCERRADO', 'REVOGADO', now_utc(db)
             elif a.status != 'ENCERRADO': a.status = 'PAUSADO'
             for conversation in db.scalars(select(Conversation).where(Conversation.acompanhamento_whatsapp_id == a.id, Conversation.status.in_(OPEN)).with_for_update()):
@@ -142,6 +146,7 @@ class WhatsAppMentalService:
 
     def eligible_ids(self, db, limit=100):
         """Read-only selection. prepare() rechecks eligibility under locks."""
+        from app.services.whatsapp_autorizacao import authorized_follow_exists
         active_line = select(Line.id).where(Line.contexto_assistencial_id == Context.id,
             Line.modulo_id == 3, Line.ativo.is_(True)).exists()
         busy_phone = select(Conversation.id).where(Conversation.telefone == Follow.telefone,
@@ -150,11 +155,11 @@ class WhatsAppMentalService:
             .join(Paciente, Paciente.id == Context.paciente_id).join(Pessoa, Pessoa.id == Paciente.pessoa_id)
             .where(Follow.status == 'ATIVO', Follow.consentimento_status != 'REVOGADO',
                 Follow.paciente_id == Context.paciente_id, Context.ativo.is_(True), Context.data_fim.is_(None),
-                Context.data_inicio <= func.current_date(), Pessoa.ativo.is_(True), active_line, ~busy_phone,
+                Context.data_inicio <= func.current_date(), Pessoa.ativo.is_(True), active_line, ~busy_phone, authorized_follow_exists(),
                 or_(Follow.proximo_envio_em.is_(None), Follow.proximo_envio_em <= func.clock_timestamp()))
             .order_by(Follow.id).limit(limit)))
 
-    def prepare(self, db, identity):
+    def prepare(self, db, identity, *, manual=False):
         """Caller commits before delivery. A blocked phone never advances the schedule."""
         initial = db.get(Follow, identity)
         if initial is None: raise CheckinInvalid('FOLLOW_UP_NOT_FOUND')
@@ -164,19 +169,27 @@ class WhatsAppMentalService:
         a = locked(db, Follow, identity)
         now = now_utc(db)
         if a.telefone != phone: raise CheckinInvalid('DESTINATION_CHANGED')
+        from app.services.whatsapp_manual import blocking_attempt, require_prior_authorization
+        if blocking_attempt(db, phone, follow_id=identity): return None
+        if not valid_scope(db, a, c, patient, person, now): return None
+        try:
+            require_prior_authorization(db, a)
+        except CheckinInvalid:
+            if manual: raise
+            return None
         # Expiry closes a fixed window; replies cannot extend it.
         for old in db.scalars(select(Conversation).where(Conversation.telefone == phone, Conversation.status.in_(OPEN)).with_for_update()):
             if old.expires_at <= now: old.status = 'EXPIRADA'
         db.flush()
         if not valid_scope(db, a, c, patient, person, now): return None
-        if a.proximo_envio_em is not None and a.proximo_envio_em > now: return None
+        if not manual and a.proximo_envio_em is not None and a.proximo_envio_em > now: return None
         if db.scalar(select(Conversation.id).where(Conversation.telefone == phone, Conversation.status.in_(OPEN))): return None
         conversation = Conversation(acompanhamento_whatsapp_id=a.id, contexto_assistencial_id=c.id,
             paciente_id=patient.id, telefone=phone, care_line='MENTAL_HEALTH', etapa_atual='ACEITE',
             respostas_json={}, status='AGUARDANDO_ACEITE', data_referencia=now.date(),
             created_at=now, expires_at=now+timedelta(hours=24))
         db.add(conversation)
-        a.proximo_envio_em = now+timedelta(days=7)
+        if not manual: a.proximo_envio_em = now+timedelta(days=7)
         db.flush()
         return conversation
 
@@ -184,10 +197,12 @@ class WhatsAppMentalService:
         from app.services.whatsapp_convite_envio import deliver
         return deliver(db, identity, context, explicit_retry=explicit_retry)
 
-    def receive(self, db, identity, content):
+    def receive(self, db, identity, content, *, message_id=None):
         a, conversation, c, patient, person, now = lock_execution_scope(db, identity)
         if conversation.status not in OPEN: return 'Esta execução já foi encerrada.'
         if content.strip().upper() == 'PARAR':
+            from app.services.whatsapp_autorizacao import revoke_internal
+            revoke_internal(db, a, origin='WHATSAPP_PARAR', reason='PARAR', conversation=conversation.id, message=message_id)
             a.status, a.consentimento_status, a.revogado_em = 'ENCERRADO', 'REVOGADO', now
             conversation.status = 'CANCELADA'
             db.flush()
@@ -240,9 +255,9 @@ class WhatsAppMentalService:
         return question(next_step)
 
 
-def dispatch(db, sender, content, legacy):
+def dispatch(db, sender, content, legacy, *, message_id=None):
     phone = normalizar_telefone(sender)
     lock_phone(db, phone)
     identity = db.scalar(select(Conversation.id).where(Conversation.telefone == phone, Conversation.status.in_(OPEN)))
     if identity is None: return legacy(db, sender, content)
-    return WhatsAppMentalService().receive(db, identity, content)
+    return WhatsAppMentalService().receive(db, identity, content, message_id=message_id)

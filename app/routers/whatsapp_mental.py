@@ -1,7 +1,9 @@
 """Context-authorized management and controlled proactive execution."""
 import logging
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Path
+from app.schemas.whatsapp_manual import ManualRequest
+from app.schemas.whatsapp_autorizacao import AuthorizationCreate, AuthorizationRevoke
+from fastapi import Header, APIRouter, Depends, HTTPException, Query, Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.core.deps import get_usuario_atual
@@ -104,6 +106,12 @@ def invitation(db, context, retry=False):
                     identity, diagnostic['graph_version'], diagnostic['observed_at_utc'],
                     diagnostic['graph_http_status'], diagnostic['meta_accepted'])
             return {'status':'ENVIADO' if sent else 'SEM_NOVO_ENVIO', 'conversa_id':identity}
+        except CheckinDenied:
+            db.rollback()
+            raise HTTPException(403, {'code': 'CHECKIN_UNAVAILABLE'}) from None
+        except CheckinInvalid as exc:
+            db.rollback()
+            raise HTTPException(409, {'code': str(exc)}) from None
         except Exception:
             # Do not log exception strings, tracebacks, requests or response bodies.
             logger.warning(
@@ -138,3 +146,59 @@ def diagnostic(db: Session = Depends(get_db), context=Depends(scope)):
         raise HTTPException(403, {'code': 'CHECKIN_UNAVAILABLE'}) from None
     except Exception:
         raise HTTPException(500, {'code': 'WHATSAPP_OPERATION_FAILED'}) from None
+
+
+@router.post('/disparar-manual')
+def send_manual(payload: ManualRequest,
+                idempotency_key: str = Header(..., alias='Idempotency-Key', min_length=16, max_length=128),
+                db: Session = Depends(get_db), context=Depends(scope)):
+    from app.services.whatsapp_manual import dispatch_manual
+    try:
+        return dispatch_manual(db, context, idempotency_key, payload)
+    except CheckinDenied:
+        db.rollback()
+        raise HTTPException(403, {'code': 'CHECKIN_UNAVAILABLE'}) from None
+    except CheckinInvalid as exc:
+        db.rollback()
+        raise HTTPException(409, {'code': str(exc)}) from None
+    except Exception:
+        db.rollback()
+        raise HTTPException(503, {'code': 'MANUAL_OUTCOME_UNAVAILABLE', 'retry_automatically': False}) from None
+
+
+def authorization_command(db, operation, *, write=True):
+    try:
+        output = operation()
+        if write: db.commit()
+        return output
+    except CheckinDenied:
+        db.rollback()
+        raise HTTPException(403, {'code': 'CHECKIN_UNAVAILABLE'}) from None
+    except CheckinInvalid as exc:
+        db.rollback()
+        raise HTTPException(409, {'code': str(exc)}) from None
+    except Exception:
+        db.rollback()
+        raise HTTPException(503, {'code': 'AUTHORIZATION_OUTCOME_UNAVAILABLE'}) from None
+
+
+@router.post('/autorizacao-comunicacao')
+def authorize_communication(payload: AuthorizationCreate,
+        idempotency_key: str = Header(..., alias='Idempotency-Key', min_length=16, max_length=128),
+        db: Session = Depends(get_db), context=Depends(scope)):
+    from app.services.whatsapp_autorizacao import register
+    return authorization_command(db, lambda: register(db, context, idempotency_key, payload))
+
+
+@router.post('/autorizacao-comunicacao/revogar')
+def revoke_communication(payload: AuthorizationRevoke,
+        idempotency_key: str = Header(..., alias='Idempotency-Key', min_length=16, max_length=128),
+        db: Session = Depends(get_db), context=Depends(scope)):
+    from app.services.whatsapp_autorizacao import register
+    return authorization_command(db, lambda: register(db, context, idempotency_key, payload, revoke=True))
+
+
+@router.get('/autorizacao-comunicacao')
+def read_communication_authorization(db: Session = Depends(get_db), context=Depends(scope)):
+    from app.services.whatsapp_autorizacao import read
+    return authorization_command(db, lambda: read(db, context), write=False)

@@ -10,6 +10,7 @@ class WhatsAppConviteEnvio(Base):
     __tablename__ = 'whatsapp_convite_envios'
     id = Column(Integer, primary_key=True)
     conversa_id = Column(Integer, ForeignKey('whatsapp_conversas_contextuais.id', ondelete='RESTRICT'), nullable=False)
+    autorizacao_comunicacao_id = Column(Integer, ForeignKey('whatsapp_autorizacoes_comunicacao.id', ondelete='RESTRICT'))
     tentativa = Column(Integer, nullable=False)
     correlacao_id = Column(String(36), nullable=False, unique=True)
     phone_number_id = Column(String(128), nullable=False)
@@ -35,6 +36,7 @@ class WhatsAppConviteEnvio(Base):
         CheckConstraint('graph_http_status IS NULL OR graph_http_status BETWEEN 100 AND 599', name='ck_wce_http'),
         CheckConstraint('(meta_error_code IS NULL OR meta_error_code >= 0) AND (meta_error_subcode IS NULL OR meta_error_subcode >= 0)', name='ck_wce_erros'),
         Index('ix_wce_estado', 'estado'),
+        Index('ix_wce_autorizacao', 'autorizacao_comunicacao_id'),
     )
 
 

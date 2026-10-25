@@ -115,7 +115,7 @@ class WhatsAppSenderService:
         return response.json()
 
     @staticmethod
-    def enviar_template(telefone: str, *, expected_phone_id=None):
+    def enviar_template(telefone: str, *, expected_phone_id=None, expected_template=None):
         _diagnose(stage='configuration', category='configuration')
         token = os.getenv('WHATSAPP_ACCESS_TOKEN')
         phone_id = os.getenv('WHATSAPP_PHONE_NUMBER_ID')
@@ -125,6 +125,8 @@ class WhatsAppSenderService:
             raise ValueError('Configuração do convite WhatsApp indisponível.')
         if expected_phone_id is not None and phone_id != expected_phone_id:
             raise ValueError('Invitation emitter changed')
+        if expected_template is not None and (name, language) != expected_template:
+            raise ValueError('Invitation template changed')
         _diagnose(stage='meta_request', category='other')
         try:
             response = requests.post(

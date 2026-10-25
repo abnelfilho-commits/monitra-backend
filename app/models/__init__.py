@@ -50,3 +50,7 @@ from .registro_proveniencia import RegistroProveniencia
 from .whatsapp_contextual import AcompanhamentoWhatsApp, WhatsAppConversaContextual
 
 from .whatsapp_convite import WhatsAppConviteEnvio, WhatsAppConviteStatusEvento
+
+from app.models.whatsapp_manual import WhatsAppSolicitacaoManual
+
+from app.models.whatsapp_autorizacao import WhatsAppAutorizacaoComunicacao

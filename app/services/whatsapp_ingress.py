@@ -82,7 +82,7 @@ def process_message(db, identity, recipient, sender, content):
             response = receipt.resposta
         else:
             from app.services.whatsapp_mental import dispatch
-            response = dispatch(db, sender, content, processar_mensagem)
+            response = dispatch(db, sender, content, processar_mensagem, message_id=identity)
             db.query(WhatsAppMensagem).filter_by(message_id=identity).update({'resposta': response})
         db.commit()
         return response
