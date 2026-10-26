@@ -78,6 +78,8 @@ def deliver(db, identity, context, explicit_retry=False):
     if previous is not None and (previous.estado != 'REJEITADO' or not explicit_retry):
         db.rollback()
         return False
+    from app.services.whatsapp_sender_service import mental_template_payload
+    mental_template_payload(required[2], required[3], conversation.data_referencia)
     attempt = Envio(conversa_id=identity, tentativa=previous.tentativa+1 if previous else 1,
                     correlacao_id=str(uuid4()), phone_number_id=emitter, estado='PREPARADO',
                     autorizacao_comunicacao_id=authorization.id)
@@ -103,12 +105,13 @@ def deliver(db, identity, context, explicit_retry=False):
         db.rollback()
         return False
     phone = conversation.telefone
+    checkin_date = conversation.data_referencia
     attempt.estado = 'EM_EXECUCAO'
     attempt.iniciado_em = now
     db.commit()  # No DB transaction/locks remain across the network call.
 
     try:
-        result = WhatsAppSenderService.enviar_template(phone, expected_phone_id=emitter, **({'expected_template': (required[2], required[3])} if manual is not None else {}))
+        result = WhatsAppSenderService.enviar_template(phone, expected_phone_id=emitter, expected_template=(required[2], required[3]), checkin_date=checkin_date)
         wamid = capture_wamid(result)
         # Record acceptance even if consent/state changed during the network call.
         # Only the transport timestamp changes; never overwrite clinical state.

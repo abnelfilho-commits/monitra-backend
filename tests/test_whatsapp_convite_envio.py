@@ -59,6 +59,19 @@ class DeliveryTests(unittest.TestCase):
         with Session(self.engine) as db:
             return [(e.estado,e.wamid,e.graph_http_status) for e in db.scalars(select(Envio).where(Envio.conversa_id==self.cid).order_by(Envio.tentativa))]
 
+    def test_dated_template_uses_persisted_conversation_reference(self):
+        from datetime import date
+        from app.services.whatsapp_mental import Conversation
+        from app.services.whatsapp_sender_service import DATED_MENTAL_TEMPLATE
+        conversation = self.db.get(Conversation, self.cid)
+        conversation.data_referencia = date(2024, 2, 29)
+        self.db.commit()
+        with patch.dict(os.environ, {'WHATSAPP_MENTAL_TEMPLATE_NAME': DATED_MENTAL_TEMPLATE}), patch('app.services.whatsapp_sender_service.requests.post', return_value=self.response()) as post:
+            self.assertTrue(self.send())
+        self.assertEqual(post.call_args.kwargs['json']['template']['components'],
+            [{'type': 'body', 'parameters': [{'type': 'text', 'text': '29/02/2024'}]}])
+        self.assertEqual(self.states()[0][0], 'ACEITO')
+
     def test_acceptance_durable_no_http_transaction_and_repeat_blocked(self):
         commits=[]
         from sqlalchemy import event

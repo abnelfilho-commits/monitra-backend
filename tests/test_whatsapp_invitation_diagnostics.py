@@ -11,7 +11,7 @@ from app.routers import whatsapp_mental as api
 from app.services.whatsapp_sender_service import WhatsAppSenderService, invitation_diagnostics
 
 ENV = {'WHATSAPP_ACCESS_TOKEN': 'secret-token-sentinel', 'WHATSAPP_PHONE_NUMBER_ID': '12345',
-       'WHATSAPP_MENTAL_TEMPLATE_NAME': 'synthetic', 'WHATSAPP_MENTAL_TEMPLATE_LANGUAGE': 'pt_BR'}
+       'WHATSAPP_MENTAL_TEMPLATE_NAME': 'integra_care_checkin_bem_estar', 'WHATSAPP_MENTAL_TEMPLATE_LANGUAGE': 'pt_BR'}
 PHONE = '5565999990000'
 PRIVATE = 'clinical-sentinel Authorization: Bearer secret-token-sentinel ' + PHONE
 

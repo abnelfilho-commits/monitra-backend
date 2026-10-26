@@ -3,7 +3,7 @@ import requests
 import re
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 
 _invitation_diagnostic = ContextVar('whatsapp_invitation_diagnostic', default=None)
@@ -56,6 +56,26 @@ class MetaInvitationRejected(RuntimeError):
         self.http_status = http_status
         self.code = _integer(code)
         self.subcode = _integer(subcode)
+
+
+LEGACY_MENTAL_TEMPLATE = 'integra_care_checkin_bem_estar'
+DATED_MENTAL_TEMPLATE = 'integra_care_checkin_acompanhamento_v1'
+
+
+def mental_template_payload(name, language, checkin_date=None):
+    """Explicit template contracts. Reference date is civil, never server time."""
+    if name not in (LEGACY_MENTAL_TEMPLATE, DATED_MENTAL_TEMPLATE) or language != 'pt_BR':
+        raise ValueError('Unsupported mental check-in template configuration')
+    template = {'name': name, 'language': {'code': language}}
+    if name == DATED_MENTAL_TEMPLATE:
+        # Reject datetimes (including naive ones): the caller must supply the
+        # conversation's canonical civil date, without timezone conversion.
+        if type(checkin_date) is not date:
+            raise ValueError('Check-in reference date required')
+        template['components'] = [{'type': 'body', 'parameters': [
+            {'type': 'text', 'text': checkin_date.strftime('%d/%m/%Y')}
+        ]}]
+    return template
 
 
 class WhatsAppSenderService:
@@ -115,7 +135,7 @@ class WhatsAppSenderService:
         return response.json()
 
     @staticmethod
-    def enviar_template(telefone: str, *, expected_phone_id=None, expected_template=None):
+    def enviar_template(telefone: str, *, expected_phone_id=None, expected_template=None, checkin_date=None):
         _diagnose(stage='configuration', category='configuration')
         token = os.getenv('WHATSAPP_ACCESS_TOKEN')
         phone_id = os.getenv('WHATSAPP_PHONE_NUMBER_ID')
@@ -127,13 +147,14 @@ class WhatsAppSenderService:
             raise ValueError('Invitation emitter changed')
         if expected_template is not None and (name, language) != expected_template:
             raise ValueError('Invitation template changed')
+        template = mental_template_payload(name, language, checkin_date)
         _diagnose(stage='meta_request', category='other')
         try:
             response = requests.post(
                 f'https://graph.facebook.com/v25.0/{phone_id}/messages',
                 headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
                 json={'messaging_product': 'whatsapp', 'to': telefone, 'type': 'template',
-                      'template': {'name': name, 'language': {'code': language}}}, timeout=15)
+                      'template': template}, timeout=15)
         except requests.exceptions.Timeout:
             _diagnose(category='timeout')
             raise

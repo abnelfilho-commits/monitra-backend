@@ -20,7 +20,7 @@ import test_checkin_bem_estar as fixture
 class SenderTests(unittest.TestCase):
     def test_template_and_text_payload(self):
         env={'WHATSAPP_ACCESS_TOKEN':'synthetic','WHATSAPP_PHONE_NUMBER_ID':'123',
-             'WHATSAPP_MENTAL_TEMPLATE_NAME':'approved_synthetic','WHATSAPP_MENTAL_TEMPLATE_LANGUAGE':'pt_BR'}
+             'WHATSAPP_MENTAL_TEMPLATE_NAME':'integra_care_checkin_bem_estar','WHATSAPP_MENTAL_TEMPLATE_LANGUAGE':'pt_BR'}
         with patch.dict(os.environ,env), patch('app.services.whatsapp_sender_service.requests.post') as post:
             post.return_value.ok=True
             WhatsAppSenderService.enviar_texto('5511999999999','Synthetic')
@@ -28,7 +28,7 @@ class SenderTests(unittest.TestCase):
             self.assertEqual(post.call_args.args[0], 'https://graph.facebook.com/v23.0/123/messages')
             WhatsAppSenderService.enviar_template('5511999999999')
             self.assertEqual(post.call_args.args[0], 'https://graph.facebook.com/v25.0/123/messages')
-            self.assertEqual(post.call_args.kwargs['json']['template'],{'name':'approved_synthetic','language':{'code':'pt_BR'}})
+            self.assertEqual(post.call_args.kwargs['json']['template'],{'name':'integra_care_checkin_bem_estar','language':{'code':'pt_BR'}})
             self.assertEqual(post.call_args.kwargs['timeout'],15)
         for key in env:
             with patch.dict(os.environ,dict(env,**{key:''})), patch('app.services.whatsapp_sender_service.requests.post') as post:
