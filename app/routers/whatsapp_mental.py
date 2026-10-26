@@ -3,6 +3,7 @@ import logging
 from typing import Optional
 from app.schemas.whatsapp_manual import ManualRequest
 from app.schemas.whatsapp_autorizacao import AuthorizationCreate, AuthorizationRevoke
+from app.schemas.whatsapp_comunicacao import EstadoComunicacao, EventoComunicacao
 from fastapi import Header, APIRouter, Depends, HTTPException, Query, Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -202,3 +203,17 @@ def revoke_communication(payload: AuthorizationRevoke,
 def read_communication_authorization(db: Session = Depends(get_db), context=Depends(scope)):
     from app.services.whatsapp_autorizacao import read
     return authorization_command(db, lambda: read(db, context), write=False)
+
+
+@router.get('/comunicacao', response_model=EstadoComunicacao)
+def communication_state(db: Session = Depends(get_db), context=Depends(scope)):
+    from app.services.whatsapp_comunicacao import read
+    return authorization_command(db, lambda: read(db, context), write=False)
+
+
+@router.post('/comunicacao/reativar', response_model=EventoComunicacao)
+def reactivate_communication(payload: AuthorizationCreate,
+        idempotency_key: str = Header(..., alias='Idempotency-Key', min_length=16, max_length=128),
+        db: Session = Depends(get_db), context=Depends(scope)):
+    from app.services.whatsapp_comunicacao import reactivate
+    return authorization_command(db, lambda: reactivate(db, context, idempotency_key, payload))

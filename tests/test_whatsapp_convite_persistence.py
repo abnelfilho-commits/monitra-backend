@@ -24,8 +24,8 @@ from test_m0_baseline import config
 from app.models.whatsapp_convite import WhatsAppConviteEnvio as Envio, WhatsAppConviteStatusEvento as Evento
 from app.models.whatsapp_contextual import AcompanhamentoWhatsApp as Follow, WhatsAppConversaContextual as Conversation
 
-HEAD = 'e14b3a_multilinhas'
-NEW = {'whatsapp_resolucoes', 'whatsapp_mensagens_roteaveis', 'whatsapp_autorizacoes_comunicacao', 'whatsapp_solicitacoes_manuais', 'whatsapp_convite_envios', 'whatsapp_convite_status_eventos'}
+HEAD = 'e14b3b2_comunicacao'
+NEW = {'whatsapp_comunicacao_eventos', 'whatsapp_resposta_execucoes', 'whatsapp_resolucoes', 'whatsapp_mensagens_roteaveis', 'whatsapp_autorizacoes_comunicacao', 'whatsapp_solicitacoes_manuais', 'whatsapp_convite_envios', 'whatsapp_convite_status_eventos'}
 
 
 @unittest.skipUnless(URL, 'Explicit disposable PostgreSQL required')

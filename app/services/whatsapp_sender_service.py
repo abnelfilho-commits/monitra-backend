@@ -84,6 +84,7 @@ class WhatsAppSenderService:
     def enviar_texto(
         telefone: str,
         mensagem: str,
+        *, expected_phone_id=None,
     ):
         access_token = os.getenv(
             "WHATSAPP_ACCESS_TOKEN"
@@ -97,6 +98,9 @@ class WhatsAppSenderService:
             raise ValueError(
                 "Credenciais do WhatsApp não configuradas."
             )
+
+        if expected_phone_id is not None and phone_number_id != expected_phone_id:
+            raise ValueError("WhatsApp emitter changed")
 
         url = (
             "https://graph.facebook.com/v23.0/"
@@ -127,6 +131,15 @@ class WhatsAppSenderService:
         )
 
         if not response.ok:
+            # A structured non-transient 4xx is a proven rejection, not delivery.
+            if 400 <= response.status_code < 500 and response.status_code not in (408, 429):
+                try:
+                    error = response.json().get('error', {})
+                    code = error.get('code')
+                except (ValueError, AttributeError):
+                    code = None
+                if type(code) is int:
+                    raise MetaInvitationRejected(response.status_code, code, None)
             raise RuntimeError(
                 "Erro ao enviar mensagem WhatsApp: "
                 f"{response.status_code}"

@@ -52,7 +52,11 @@ from app.schemas.gad7 import GAD7Jornada
 from app.schemas.sessoes_mentais import SessaoMentalOut
 
 
+from app.schemas.whatsapp_comunicacao import EstadoComunicacao
+
+
 class JornadaMentalDetalhe(JornadaMental):
+    comunicacao_whatsapp: Optional[EstadoComunicacao] = None
     sessoes: list[SessaoMentalOut] = Field(default_factory=list)
     gad7: GAD7Jornada
     cbi: CBIJornada

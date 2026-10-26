@@ -108,7 +108,7 @@ class WhatsAppPostgresTests(unittest.TestCase):
         with patch('app.services.whatsapp_sender_service.WhatsAppSenderService.enviar_texto',return_value=result) as sender:
             deliver_reply(self.db,'transport-receipt','5565999990002')
             deliver_reply(self.db,'transport-receipt','5565999990002')
-            sender.assert_called_once_with('5565999990002',response)
+            sender.assert_called_once_with('5565999990002',response,expected_phone_id='12345')
         with Session(self.engine) as independent:
             evidence=independent.query(WhatsAppMensagemRoteavel).one()
             self.assertEqual(evidence.conversa_legada_id,conversation.id)
@@ -214,7 +214,7 @@ class WhatsAppPostgresTests(unittest.TestCase):
         original=receipt.legado_estado_sha256
         self.assertEqual(original,legacy_state(c))
         ref='wamid.race-'+uuid.uuid4().hex
-        def sent(*args):
+        def sent(*args, **kwargs):
             with self.engine.begin() as connection:
                 connection.execute(text("UPDATE whatsapp_conversas SET etapa_atual='CARDIO_0' WHERE id=:i"),{'i':c.id})
             return {'messages':[{'id':ref}],'contacts':[{'input':c.telefone,'wa_id':c.telefone}]}
@@ -400,7 +400,7 @@ class WhatsAppPostgresTests(unittest.TestCase):
         self.assertEqual(sorted(results),['duplicate','ok'])
         self.assertEqual(self.db.query(RegistroLongitudinal).count(),1)
 
-    def test_delivery_retry_does_not_repeat_processing_or_successful_send(self):
+    def test_delivery_uncertainty_does_not_repeat_processing_or_send(self):
         from app.services.whatsapp_ingress import deliver_reply
         process_message(self.db,'delivery','12345','5565999990002','oi')
         with patch('app.services.whatsapp_sender_service.WhatsAppSenderService.enviar_texto',side_effect=RuntimeError('synthetic')):
@@ -409,7 +409,7 @@ class WhatsAppPostgresTests(unittest.TestCase):
         with patch('app.services.whatsapp_sender_service.WhatsAppSenderService.enviar_texto') as sender:
             deliver_reply(self.db,'delivery','5565999990002')
             deliver_reply(self.db,'delivery','5565999990002')
-            self.assertEqual(sender.call_count,1)
+            self.assertEqual(sender.call_count,0)
         self.assertEqual(self.db.query(WhatsAppConversa).one().etapa_atual,'SELECIONAR_DATA')
 
     def test_additive_migration_upgrade_downgrade(self):

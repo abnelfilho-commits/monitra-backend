@@ -52,6 +52,10 @@ def deliver(db, identity, context, explicit_retry=False):
                 os.getenv('WHATSAPP_MENTAL_TEMPLATE_LANGUAGE', ''))
     if not all(v.strip() for v in required):
         raise ValueError('Invitation configuration unavailable')
+    from app.services.whatsapp_comunicacao import coordinate, require_output
+    initial = db.get(Conversation, identity)
+    if initial is None: raise ValueError('Conversation unavailable')
+    coordinate(db, emitter, initial.telefone)
     a, conversation, c, patient, person, now = lock_execution_scope(db, identity)
     service.authorized(db, **context)
     if (context['context'] != conversation.contexto_assistencial_id
@@ -67,6 +71,7 @@ def deliver(db, identity, context, explicit_retry=False):
         return False
     manual = db.scalar(select(Manual).where(Manual.conversa_id == identity))
     authorization = require_prior_authorization(db, a)
+    require_output(db, emitter, conversation.telefone, conversation_id=identity, invitation=True)
     if manual is not None:
         if (manual.usuario_id != context['actor'] or manual.instituicao_id != context['institution']
                 or manual.acompanhamento_id != a.id or manual.tentativa_id is not None
@@ -92,6 +97,10 @@ def deliver(db, identity, context, explicit_retry=False):
     db.commit()  # PREPARADO must survive process failure.
 
     # Reacquire canonical locks and eligibility after the preparation commit.
+    from app.services.whatsapp_comunicacao import coordinate, require_output
+    initial = db.get(Conversation, identity)
+    if initial is None: raise ValueError('Conversation unavailable')
+    coordinate(db, emitter, initial.telefone)
     a, conversation, c, patient, person, now = lock_execution_scope(db, identity)
     service.authorized(db, **context)
     attempt = db.scalar(select(Envio).where(Envio.id == attempt_id).with_for_update())
@@ -101,6 +110,7 @@ def deliver(db, identity, context, explicit_retry=False):
         db.rollback()
         return False
     authorization = require_prior_authorization(db, a)
+    require_output(db, emitter, conversation.telefone, conversation_id=identity, invitation=True)
     if authorization.id != attempt.autorizacao_comunicacao_id:
         db.rollback()
         return False

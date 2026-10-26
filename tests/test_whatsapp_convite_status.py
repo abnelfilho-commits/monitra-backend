@@ -110,7 +110,7 @@ class StatusTests(unittest.TestCase):
         payload=self.payload([self.status('sent')],messages=[message])
         payload['entry'].extend(self.payload([self.status('delivered')])['entry'])
         body=http.encoded(payload)
-        with patch.object(WhatsAppSenderService,'enviar_texto',return_value={}) as reply, patch.object(WhatsAppSenderService,'enviar_template') as invite:
+        with patch.object(WhatsAppSenderService,'enviar_texto',return_value={'messages':[{'id':'wamid.synthetic-reply'}]}) as reply, patch.object(WhatsAppSenderService,'enviar_template') as invite:
             for _ in range(2):
                 r=self.client.post('/whatsapp/webhook',content=body,headers={'X-Hub-Signature-256':http.signature(body)})
                 self.assertEqual(r.status_code,200,r.text)

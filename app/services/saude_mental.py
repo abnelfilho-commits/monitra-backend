@@ -106,5 +106,7 @@ class SaudeMentalService:
                     diagnoses=diagnoses.itens, interventions=interventions.itens)
             from app.services.sessoes_mentais import SessoesMentaisService
             sessions = SessoesMentaisService().journey(db, dict(actor=actor_id,institution=institution,person=person,context=context)) if row["line_active"] is True else []
-            return JornadaMentalDetalhe(sessoes=sessions, **self._result(row).model_dump(),bem_estar=wellbeing, diagnosticos=diagnoses, intervencoes=interventions, phq9=phq9, gad7=gad7, cbi=cbi,
+            from app.services.whatsapp_comunicacao import read as communication_read
+            communication = communication_read(db, dict(actor=actor_id,institution=institution,person=person,context=context))
+            return JornadaMentalDetalhe(comunicacao_whatsapp=communication,sessoes=sessions, **self._result(row).model_dump(),bem_estar=wellbeing, diagnosticos=diagnoses, intervencoes=interventions, phq9=phq9, gad7=gad7, cbi=cbi,
                                         clinical_reading=reading)

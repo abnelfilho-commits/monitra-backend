@@ -69,8 +69,8 @@ def authenticated_events(body, signature):
 def process_message(db, identity, recipient, sender, content, context_wamid=None):
     """PostgreSQL owns dedup and sender serialization; no intermediate commits.
 
-    Reply is retained for outbound retry, without logging clinical contents.
-    Delivery may be repeated after an uncertain transport failure; clinical writes
+    Reply is retained without logging clinical contents.
+    Durable executions block retries after uncertain transport failure; clinical writes
     and conversation transitions are processed only once per message identity.
     """
     try:
@@ -119,27 +119,5 @@ def process_message(db, identity, recipient, sender, content, context_wamid=None
 
 
 def deliver_reply(db, identity, sender):
-    """Serialize outbound retries after clinical commit, without repeating writes.
-
-    A network timeout after Meta accepted a reply still has uncertain delivery;
-    no exactly-once network delivery is claimed without a remote idempotency API.
-    """
-    from datetime import datetime
-    from app.services.whatsapp_sender_service import WhatsAppSenderService
-    try:
-        receipt = db.query(WhatsAppMensagem).filter_by(message_id=identity).with_for_update().one()
-        if receipt.enviado_em is None:
-            result = WhatsAppSenderService.enviar_texto(sender, receipt.resposta)
-            # Mark accepted text delivery before optional evidence persistence. A
-            # capture failure must not cause an additional text send on replay.
-            receipt.enviado_em = datetime.utcnow()
-            db.commit()
-            if receipt.conversa_contextual_id is not None or receipt.conversa_legada_id is not None:
-                from app.services.whatsapp_transporte import capture
-                capture(db, result, emitter=receipt.phone_number_id, requested=sender,
-                        contextual=receipt.conversa_contextual_id, legacy=receipt.conversa_legada_id,
-                        origin='META_RESPOSTA', legacy_snapshot=receipt.legado_estado_sha256)
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
+    from app.services.whatsapp_resposta import deliver
+    return deliver(db, identity, sender)
