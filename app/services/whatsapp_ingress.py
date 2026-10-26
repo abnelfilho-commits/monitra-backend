@@ -75,9 +75,13 @@ def process_message(db, identity, recipient, sender, content, context_wamid=None
     """
     try:
         # Serializes even the first conversation; transaction-scoped, no session lock.
-        key = int.from_bytes(hashlib.sha256(normalizar_telefone(sender).encode()).digest()[:8],
-                             'big', signed=True)
-        db.execute(text('SELECT pg_advisory_xact_lock(:key)'), {'key': key})
+        if context_wamid is not None:
+            from app.services.whatsapp_referencia import lock_reference
+            lock_reference(db, recipient, sender, context_wamid)
+        else:
+            key = int.from_bytes(hashlib.sha256(normalizar_telefone(sender).encode()).digest()[:8],
+                                 'big', signed=True)
+            db.execute(text('SELECT pg_advisory_xact_lock(:key)'), {'key': key})
         fingerprint = hashlib.sha256(json.dumps([recipient, sender, content], ensure_ascii=False).encode()).hexdigest()
         # v1 receipts remain replayable using their original fingerprint contract.
         legacy_fingerprint = fingerprint
@@ -95,7 +99,17 @@ def process_message(db, identity, recipient, sender, content, context_wamid=None
             observation = {}
             def legacy(session, phone, message):
                 return processar_mensagem(session, phone, message, observation=observation)
-            response = dispatch(db, sender, content, legacy, message_id=identity, observation=observation)
+            if context_wamid is not None:
+                from app.services.whatsapp_referencia import resolve
+                response = resolve(db, recipient, sender, context_wamid, content,
+                                   message_id=identity, observation=observation)
+            else:
+                response = dispatch(db, sender, content, legacy, message_id=identity, observation=observation)
+            if observation.get('conversa_legada_id') is not None:
+                from app.models.whatsapp_conversa import WhatsAppConversa
+                from app.services.whatsapp_transporte import legacy_state
+                db.flush()
+                observation['legado_estado_sha256'] = legacy_state(db.get(WhatsAppConversa, observation['conversa_legada_id']))
             db.query(WhatsAppMensagem).filter_by(message_id=identity).update(dict(observation, resposta=response))
         db.commit()
         return response
@@ -124,7 +138,7 @@ def deliver_reply(db, identity, sender):
                 from app.services.whatsapp_transporte import capture
                 capture(db, result, emitter=receipt.phone_number_id, requested=sender,
                         contextual=receipt.conversa_contextual_id, legacy=receipt.conversa_legada_id,
-                        origin='META_RESPOSTA')
+                        origin='META_RESPOSTA', legacy_snapshot=receipt.legado_estado_sha256)
         db.commit()
     except Exception:
         db.rollback()

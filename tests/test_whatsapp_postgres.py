@@ -96,13 +96,13 @@ class WhatsAppPostgresTests(unittest.TestCase):
     def test_transport_receipt_and_reply_preserve_legacy_route(self):
         from app.services.whatsapp_ingress import deliver_reply
         from app.models.whatsapp_transporte import WhatsAppMensagemRoteavel
-        response=process_message(self.db,'transport-receipt','12345','5565999990002','oi','wamid.unresolved')
+        response=process_message(self.db,'transport-receipt','12345','5565999990002','oi')
         receipt=self.db.get(WhatsAppMensagem,'transport-receipt')
         conversation=self.db.query(WhatsAppConversa).one()
         self.assertEqual(receipt.resolucao,'LEGADO_ATUAL')
         self.assertEqual(receipt.conversa_legada_id,conversation.id)
         self.assertIsNone(receipt.conversa_contextual_id)
-        self.assertEqual(receipt.context_wamid,'wamid.unresolved')
+        self.assertIsNone(receipt.context_wamid)
         self.assertEqual(conversation.etapa_atual,'SELECIONAR_DATA')
         result={'messages':[{'id':'wamid.synthetic-legacy'}], 'contacts':[{'input':'5565999990002','wa_id':'556599990002'}]}
         with patch('app.services.whatsapp_sender_service.WhatsAppSenderService.enviar_texto',return_value=result) as sender:
@@ -113,6 +113,123 @@ class WhatsAppPostgresTests(unittest.TestCase):
             evidence=independent.query(WhatsAppMensagemRoteavel).one()
             self.assertEqual(evidence.conversa_legada_id,conversation.id)
             self.assertEqual(evidence.evidencia_estado,'VALIDA')
+
+    def reference_legacy(self, patient=2):
+        from app.services.whatsapp_transporte import capture
+        process_message(self.db,'start-ref-'+str(patient),'12345','556599999000'+str(patient),'oi')
+        c=self.db.query(WhatsAppConversa).filter_by(responsavel_id=patient).one()
+        ref='wamid.legacy-'+uuid.uuid4().hex
+        capture(self.db,{'messages':[{'id':ref}], 'contacts':[{'input':c.telefone,'wa_id':'556500000000'}]},
+                emitter='12345',requested=c.telefone,legacy=c.id,origin='META_RESPOSTA')
+        self.db.commit()
+        return c,ref
+
+    def test_explicit_reference_cardio(self):
+        c,ref=self.reference_legacy()
+        response=process_message(self.db,'explicit-cardio','12345','556500000000','1',ref)
+        self.assertNotIn('Não foi possível',response)
+        self.assertEqual(c.etapa_atual,'CARDIO_0')
+        r=self.db.get(WhatsAppMensagem,'explicit-cardio')
+        self.assertEqual((r.resolucao,r.conversa_legada_id),('REFERENCIA_LEGADA',c.id))
+        self.assertEqual(process_message(self.db,'explicit-cardio','12345','556500000000','1',ref),response)
+
+    def test_explicit_reference_neuro(self):
+        c,ref=self.reference_legacy(1)
+        process_message(self.db,'explicit-neuro','12345','556500000000','1',ref)
+        self.assertEqual(c.etapa_atual,'SONO')
+
+    def test_explicit_reference_does_not_select_other_legacy_conversation(self):
+        c,ref=self.reference_legacy()
+        from app.services.whatsapp_conversation_service import criar_conversa
+        other=criar_conversa(self.db,c.responsavel_id,c.telefone);self.db.commit()
+        process_message(self.db,'explicit-exact','12345','556500000000','1',ref)
+        self.assertEqual(c.etapa_atual,'CARDIO_0')
+        self.assertEqual(other.etapa_atual,'INICIO')
+
+    def test_explicit_reference_denies_cross_clinic(self):
+        c,ref=self.reference_legacy()
+        self.db.add(Clinica(id=2,nome='Other synthetic'))
+        self.db.flush();self.db.get(Paciente,c.paciente_id).clinica_id=2;self.db.commit()
+        from app.services.whatsapp_referencia import UNAVAILABLE
+        self.assertEqual(process_message(self.db,'cross-clinic','12345','556500000000','1',ref),UNAVAILABLE)
+        self.assertEqual(c.etapa_atual,'SELECIONAR_DATA')
+
+    def test_explicit_reference_denies_inactive_link(self):
+        c,ref=self.reference_legacy()
+        self.db.query(ResponsavelPaciente).filter_by(responsavel_id=2,paciente_id=2).one().ativo=False;self.db.commit()
+        from app.services.whatsapp_referencia import UNAVAILABLE
+        self.assertEqual(process_message(self.db,'inactive-link','12345','556500000000','1',ref),UNAVAILABLE)
+
+    def test_explicit_reference_denies_unbound_legacy(self):
+        c,ref=self.reference_legacy()
+        c.paciente_id=None;self.db.commit()
+        from app.services.whatsapp_referencia import UNAVAILABLE
+        self.assertEqual(process_message(self.db,'unbound','12345','556500000000','1',ref),UNAVAILABLE)
+        self.assertEqual(self.db.get(WhatsAppMensagem,'unbound').resolucao_motivo,'SEM_VINCULO_ASSISTENCIAL')
+
+    def test_explicit_reference_denies_reused_episode(self):
+        c,ref=self.reference_legacy()
+        c.etapa_atual='INICIO';self.db.commit()
+        from app.services.whatsapp_referencia import UNAVAILABLE
+        self.assertEqual(process_message(self.db,'old-episode','12345','556500000000','1',ref),UNAVAILABLE)
+        self.assertEqual(c.etapa_atual,'INICIO')
+
+    def test_explicit_reference_denies_obsolete_date(self):
+        from datetime import timedelta
+        from app.models.whatsapp_transporte import WhatsAppMensagemRoteavel
+        c,ref=self.reference_legacy()
+        c.data_referencia=date.today()-timedelta(days=3);self.db.commit()
+        # The evidence can be fresh but the clinical date cannot be submitted.
+        from app.services.whatsapp_transporte import legacy_state
+        evidence=self.db.query(WhatsAppMensagemRoteavel).filter_by(wamid=ref).one()
+        evidence.legado_estado_sha256=legacy_state(c);self.db.commit()
+        from app.services.whatsapp_referencia import UNAVAILABLE
+        self.assertEqual(process_message(self.db,'obsolete-date','12345','556500000000','1',ref),UNAVAILABLE)
+        self.assertEqual(self.db.get(WhatsAppMensagem,'obsolete-date').resolucao_motivo,'CONVERSA_INDISPONIVEL')
+
+    def test_explicit_reference_denies_stage_one_legacy_without_snapshot(self):
+        from app.models.whatsapp_transporte import WhatsAppMensagemRoteavel
+        c,ref=self.reference_legacy()
+        self.db.query(WhatsAppMensagemRoteavel).filter_by(wamid=ref).one().legado_estado_sha256=None;self.db.commit()
+        from app.services.whatsapp_referencia import UNAVAILABLE
+        self.assertEqual(process_message(self.db,'legacy-insufficient','12345','556500000000','1',ref),UNAVAILABLE)
+        self.assertEqual(self.db.get(WhatsAppMensagem,'legacy-insufficient').resolucao_motivo,'EVIDENCIA_LEGADA_INSUFICIENTE')
+
+    def test_explicit_reference_denies_changed_patient_with_unchanged_timestamp(self):
+        c,ref=self.reference_legacy()
+        self.db.add(ResponsavelPaciente(responsavel_id=2,paciente_id=3,ativo=True));self.db.commit()
+        self.db.execute(text('UPDATE whatsapp_conversas SET paciente_id=3 WHERE id=:i'),{'i':c.id});self.db.commit();self.db.expire_all()
+        from app.services.whatsapp_referencia import UNAVAILABLE
+        self.assertEqual(process_message(self.db,'legacy-patient-changed','12345','556500000000','1',ref),UNAVAILABLE)
+        self.assertEqual(self.db.get(WhatsAppMensagem,'legacy-patient-changed').resolucao_motivo,'REFERENCIA_DESATUALIZADA')
+
+    def test_reply_evidence_keeps_receipt_state_across_concurrent_transition(self):
+        from app.services.whatsapp_ingress import deliver_reply
+        from app.models.whatsapp_transporte import WhatsAppMensagemRoteavel
+        from app.services.whatsapp_transporte import legacy_state
+        from app.services.whatsapp_referencia import UNAVAILABLE
+        process_message(self.db,'race-start','12345','5565999990002','oi')
+        c=self.db.query(WhatsAppConversa).one()
+        receipt=self.db.get(WhatsAppMensagem,'race-start')
+        original=receipt.legado_estado_sha256
+        self.assertEqual(original,legacy_state(c))
+        ref='wamid.race-'+uuid.uuid4().hex
+        def sent(*args):
+            with self.engine.begin() as connection:
+                connection.execute(text("UPDATE whatsapp_conversas SET etapa_atual='CARDIO_0' WHERE id=:i"),{'i':c.id})
+            return {'messages':[{'id':ref}],'contacts':[{'input':c.telefone,'wa_id':c.telefone}]}
+        with patch('app.services.whatsapp_sender_service.WhatsAppSenderService.enviar_texto',side_effect=sent):
+            deliver_reply(self.db,'race-start',c.telefone)
+        row=self.db.query(WhatsAppMensagemRoteavel).filter_by(wamid=ref).one()
+        self.assertEqual(row.legado_estado_sha256,original)
+        self.assertEqual(process_message(self.db,'race-reference','12345',c.telefone,'180',ref),UNAVAILABLE)
+        self.assertEqual(self.db.get(WhatsAppMensagem,'race-reference').resolucao_motivo,'REFERENCIA_DESATUALIZADA')
+
+    def test_explicit_reference_unknown_never_reaches_legacy(self):
+        from app.services.whatsapp_referencia import UNAVAILABLE
+        with patch('app.services.whatsapp_ingress.processar_mensagem',side_effect=AssertionError('fallback')):
+            self.assertEqual(process_message(self.db,'unknown-ref','12345','5565999990002','oi','wamid.unknown'),UNAVAILABLE)
+        self.assertEqual(self.db.query(WhatsAppConversa).count(),0)
 
     def test_cardio_signed_journey_and_canonical_text(self):
         self.cardio()

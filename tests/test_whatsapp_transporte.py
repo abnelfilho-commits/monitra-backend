@@ -119,13 +119,13 @@ class TransportPostgresTests(unittest.TestCase):
             with self.assertRaises(IntegrityError): self.evidence(**change)
             self.db.rollback()
 
-    def test_receipt_context_observed_not_used_and_replay(self):
+    def test_receipt_without_context_and_replay(self):
         phone=self.db.execute(text('select telefone from whatsapp_conversas_contextuais where id=:i'),{'i':self.cid}).scalar_one()
         mid='receipt-'+uuid4().hex
-        response=process_message(self.db,mid,'12345',phone,'SIM','wamid.unknown')
+        response=process_message(self.db,mid,'12345',phone,'SIM')
         row=self.db.get(Receipt,mid)
-        self.assertEqual((row.context_wamid,row.fingerprint_versao,row.resolucao,row.conversa_contextual_id),('wamid.unknown',2,'CONTEXTUAL_ATUAL',self.cid))
-        self.assertEqual(process_message(self.db,mid,'12345',phone,'SIM','wamid.unknown'),response)
+        self.assertEqual((row.context_wamid,row.fingerprint_versao,row.resolucao,row.conversa_contextual_id),(None,2,'CONTEXTUAL_ATUAL',self.cid))
+        self.assertEqual(process_message(self.db,mid,'12345',phone,'SIM'),response)
         from fastapi import HTTPException
         with self.assertRaises(HTTPException):process_message(self.db,mid,'12345',phone,'SIM','wamid.changed')
         self.assertEqual(self.db.execute(text('select status from whatsapp_conversas_contextuais where id=:i'),{'i':self.cid}).scalar_one(),'EM_ANDAMENTO')

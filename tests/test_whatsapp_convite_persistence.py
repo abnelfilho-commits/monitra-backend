@@ -24,7 +24,7 @@ from test_m0_baseline import config
 from app.models.whatsapp_convite import WhatsAppConviteEnvio as Envio, WhatsAppConviteStatusEvento as Evento
 from app.models.whatsapp_contextual import AcompanhamentoWhatsApp as Follow, WhatsAppConversaContextual as Conversation
 
-HEAD = 'e14b1_transporte'
+HEAD = 'e14b2_referencia'
 NEW = {'whatsapp_mensagens_roteaveis', 'whatsapp_autorizacoes_comunicacao', 'whatsapp_solicitacoes_manuais', 'whatsapp_convite_envios', 'whatsapp_convite_status_eventos'}
 
 
@@ -64,7 +64,7 @@ class PersistenceTests(unittest.TestCase):
         with self.engine.connect() as c:
             names = set(inspect(c).get_table_names()) - NEW - {'alembic_version'}
             result = {}
-            added = {'fingerprint_versao','context_wamid','resolucao','conversa_contextual_id','conversa_legada_id'}
+            added = {'legado_estado_sha256','resolucao_motivo','fingerprint_versao','context_wamid','resolucao','conversa_contextual_id','conversa_legada_id'}
             for name in names:
                 columns = [x for x in inspect(c).get_columns(name) if name != 'whatsapp_mensagens' or x['name'] not in added]
                 projection = ','.join('"'+x['name']+'"' for x in columns)

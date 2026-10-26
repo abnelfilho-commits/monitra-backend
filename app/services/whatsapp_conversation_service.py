@@ -306,9 +306,9 @@ def iniciar_datas(
         f"2 - Agora não"
     )
 
-def processar_mensagem(db, telefone, mensagem, *, observation=None):
+def processar_mensagem(db, telefone, mensagem, *, observation=None, selected=None):
     try:
-        return _processar_mensagem(db, telefone, mensagem, observation=observation)
+        return _processar_mensagem(db, telefone, mensagem, observation=observation, selected=selected)
     except ValueError:
         return 'Não foi possível validar este acompanhamento. Procure a equipe responsável.'
 
@@ -317,7 +317,7 @@ def _processar_mensagem(
     db: Session,
     telefone: str,
     mensagem: str,
-    *, observation=None,
+    *, observation=None, selected=None,
 ):
     """
     Motor conversacional inicial do WhatsApp.
@@ -343,10 +343,8 @@ def _processar_mensagem(
     # 1. IDENTIFICAR RESPONSÁVEL
     # -------------------------------------------------
 
-    responsavel = buscar_responsavel_por_telefone(
-        db,
-        telefone_normalizado,
-    )
+    responsavel = (db.get(Responsavel, selected.responsavel_id) if selected is not None
+                   else buscar_responsavel_por_telefone(db, telefone_normalizado))
 
     if not responsavel:
         return (
@@ -379,11 +377,8 @@ def _processar_mensagem(
     # 3. BUSCAR OU CRIAR CONVERSA
     # -------------------------------------------------
 
-    conversa = buscar_conversa_ativa(
-        db,
-        responsavel.id,
-        telefone_normalizado,
-    )
+    conversa = (selected if selected is not None else
+                buscar_conversa_ativa(db, responsavel.id, telefone_normalizado))
 
     if not conversa:
         conversa = criar_conversa(

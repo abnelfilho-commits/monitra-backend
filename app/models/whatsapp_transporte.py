@@ -12,6 +12,7 @@ class WhatsAppMensagemRoteavel(Base):
     evidencia_estado = Column(String(16), nullable=False)
     conversa_contextual_id = Column(Integer, ForeignKey('whatsapp_conversas_contextuais.id', ondelete='RESTRICT'))
     conversa_legada_id = Column(Integer, ForeignKey('whatsapp_conversas.id', ondelete='RESTRICT'))
+    legado_estado_sha256 = Column(String(64))
     origem = Column(String(32), nullable=False)
     observado_em = Column(DateTime(timezone=True), nullable=False, server_default=func.clock_timestamp())
     __table_args__ = (

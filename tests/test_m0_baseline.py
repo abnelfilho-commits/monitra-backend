@@ -36,7 +36,7 @@ class ModelContractTests(unittest.TestCase):
                 continue  # Explicit transitional model; never bootstrap it.
             physical = {c["column_name"]: c for c in CONTRACT["tables"][name]["columns"]}
             for col in table.c:
-                if name == "whatsapp_mensagens" and col.name in {"fingerprint_versao", "context_wamid", "resolucao", "conversa_contextual_id", "conversa_legada_id"}:
+                if name == "whatsapp_mensagens" and col.name in {"legado_estado_sha256", "resolucao_motivo", "fingerprint_versao", "context_wamid", "resolucao", "conversa_contextual_id", "conversa_legada_id"}:
                     continue  # E14B additive migration, covered on PostgreSQL.
                 if name == "intervencoes" and col.name == "registrador_profissional_id":
                     continue
@@ -74,7 +74,7 @@ class ModelContractTests(unittest.TestCase):
         self.assertNotIn("planejamento_atividades", CONTRACT["tables"])
 
     def test_separate_single_heads(self):
-        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["e14b1_transporte"])
+        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["e14b2_referencia"])
         historical = Config(str(ROOT / "alembic.ini"))
         historical.set_main_option("script_location", str(ROOT / "alembic"))
         self.assertEqual(ScriptDirectory.from_config(historical).get_heads(), ["8c01a0d1a004"])
@@ -165,7 +165,7 @@ class BaselinePostgresTests(unittest.TestCase):
                     self.assertEqual(actual_indexes, expected_indexes)
                     physical = {c["column_name"]: c for c in CONTRACT["tables"][name]["columns"]}
                     for column in table.c:
-                        if name == "whatsapp_mensagens" and column.name in {"fingerprint_versao", "context_wamid", "resolucao", "conversa_contextual_id", "conversa_legada_id"}:
+                        if name == "whatsapp_mensagens" and column.name in {"legado_estado_sha256", "resolucao_motivo", "fingerprint_versao", "context_wamid", "resolucao", "conversa_contextual_id", "conversa_legada_id"}:
                             continue  # E14B additive columns verified separately.
                         if name == "intervencoes" and column.name == "registrador_profissional_id":
                             continue
