@@ -55,3 +55,5 @@ from app.models.whatsapp_manual import WhatsAppSolicitacaoManual
 
 from app.models.whatsapp_autorizacao import WhatsAppAutorizacaoComunicacao
 from app.models.whatsapp_transporte import WhatsAppMensagemRoteavel
+
+from .whatsapp_resolucao import WhatsAppResolucao

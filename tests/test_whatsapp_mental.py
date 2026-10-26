@@ -275,11 +275,11 @@ class MentalWhatsAppTests(unittest.TestCase):
                 self.assertTrue(indexes[name]['unique'])
                 self.assertIn('AGUARDANDO_ACEITE',str(indexes[name]['dialect_options']))
             revision = c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar_one()
-            if revision in ('d92a_whatsapp_persistencia', 'd92e12_whatsapp_manual', 'd92e12c_autorizacao_whatsapp', 'e14b1_transporte', 'e14b2_referencia'):
+            if revision in ('d92a_whatsapp_persistencia', 'd92e12_whatsapp_manual', 'd92e12c_autorizacao_whatsapp', 'e14b1_transporte', 'e14b2_referencia', 'e14b3a_multilinhas'):
                 # The new additive evidence migration deliberately forbids destructive rollback.
                 # Keep the historical roundtrip below for fixtures pinned to the W3 revision.
                 before = set(inspect(c).get_table_names())
-                with self.assertRaisesRegex(RuntimeError, 'delivery evidence must be preserved|Manual request evidence requires separately approved removal|Channel authorization evidence requires separately approved removal|Transport evidence removal requires an approved recovery procedure'):
+                with self.assertRaisesRegex(RuntimeError, 'delivery evidence must be preserved|Manual request evidence requires separately approved removal|Channel authorization evidence requires separately approved removal|Transport evidence removal requires an approved recovery procedure|Routing evidence removal requires an approved recovery procedure'):
                     command.downgrade(config(c), 'w3_atendimento_mental_v1')
                 self.assertEqual(set(inspect(c).get_table_names()), before)
                 self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar_one(), revision)

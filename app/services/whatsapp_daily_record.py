@@ -16,10 +16,18 @@ RESPONSIBLE_ORIGINS = ('RESPONSAVEL', 'RESPONSAVEL_APP', 'RESPONSAVEL_WHATSAPP')
 
 def authorized_lines(db, responsible_id, patient_id):
     lock_context(db, patient_id, responsible_id)
+    return eligible_lines(db, responsible_id, patient_id, lock_link=True)
+
+
+def eligible_lines(db, responsible_id, patient_id, *, lock_link=False):
+    """Read-only eligibility; canonical writer retains its existing locks."""
     responsible = db.query(Responsavel).filter_by(id=responsible_id, ativo=True).populate_existing().first()
     patient = db.query(Paciente).filter_by(id=patient_id, ativo=True).populate_existing().first()
-    link = db.query(ResponsavelPaciente).filter_by(responsavel_id=responsible_id,
-        paciente_id=patient_id, ativo=True).populate_existing().with_for_update(key_share=True).first()
+    query = db.query(ResponsavelPaciente).filter_by(responsavel_id=responsible_id,
+        paciente_id=patient_id, ativo=True).populate_existing()
+    if lock_link:
+        query = query.with_for_update(key_share=True)
+    link = query.first()
     if responsible is None or patient is None or link is None:
         raise ValueError('Vínculo assistencial indisponível.')
     if responsible.clinica_id is not None and responsible.clinica_id != patient.clinica_id:

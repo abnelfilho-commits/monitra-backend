@@ -32,7 +32,7 @@ class ModelContractTests(unittest.TestCase):
         from app.database import Base
         configure_mappers()
         for name, table in Base.metadata.tables.items():
-            if name in {"whatsapp_mensagens_roteaveis", "whatsapp_autorizacoes_comunicacao", "whatsapp_solicitacoes_manuais", "whatsapp_convite_envios", "whatsapp_convite_status_eventos", "acompanhamentos_whatsapp", "whatsapp_conversas_contextuais", "atividade_modulos", "registro_proveniencias", "contexto_profissionais", "concessoes_assistenciais", "autoridades_delegacao", "contextos_assistenciais", "contexto_assistencial_linhas", "servicos_economicos", "tabelas_preco", "tabela_preco_versoes", "precos_servico", "contratos_financeiros", "paciente_contratos", "mapeamentos_agenda_servico", "capacidade_instalada", "usuario_instituicao_acessos", "institucional_operacoes", "identidade_operacoes", "pessoas", "instituicoes", "instituicao_papeis", "paciente_instituicoes", "profissional_instituicoes", "paciente_profissionais"}:
+            if name in {"whatsapp_resolucoes", "whatsapp_mensagens_roteaveis", "whatsapp_autorizacoes_comunicacao", "whatsapp_solicitacoes_manuais", "whatsapp_convite_envios", "whatsapp_convite_status_eventos", "acompanhamentos_whatsapp", "whatsapp_conversas_contextuais", "atividade_modulos", "registro_proveniencias", "contexto_profissionais", "concessoes_assistenciais", "autoridades_delegacao", "contextos_assistenciais", "contexto_assistencial_linhas", "servicos_economicos", "tabelas_preco", "tabela_preco_versoes", "precos_servico", "contratos_financeiros", "paciente_contratos", "mapeamentos_agenda_servico", "capacidade_instalada", "usuario_instituicao_acessos", "institucional_operacoes", "identidade_operacoes", "pessoas", "instituicoes", "instituicao_papeis", "paciente_instituicoes", "profissional_instituicoes", "paciente_profissionais"}:
                 continue  # Explicit transitional model; never bootstrap it.
             physical = {c["column_name"]: c for c in CONTRACT["tables"][name]["columns"]}
             for col in table.c:
@@ -74,7 +74,7 @@ class ModelContractTests(unittest.TestCase):
         self.assertNotIn("planejamento_atividades", CONTRACT["tables"])
 
     def test_separate_single_heads(self):
-        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["e14b2_referencia"])
+        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["e14b3a_multilinhas"])
         historical = Config(str(ROOT / "alembic.ini"))
         historical.set_main_option("script_location", str(ROOT / "alembic"))
         self.assertEqual(ScriptDirectory.from_config(historical).get_heads(), ["8c01a0d1a004"])
@@ -151,7 +151,7 @@ class BaselinePostgresTests(unittest.TestCase):
         with self.engine.connect() as conn:
             inspector = inspect(conn)
             for name, table in Base.metadata.tables.items():
-                if name in {"whatsapp_mensagens_roteaveis", "whatsapp_autorizacoes_comunicacao", "whatsapp_solicitacoes_manuais", "whatsapp_convite_envios", "whatsapp_convite_status_eventos", "acompanhamentos_whatsapp", "whatsapp_conversas_contextuais", "atividade_modulos", "registro_proveniencias", "contexto_profissionais", "concessoes_assistenciais", "autoridades_delegacao", "contextos_assistenciais", "contexto_assistencial_linhas", "servicos_economicos", "tabelas_preco", "tabela_preco_versoes", "precos_servico", "contratos_financeiros", "paciente_contratos", "mapeamentos_agenda_servico", "capacidade_instalada", "usuario_instituicao_acessos", "institucional_operacoes", "identidade_operacoes", "pessoas", "instituicoes", "instituicao_papeis", "paciente_instituicoes", "profissional_instituicoes", "paciente_profissionais"}:
+                if name in {"whatsapp_resolucoes", "whatsapp_mensagens_roteaveis", "whatsapp_autorizacoes_comunicacao", "whatsapp_solicitacoes_manuais", "whatsapp_convite_envios", "whatsapp_convite_status_eventos", "acompanhamentos_whatsapp", "whatsapp_conversas_contextuais", "atividade_modulos", "registro_proveniencias", "contexto_profissionais", "concessoes_assistenciais", "autoridades_delegacao", "contextos_assistenciais", "contexto_assistencial_linhas", "servicos_economicos", "tabelas_preco", "tabela_preco_versoes", "precos_servico", "contratos_financeiros", "paciente_contratos", "mapeamentos_agenda_servico", "capacidade_instalada", "usuario_instituicao_acessos", "institucional_operacoes", "identidade_operacoes", "pessoas", "instituicoes", "instituicao_papeis", "paciente_instituicoes", "profissional_instituicoes", "paciente_profissionais"}:
                     continue
                 with self.subTest(table=name):
                     actual = {(tuple(f["constrained_columns"]), f["referred_table"], tuple(f["referred_columns"]), f["options"].get("ondelete", "NO ACTION")) for f in inspector.get_foreign_keys(name)}
