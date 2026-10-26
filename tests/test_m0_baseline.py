@@ -32,10 +32,12 @@ class ModelContractTests(unittest.TestCase):
         from app.database import Base
         configure_mappers()
         for name, table in Base.metadata.tables.items():
-            if name in {"whatsapp_autorizacoes_comunicacao", "whatsapp_solicitacoes_manuais", "whatsapp_convite_envios", "whatsapp_convite_status_eventos", "acompanhamentos_whatsapp", "whatsapp_conversas_contextuais", "atividade_modulos", "registro_proveniencias", "contexto_profissionais", "concessoes_assistenciais", "autoridades_delegacao", "contextos_assistenciais", "contexto_assistencial_linhas", "servicos_economicos", "tabelas_preco", "tabela_preco_versoes", "precos_servico", "contratos_financeiros", "paciente_contratos", "mapeamentos_agenda_servico", "capacidade_instalada", "usuario_instituicao_acessos", "institucional_operacoes", "identidade_operacoes", "pessoas", "instituicoes", "instituicao_papeis", "paciente_instituicoes", "profissional_instituicoes", "paciente_profissionais"}:
+            if name in {"whatsapp_mensagens_roteaveis", "whatsapp_autorizacoes_comunicacao", "whatsapp_solicitacoes_manuais", "whatsapp_convite_envios", "whatsapp_convite_status_eventos", "acompanhamentos_whatsapp", "whatsapp_conversas_contextuais", "atividade_modulos", "registro_proveniencias", "contexto_profissionais", "concessoes_assistenciais", "autoridades_delegacao", "contextos_assistenciais", "contexto_assistencial_linhas", "servicos_economicos", "tabelas_preco", "tabela_preco_versoes", "precos_servico", "contratos_financeiros", "paciente_contratos", "mapeamentos_agenda_servico", "capacidade_instalada", "usuario_instituicao_acessos", "institucional_operacoes", "identidade_operacoes", "pessoas", "instituicoes", "instituicao_papeis", "paciente_instituicoes", "profissional_instituicoes", "paciente_profissionais"}:
                 continue  # Explicit transitional model; never bootstrap it.
             physical = {c["column_name"]: c for c in CONTRACT["tables"][name]["columns"]}
             for col in table.c:
+                if name == "whatsapp_mensagens" and col.name in {"fingerprint_versao", "context_wamid", "resolucao", "conversa_contextual_id", "conversa_legada_id"}:
+                    continue  # E14B additive migration, covered on PostgreSQL.
                 if name == "intervencoes" and col.name == "registrador_profissional_id":
                     continue
                 if name == "diagnosticos" and col.name in {"registrador_usuario_id", "registrador_profissional_id"}:
@@ -72,7 +74,7 @@ class ModelContractTests(unittest.TestCase):
         self.assertNotIn("planejamento_atividades", CONTRACT["tables"])
 
     def test_separate_single_heads(self):
-        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["d92e12c_autorizacao_whatsapp"])
+        self.assertEqual(ScriptDirectory.from_config(config()).get_heads(), ["e14b1_transporte"])
         historical = Config(str(ROOT / "alembic.ini"))
         historical.set_main_option("script_location", str(ROOT / "alembic"))
         self.assertEqual(ScriptDirectory.from_config(historical).get_heads(), ["8c01a0d1a004"])
@@ -149,11 +151,11 @@ class BaselinePostgresTests(unittest.TestCase):
         with self.engine.connect() as conn:
             inspector = inspect(conn)
             for name, table in Base.metadata.tables.items():
-                if name in {"whatsapp_autorizacoes_comunicacao", "whatsapp_solicitacoes_manuais", "whatsapp_convite_envios", "whatsapp_convite_status_eventos", "acompanhamentos_whatsapp", "whatsapp_conversas_contextuais", "atividade_modulos", "registro_proveniencias", "contexto_profissionais", "concessoes_assistenciais", "autoridades_delegacao", "contextos_assistenciais", "contexto_assistencial_linhas", "servicos_economicos", "tabelas_preco", "tabela_preco_versoes", "precos_servico", "contratos_financeiros", "paciente_contratos", "mapeamentos_agenda_servico", "capacidade_instalada", "usuario_instituicao_acessos", "institucional_operacoes", "identidade_operacoes", "pessoas", "instituicoes", "instituicao_papeis", "paciente_instituicoes", "profissional_instituicoes", "paciente_profissionais"}:
+                if name in {"whatsapp_mensagens_roteaveis", "whatsapp_autorizacoes_comunicacao", "whatsapp_solicitacoes_manuais", "whatsapp_convite_envios", "whatsapp_convite_status_eventos", "acompanhamentos_whatsapp", "whatsapp_conversas_contextuais", "atividade_modulos", "registro_proveniencias", "contexto_profissionais", "concessoes_assistenciais", "autoridades_delegacao", "contextos_assistenciais", "contexto_assistencial_linhas", "servicos_economicos", "tabelas_preco", "tabela_preco_versoes", "precos_servico", "contratos_financeiros", "paciente_contratos", "mapeamentos_agenda_servico", "capacidade_instalada", "usuario_instituicao_acessos", "institucional_operacoes", "identidade_operacoes", "pessoas", "instituicoes", "instituicao_papeis", "paciente_instituicoes", "profissional_instituicoes", "paciente_profissionais"}:
                     continue
                 with self.subTest(table=name):
                     actual = {(tuple(f["constrained_columns"]), f["referred_table"], tuple(f["referred_columns"]), f["options"].get("ondelete", "NO ACTION")) for f in inspector.get_foreign_keys(name)}
-                    expected = {(tuple(c.name for c in f.columns), f.elements[0].column.table.name, tuple(e.column.name for e in f.elements), f.ondelete or "NO ACTION") for f in table.foreign_key_constraints if not (name == "intervencoes" and "registrador_profissional_id" in {c.name for c in f.columns}) and not (name == "diagnosticos" and {"registrador_usuario_id", "registrador_profissional_id"}.intersection(c.name for c in f.columns)) and f.elements[0].column.table.name not in {"pessoas", "contextos_assistenciais", "contexto_assistencial_linhas"}}
+                    expected = {(tuple(c.name for c in f.columns), f.elements[0].column.table.name, tuple(e.column.name for e in f.elements), f.ondelete or "NO ACTION") for f in table.foreign_key_constraints if not (name == "whatsapp_mensagens" and {"conversa_contextual_id", "conversa_legada_id"}.intersection(c.name for c in f.columns)) and not (name == "intervencoes" and "registrador_profissional_id" in {c.name for c in f.columns}) and not (name == "diagnosticos" and {"registrador_usuario_id", "registrador_profissional_id"}.intersection(c.name for c in f.columns)) and f.elements[0].column.table.name not in {"pessoas", "contextos_assistenciais", "contexto_assistencial_linhas"}}
                     self.assertEqual(actual, expected)
                     actual_unique = {tuple(u["column_names"]) for u in inspector.get_unique_constraints(name)}
                     expected_unique = {tuple(c.name for c in u.columns) for u in table.constraints if isinstance(u, UniqueConstraint) and tuple(c.name for c in u.columns) != ("pessoa_id",)}
@@ -163,6 +165,8 @@ class BaselinePostgresTests(unittest.TestCase):
                     self.assertEqual(actual_indexes, expected_indexes)
                     physical = {c["column_name"]: c for c in CONTRACT["tables"][name]["columns"]}
                     for column in table.c:
+                        if name == "whatsapp_mensagens" and column.name in {"fingerprint_versao", "context_wamid", "resolucao", "conversa_contextual_id", "conversa_legada_id"}:
+                            continue  # E14B additive columns verified separately.
                         if name == "intervencoes" and column.name == "registrador_profissional_id":
                             continue
                         if name == "diagnosticos" and column.name in {"registrador_usuario_id", "registrador_profissional_id"}:

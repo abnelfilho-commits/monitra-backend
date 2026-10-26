@@ -36,7 +36,7 @@ class WhatsAppPostgresTests(unittest.TestCase):
         self.schema='whatsapp_test_'+uuid.uuid4().hex
         self.admin=create_engine(URL)
         with self.admin.begin() as conn: conn.execute(text('CREATE SCHEMA '+self.schema))
-        self.engine=create_engine(URL,connect_args={'options':'-c search_path='+self.schema})
+        self.engine=create_engine(URL,connect_args={'options':'-c search_path='+self.schema+',public'})
         Base.metadata.create_all(self.engine)
         self.db=Session(self.engine)
         self.db.add(Clinica(id=1,nome='Synthetic'));self.db.flush()
@@ -92,6 +92,27 @@ class WhatsAppPostgresTests(unittest.TestCase):
         # new food, observation, confirmation. Existing questionnaire mappings.
         for message in ('1','4','2','1','0','1','1','1','synthetic neuro','1'):
             self.send(message,patient)
+
+    def test_transport_receipt_and_reply_preserve_legacy_route(self):
+        from app.services.whatsapp_ingress import deliver_reply
+        from app.models.whatsapp_transporte import WhatsAppMensagemRoteavel
+        response=process_message(self.db,'transport-receipt','12345','5565999990002','oi','wamid.unresolved')
+        receipt=self.db.get(WhatsAppMensagem,'transport-receipt')
+        conversation=self.db.query(WhatsAppConversa).one()
+        self.assertEqual(receipt.resolucao,'LEGADO_ATUAL')
+        self.assertEqual(receipt.conversa_legada_id,conversation.id)
+        self.assertIsNone(receipt.conversa_contextual_id)
+        self.assertEqual(receipt.context_wamid,'wamid.unresolved')
+        self.assertEqual(conversation.etapa_atual,'SELECIONAR_DATA')
+        result={'messages':[{'id':'wamid.synthetic-legacy'}], 'contacts':[{'input':'5565999990002','wa_id':'556599990002'}]}
+        with patch('app.services.whatsapp_sender_service.WhatsAppSenderService.enviar_texto',return_value=result) as sender:
+            deliver_reply(self.db,'transport-receipt','5565999990002')
+            deliver_reply(self.db,'transport-receipt','5565999990002')
+            sender.assert_called_once_with('5565999990002',response)
+        with Session(self.engine) as independent:
+            evidence=independent.query(WhatsAppMensagemRoteavel).one()
+            self.assertEqual(evidence.conversa_legada_id,conversation.id)
+            self.assertEqual(evidence.evidencia_estado,'VALIDA')
 
     def test_cardio_signed_journey_and_canonical_text(self):
         self.cardio()
@@ -168,8 +189,8 @@ class WhatsAppPostgresTests(unittest.TestCase):
     def test_failed_transaction_rolls_back_receipt_and_conversation(self):
         from app.services import whatsapp_ingress
         original=whatsapp_ingress.processar_mensagem
-        def fail(db,*args):
-            original(db,*args)
+        def fail(db,*args,**kwargs):
+            original(db,*args,**kwargs)
             raise RuntimeError('synthetic failure')
         with patch.object(whatsapp_ingress,'processar_mensagem',side_effect=fail):
             with self.assertRaises(RuntimeError):
@@ -277,8 +298,12 @@ class WhatsAppPostgresTests(unittest.TestCase):
     def test_additive_migration_upgrade_downgrade(self):
         self.db.close()
         with self.engine.begin() as conn:
-            conn.execute(text('DROP TABLE whatsapp_mensagens'))
-            conn.execute(text('ALTER TABLE whatsapp_conversas DROP COLUMN care_line'))
+            # Exercise the historical revision on its historical shape, not the
+            # current ledger with RESTRICT foreign keys added by later migrations.
+            historical=self.schema+'_history'
+            conn.execute(text('CREATE SCHEMA '+historical))
+            conn.execute(text('SET LOCAL search_path TO '+historical+',public'))
+            conn.execute(text('CREATE TABLE whatsapp_conversas (responsavel_id integer, telefone varchar(30), etapa_atual varchar(50), respostas_json json)'))
             conn.execute(text("INSERT INTO whatsapp_conversas (responsavel_id,telefone,etapa_atual,respostas_json) VALUES (1,'synthetic','SONO','{}')"))
             spec=importlib.util.spec_from_file_location('wa_migration','alembic/versions/8c01a0d1a004_whatsapp_ingress.py')
             module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
@@ -289,3 +314,4 @@ class WhatsAppPostgresTests(unittest.TestCase):
                 module.downgrade()
                 self.assertFalse(inspect(conn).has_table('whatsapp_mensagens'))
                 self.assertEqual(conn.execute(text('SELECT count(*) FROM whatsapp_conversas')).scalar(),1)
+            conn.execute(text('DROP SCHEMA '+historical+' CASCADE'))

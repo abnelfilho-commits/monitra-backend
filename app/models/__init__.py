@@ -54,3 +54,4 @@ from .whatsapp_convite import WhatsAppConviteEnvio, WhatsAppConviteStatusEvento
 from app.models.whatsapp_manual import WhatsAppSolicitacaoManual
 
 from app.models.whatsapp_autorizacao import WhatsAppAutorizacaoComunicacao
+from app.models.whatsapp_transporte import WhatsAppMensagemRoteavel

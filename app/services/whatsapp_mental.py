@@ -255,9 +255,14 @@ class WhatsAppMentalService:
         return question(next_step)
 
 
-def dispatch(db, sender, content, legacy, *, message_id=None):
+def dispatch(db, sender, content, legacy, *, message_id=None, observation=None):
     phone = normalizar_telefone(sender)
     lock_phone(db, phone)
     identity = db.scalar(select(Conversation.id).where(Conversation.telefone == phone, Conversation.status.in_(OPEN)))
-    if identity is None: return legacy(db, sender, content)
+    if identity is None:
+        if observation is not None:
+            observation['resolucao'] = 'LEGADO_SEM_CONVERSA'
+        return legacy(db, sender, content)
+    if observation is not None:
+        observation.update(resolucao='CONTEXTUAL_ATUAL', conversa_contextual_id=identity)
     return WhatsAppMentalService().receive(db, identity, content, message_id=message_id)

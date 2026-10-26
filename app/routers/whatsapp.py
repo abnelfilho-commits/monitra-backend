@@ -53,8 +53,9 @@ async def receber_webhook(request: Request, db: Session = Depends(get_db)):
 def process_validated(db, messages, statuses=()):
     try:
         persist_statuses(db, statuses)
-        for identity, recipient, sender, content in messages:
-            process_message(db, identity, recipient, sender, content)
+        for message in messages:
+            identity, recipient, sender, content = message[:4]
+            process_message(db, *message)
             if os.getenv('WHATSAPP_ACCESS_TOKEN'):
                 deliver_reply(db, identity, sender)
         return {'status': 'processed' if messages or statuses else 'ignored'}

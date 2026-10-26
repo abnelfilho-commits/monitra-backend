@@ -51,7 +51,14 @@ def authenticated_events(body, signature):
                             or not sender.isdigit() or not 8 <= len(sender) <= 15
                             or not isinstance(content, str) or not content.strip() or len(content) > 4096):
                         raise ValueError()
-                    messages.append((identity, recipient, sender, content))
+                    context = message.get('context')
+                    if context is not None:
+                        from app.services.whatsapp_transporte import wamid_valid
+                        if not isinstance(context, dict) or ('id' in context and not wamid_valid(context['id'])):
+                            raise ValueError()
+                        messages.append((identity, recipient, sender, content, context.get('id')))
+                    else:
+                        messages.append((identity, recipient, sender, content))
         return messages, statuses
     except HTTPException:
         raise
@@ -59,7 +66,7 @@ def authenticated_events(body, signature):
         raise HTTPException(400, 'Invalid webhook payload.') from None
 
 
-def process_message(db, identity, recipient, sender, content):
+def process_message(db, identity, recipient, sender, content, context_wamid=None):
     """PostgreSQL owns dedup and sender serialization; no intermediate commits.
 
     Reply is retained for outbound retry, without logging clinical contents.
@@ -72,18 +79,24 @@ def process_message(db, identity, recipient, sender, content):
                              'big', signed=True)
         db.execute(text('SELECT pg_advisory_xact_lock(:key)'), {'key': key})
         fingerprint = hashlib.sha256(json.dumps([recipient, sender, content], ensure_ascii=False).encode()).hexdigest()
+        # v1 receipts remain replayable using their original fingerprint contract.
+        legacy_fingerprint = fingerprint
+        fingerprint = hashlib.sha256(json.dumps([recipient, sender, content, context_wamid], ensure_ascii=False).encode()).hexdigest()
         claimed = db.execute(insert(WhatsAppMensagem).values(
-            message_id=identity, phone_number_id=recipient, fingerprint=fingerprint, resposta='').on_conflict_do_nothing(
+            message_id=identity, phone_number_id=recipient, fingerprint=fingerprint, fingerprint_versao=2, context_wamid=context_wamid, resposta='').on_conflict_do_nothing(
                 index_elements=['message_id']).returning(WhatsAppMensagem.message_id)).scalar()
         if claimed is None:
             receipt = db.query(WhatsAppMensagem).filter_by(message_id=identity).one()
-            if receipt.phone_number_id != recipient or receipt.fingerprint != fingerprint:
+            if receipt.phone_number_id != recipient or receipt.fingerprint != (legacy_fingerprint if receipt.fingerprint_versao == 1 else fingerprint):
                 raise HTTPException(409, 'Webhook identity conflict.')
             response = receipt.resposta
         else:
             from app.services.whatsapp_mental import dispatch
-            response = dispatch(db, sender, content, processar_mensagem, message_id=identity)
-            db.query(WhatsAppMensagem).filter_by(message_id=identity).update({'resposta': response})
+            observation = {}
+            def legacy(session, phone, message):
+                return processar_mensagem(session, phone, message, observation=observation)
+            response = dispatch(db, sender, content, legacy, message_id=identity, observation=observation)
+            db.query(WhatsAppMensagem).filter_by(message_id=identity).update(dict(observation, resposta=response))
         db.commit()
         return response
     except Exception:
@@ -102,8 +115,16 @@ def deliver_reply(db, identity, sender):
     try:
         receipt = db.query(WhatsAppMensagem).filter_by(message_id=identity).with_for_update().one()
         if receipt.enviado_em is None:
-            WhatsAppSenderService.enviar_texto(sender, receipt.resposta)
+            result = WhatsAppSenderService.enviar_texto(sender, receipt.resposta)
+            # Mark accepted text delivery before optional evidence persistence. A
+            # capture failure must not cause an additional text send on replay.
             receipt.enviado_em = datetime.utcnow()
+            db.commit()
+            if receipt.conversa_contextual_id is not None or receipt.conversa_legada_id is not None:
+                from app.services.whatsapp_transporte import capture
+                capture(db, result, emitter=receipt.phone_number_id, requested=sender,
+                        contextual=receipt.conversa_contextual_id, legacy=receipt.conversa_legada_id,
+                        origin='META_RESPOSTA')
         db.commit()
     except Exception:
         db.rollback()

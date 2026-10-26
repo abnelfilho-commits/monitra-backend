@@ -306,9 +306,9 @@ def iniciar_datas(
         f"2 - Agora não"
     )
 
-def processar_mensagem(db, telefone, mensagem):
+def processar_mensagem(db, telefone, mensagem, *, observation=None):
     try:
-        return _processar_mensagem(db, telefone, mensagem)
+        return _processar_mensagem(db, telefone, mensagem, observation=observation)
     except ValueError:
         return 'Não foi possível validar este acompanhamento. Procure a equipe responsável.'
 
@@ -317,6 +317,7 @@ def _processar_mensagem(
     db: Session,
     telefone: str,
     mensagem: str,
+    *, observation=None,
 ):
     """
     Motor conversacional inicial do WhatsApp.
@@ -391,6 +392,8 @@ def _processar_mensagem(
             telefone_normalizado,
         )
 
+    if observation is not None:
+        observation.update(resolucao='LEGADO_ATUAL', conversa_legada_id=conversa.id)
     if conversa.paciente_id is not None and conversa.etapa_atual != "INICIO":
         lines = authorized_lines(db, responsavel.id, conversa.paciente_id)
         if conversa.etapa_atual == 'SELECIONAR_LINHA':
