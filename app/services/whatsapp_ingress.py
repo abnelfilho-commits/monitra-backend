@@ -74,11 +74,13 @@ def process_message(db, identity, recipient, sender, content, context_wamid=None
     and conversation transitions are processed only once per message identity.
     """
     try:
-        # Serializes even the first conversation; transaction-scoped, no session lock.
+        # Transport coordination precedes existing routing/clinical locks.
+        from app.services.whatsapp_comunicacao import coordinate
         if context_wamid is not None:
             from app.services.whatsapp_referencia import lock_reference
-            lock_reference(db, recipient, sender, context_wamid)
+            lock_reference(db, recipient, sender, context_wamid, operation='ingress:'+identity)
         else:
+            coordinate(db, recipient, sender, operation='ingress:'+identity, identity_check=False)
             key = int.from_bytes(hashlib.sha256(normalizar_telefone(sender).encode()).digest()[:8],
                                  'big', signed=True)
             db.execute(text('SELECT pg_advisory_xact_lock(:key)'), {'key': key})

@@ -2,7 +2,7 @@
 import hashlib
 import os
 import re
-from sqlalchemy import select, text, or_
+from sqlalchemy import select, text, or_, and_
 from app.models.whatsapp_manual import WhatsAppSolicitacaoManual as Manual
 from app.models.whatsapp_convite import WhatsAppConviteEnvio as Envio
 from app.services.whatsapp_mental import (WhatsAppMentalService, Follow, Conversation,
@@ -12,13 +12,18 @@ from app.services.whatsapp_autorizacao import require_prior_authorization
 
 
 def blocking_attempt(db, phone, exclude_conversation=None, follow_id=None):
-    scope = Conversation.telefone == phone
-    if follow_id is not None:
-        scope = or_(scope, Conversation.acompanhamento_whatsapp_id == follow_id)
+    from app.services.whatsapp_comunicacao import aliases
+    emitter = os.getenv('WHATSAPP_PHONE_NUMBER_ID', '').strip()
+    if not emitter: raise CheckinInvalid('WHATSAPP_EMITTER_UNAVAILABLE')
+    phones = aliases(db, emitter, phone)
+    # Same followup remains blocking even if configuration/destination changed.
+    same_follow = Conversation.acompanhamento_whatsapp_id == follow_id if follow_id is not None else False
+    scope = or_(and_(Conversation.telefone.in_(phones), Envio.phone_number_id == emitter), same_follow)
+    pending_scope = or_(Conversation.telefone.in_(phones), same_follow)
     q = select(Envio.id).join(Conversation, Conversation.id == Envio.conversa_id).where(
         scope, Envio.estado.in_(('PREPARADO','EM_EXECUCAO','INCERTO')))
     pending = select(Manual.id).join(Conversation, Conversation.id == Manual.conversa_id).where(
-        scope, Manual.estado == 'PREPARADO')
+        pending_scope, Manual.estado == 'PREPARADO')
     if exclude_conversation is not None:
         q = q.where(Conversation.id != exclude_conversation)
         pending = pending.where(Conversation.id != exclude_conversation)
@@ -36,15 +41,14 @@ def dispatch_manual(db, context, key, payload):
     if not re.fullmatch(r'[A-Za-z0-9._:-]{16,128}', key or ''):
         raise CheckinInvalid('INVALID_IDEMPOTENCY_KEY')
     service = WhatsAppMentalService()
-    service.authorized(db, **context)
+    service.authorized(db, lock=False, **context)
     initial = db.scalar(select(Follow).where(Follow.contexto_assistencial_id == context['context']))
     if initial is None: raise CheckinInvalid('FOLLOW_UP_NOT_FOUND')
     identity, phone = initial.id, initial.telefone
     db.rollback()  # Canonical lock order: phone before institution/care.
     # Serialize key across phones too; same key with changed context conflicts.
-    lock_key = int.from_bytes(hashlib.sha256(('manual:' + str(context['institution']) + ':' + str(context['actor']) + ':' + key).encode()).digest()[:8], 'big', signed=True)
-    db.execute(text('SELECT pg_advisory_xact_lock(:key)'), {'key': lock_key})
-    lock_phone(db, phone)
+    from app.services.whatsapp_comunicacao import coordinate_configured
+    coordinate_configured(db, (phone,), operation='manual:' + str(context['institution']) + ':' + str(context['actor']) + ':' + key)
     service.authorized(db, **context)
     follow = locked(db, Follow, identity)
     if follow.telefone != phone: raise CheckinInvalid('DESTINATION_CHANGED')

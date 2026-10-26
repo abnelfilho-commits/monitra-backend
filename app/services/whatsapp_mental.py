@@ -82,10 +82,10 @@ def choice(content, options):
 
 
 class WhatsAppMentalService:
-    def authorized(self, db, *, actor, institution, person, context, write=True):
+    def authorized(self, db, *, actor, institution, person, context, write=True, lock=True):
         checkin = CheckinBemEstarService()
         if write:
-            lock_care(db, context)
+            if lock: lock_care(db, context)
             allowed = checkin.can_write(db, actor=actor, institution=institution, person=person, context=context)
         else:
             allowed = db.scalar(checkin._scope(actor, institution, person, context, 'ASSISTENCIAL_LER')) is not None
@@ -102,10 +102,14 @@ class WhatsAppMentalService:
             raise CheckinInvalid('INVALID_PHONE')
         old = db.scalar(select(Follow).where(Follow.contexto_assistencial_id == scope['context']))
         # Deterministic order when changing destinations; never alter execution snapshots.
-        for number in sorted({phone, old.telefone if old else phone}): lock_phone(db, number)
+        previous_phone = old.telefone if old else None
+        from app.services.whatsapp_comunicacao import coordinate_configured
+        coordinate_configured(db, {phone, previous_phone or phone})
         self.authorized(db, **scope)
         c = db.get(Context, scope['context'])
         a = db.scalar(select(Follow).where(Follow.contexto_assistencial_id == c.id).with_for_update().execution_options(populate_existing=True))
+        if a is not None and a.telefone != previous_phone:
+            raise CheckinInvalid('DESTINATION_CHANGED')
         if a is None:
             a = Follow(contexto_assistencial_id=c.id, paciente_id=c.paciente_id, telefone=phone,
                        criado_por_usuario_id=scope['actor'], status='ATIVO', consentimento_status='PENDENTE', frequencia='SEMANAL')
@@ -127,19 +131,25 @@ class WhatsAppMentalService:
     def lifecycle(self, db, action, **scope):
         initial = db.scalar(select(Follow).where(Follow.contexto_assistencial_id == scope['context']))
         if initial is None: raise CheckinInvalid('FOLLOW_UP_NOT_FOUND')
-        lock_phone(db, initial.telefone)
+        phone = initial.telefone
+        from app.services.whatsapp_comunicacao import coordinate_configured
+        coordinate_configured(db, (phone,))
         self.authorized(db, **scope)
         a = locked(db, Follow, initial.id)
+        if a.telefone != phone: raise CheckinInvalid('DESTINATION_CHANGED')
         if action == 'reativar':
             if a.status == 'ENCERRADO' or a.consentimento_status == 'REVOGADO': raise CheckinInvalid('FOLLOW_UP_CLOSED')
             a.status = 'ATIVO'
         else:
+            conversations = list(db.scalars(select(Conversation).where(
+                Conversation.acompanhamento_whatsapp_id == a.id,
+                Conversation.status.in_(OPEN)).order_by(Conversation.id).with_for_update()))
             if action == 'encerrar':
                 from app.services.whatsapp_autorizacao import revoke_internal
                 revoke_internal(db, a, origin='ENCERRAMENTO', reason='ENCERRAMENTO', actor=scope['actor'])
                 a.status, a.consentimento_status, a.revogado_em = 'ENCERRADO', 'REVOGADO', now_utc(db)
             elif a.status != 'ENCERRADO': a.status = 'PAUSADO'
-            for conversation in db.scalars(select(Conversation).where(Conversation.acompanhamento_whatsapp_id == a.id, Conversation.status.in_(OPEN)).with_for_update()):
+            for conversation in conversations:
                 conversation.status = 'CANCELADA'
         db.flush()
         return a
@@ -150,7 +160,8 @@ class WhatsAppMentalService:
         active_line = select(Line.id).where(Line.contexto_assistencial_id == Context.id,
             Line.modulo_id == 3, Line.ativo.is_(True)).exists()
         busy_phone = select(Conversation.id).where(Conversation.telefone == Follow.telefone,
-            Conversation.status.in_(OPEN), Conversation.expires_at > func.clock_timestamp()).exists()
+            Conversation.status.in_(OPEN),
+            or_(Conversation.acompanhamento_whatsapp_id != Follow.id, Conversation.expires_at > func.clock_timestamp())).exists()
         return tuple(db.scalars(select(Follow.id).join(Context, Context.id == Follow.contexto_assistencial_id)
             .join(Paciente, Paciente.id == Context.paciente_id).join(Pessoa, Pessoa.id == Paciente.pessoa_id)
             .where(Follow.status == 'ATIVO', Follow.consentimento_status != 'REVOGADO',
@@ -164,26 +175,33 @@ class WhatsAppMentalService:
         initial = db.get(Follow, identity)
         if initial is None: raise CheckinInvalid('FOLLOW_UP_NOT_FOUND')
         phone = initial.telefone
-        lock_phone(db, phone)
+        from app.services.whatsapp_comunicacao import coordinate_configured, blocked
+        import os
+        coordinate_configured(db, (phone,))
         c, patient, person = lock_care(db, initial.contexto_assistencial_id)
         a = locked(db, Follow, identity)
         now = now_utc(db)
         if a.telefone != phone: raise CheckinInvalid('DESTINATION_CHANGED')
         from app.services.whatsapp_manual import blocking_attempt, require_prior_authorization
         if blocking_attempt(db, phone, follow_id=identity): return None
+        if blocked(db, os.environ['WHATSAPP_PHONE_NUMBER_ID'].strip(), phone, follow_id=identity): return None
         if not valid_scope(db, a, c, patient, person, now): return None
         try:
             require_prior_authorization(db, a)
         except CheckinInvalid:
             if manual: raise
             return None
-        # Expiry closes a fixed window; replies cannot extend it.
-        for old in db.scalars(select(Conversation).where(Conversation.telefone == phone, Conversation.status.in_(OPEN)).with_for_update()):
+        # Temporary compatibility guard: the global phone index still exists.
+        # Even expired OPEN rows from other followups must remain untouched.
+        if db.scalar(select(Conversation.id).where(Conversation.telefone == phone,
+                Conversation.acompanhamento_whatsapp_id != identity, Conversation.status.in_(OPEN))): return None
+        # Expire only the requested followup; replies cannot extend its window.
+        for old in db.scalars(select(Conversation).where(Conversation.acompanhamento_whatsapp_id == identity, Conversation.status.in_(OPEN)).order_by(Conversation.id).with_for_update()):
             if old.expires_at <= now: old.status = 'EXPIRADA'
         db.flush()
         if not valid_scope(db, a, c, patient, person, now): return None
         if not manual and a.proximo_envio_em is not None and a.proximo_envio_em > now: return None
-        if db.scalar(select(Conversation.id).where(Conversation.telefone == phone, Conversation.status.in_(OPEN))): return None
+        if db.scalar(select(Conversation.id).where(Conversation.acompanhamento_whatsapp_id == identity, Conversation.status.in_(OPEN))): return None
         conversation = Conversation(acompanhamento_whatsapp_id=a.id, contexto_assistencial_id=c.id,
             paciente_id=patient.id, telefone=phone, care_line='MENTAL_HEALTH', etapa_atual='ACEITE',
             respostas_json={}, status='AGUARDANDO_ACEITE', data_referencia=now.date(),

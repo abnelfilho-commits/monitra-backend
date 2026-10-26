@@ -48,6 +48,8 @@ class MentalWhatsAppTests(unittest.TestCase):
 
     def setUp(self):
         fixture.CheckinTests.setUp(self)
+        emitter=patch.dict(os.environ, {'WHATSAPP_PHONE_NUMBER_ID':'123'})
+        emitter.start();self.addCleanup(emitter.stop)
         self.app.include_router(api.router)
         self.w=WhatsAppMentalService()
         self.scope=dict(actor=self.actor,institution=self.institution,person=self.person,context=self.open)

@@ -190,6 +190,10 @@ def criar_conversa(
     telefone: str,
     paciente_id: int = None,
 ):
+    from app.services.whatsapp_comunicacao import coordinate_configured
+    coordinate_configured(db, (normalizar_telefone(telefone),))
+    from app.services.daily_record.concurrency import lock_responsible
+    lock_responsible(db, responsavel_id)
     conversa = WhatsAppConversa(
         responsavel_id=responsavel_id,
         paciente_id=paciente_id,

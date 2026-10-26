@@ -14,15 +14,15 @@ def evidence(db, emitter, reference):
         Evidence.wamid == reference).execution_options(populate_existing=True))
 
 
-def lock_reference(db, emitter, sender, reference):
+def lock_reference(db, emitter, sender, reference, *, operation=None):
     row = evidence(db, emitter, reference)
     phones = {sender}
     if row is not None:
         target = db.get(Conversation, row.conversa_contextual_id) if row.conversa_contextual_id else db.get(Legacy, row.conversa_legada_id)
         if target is not None:
             phones.add(target.telefone)
-    for phone in sorted(phones):
-        lock_phone(db, phone)
+    from app.services.whatsapp_comunicacao import coordinate_many
+    coordinate_many(db, emitter, phones, operation=operation, identity_check=False)
 
 
 def identity_matches(db, row, sender, phone):

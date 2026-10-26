@@ -35,16 +35,62 @@ def aliases(db, emitter, phone):
     return result
 
 
-def coordinate(db, emitter, phone, *, operation=None):
+def coordinate_many(db, emitter, phones, *, operation=None, identity_check=True):
+    """Declare the complete transport set before canonical phone/care locks.
+
+    Raw phone locks remain for compatibility with unconverted clinical callers.
+    Proven aliases only; the conservative transport key does not establish identity.
+    """
     with db.no_autoflush:
-        numbers = aliases(db, emitter, phone)
+        requested = set(phones)
+        def lock_numbers():
+            if identity_check:
+                return set().union(*(aliases(db, emitter, phone) for phone in requested))
+            # Ingress locks are not identity decisions. Preserve canonical refusal
+            # of malformed/conflicting evidence in the unchanged resolver.
+            rows = db.scalars(select(Evidence).where(Evidence.phone_number_id == emitter,
+                or_(Evidence.destinatario_solicitado.in_(requested), Evidence.wa_id.in_(requested))))
+            values = set(requested)
+            for row in rows:
+                for value in (row.destinatario_solicitado, row.wa_id):
+                    if value and value.isascii() and value.isdigit(): values.add(value)
+            return values
+        numbers = lock_numbers()
         plan = [transport(emitter, number) for number in numbers]
         if operation:
             plan.append(Resource(Phase.OPERATION, 'communication', (operation,)))
         acquire(db, plan, timeout_ms=3000)
-        if aliases(db, emitter, phone) != numbers:
+        if lock_numbers() != numbers:
             raise CheckinInvalid('TRANSPORT_EVIDENCE_CHANGED')
+        from app.services.whatsapp_mental import lock_phone
+        from sqlalchemy import text
+        from sqlalchemy.exc import DBAPIError
+        from app.services.whatsapp_locks import LockUnavailable
+        previous_timeout = db.scalar(text('SHOW lock_timeout'))
+        try:
+            db.execute(text("SELECT set_config('lock_timeout','3000ms',true)"))
+            for phone in sorted(numbers):
+                lock_phone(db, phone)
+            db.execute(text("SELECT set_config('lock_timeout',:value,true)"), {'value':previous_timeout})
+        except DBAPIError as exc:
+            code = getattr(exc.orig, 'pgcode', None)
+            db.rollback()
+            if code in ('40P01','55P03','57014'):
+                raise LockUnavailable('Transport lock unavailable; no retry') from None
+            raise
         return numbers
+
+
+def coordinate(db, emitter, phone, *, operation=None, identity_check=True):
+    return coordinate_many(db, emitter, (phone,), operation=operation, identity_check=identity_check)
+
+
+def coordinate_configured(db, phones, *, operation=None):
+    import os
+    emitter = os.getenv('WHATSAPP_PHONE_NUMBER_ID', '').strip()
+    if not emitter:
+        raise CheckinInvalid('WHATSAPP_EMITTER_UNAVAILABLE')
+    return coordinate_many(db, emitter, phones, operation=operation)
 
 
 def recipient_scope(emitter, phone):

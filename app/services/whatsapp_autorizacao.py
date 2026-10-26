@@ -82,15 +82,14 @@ def register(db, context, key, payload, *, revoke=False):
     if not re.fullmatch(r'[A-Za-z0-9._:-]{16,128}',key or ''):
         raise CheckinInvalid('INVALID_IDEMPOTENCY_KEY')
     service = WhatsAppMentalService()
-    service.authorized(db, **context)
+    service.authorized(db, lock=False, **context)
     initial = db.scalar(select(Follow).where(Follow.contexto_assistencial_id == context['context']))
     if initial is None: raise CheckinInvalid('FOLLOW_UP_NOT_FOUND')
     identity,phone=initial.id,initial.telefone
     fingerprint=hashlib.sha256(json.dumps([identity,revoke,payload.model_dump(mode='json')],sort_keys=True).encode()).hexdigest()
     db.rollback()
-    keylock=int.from_bytes(hashlib.sha256(f"whatsapp-auth:{context['institution']}:{context['actor']}:{key}".encode()).digest()[:8],'big',signed=True)
-    db.execute(text('SELECT pg_advisory_xact_lock(:key)'),{'key':keylock})
-    lock_phone(db,phone)
+    from app.services.whatsapp_comunicacao import coordinate_configured
+    coordinate_configured(db, (phone,), operation='authorization:' + str(context['institution']) + ':' + str(context['actor']) + ':' + key)
     service.authorized(db, **context)
     follow=locked(db,Follow,identity)
     if follow.telefone != phone: raise CheckinInvalid('DESTINATION_CHANGED')
@@ -104,10 +103,12 @@ def register(db, context, key, payload, *, revoke=False):
     if revoke:
         if previous is not None and previous.estado=='REVOGADA':
             raise CheckinInvalid('AUTHORIZATION_ALREADY_REVOKED')
+        conversations=list(db.scalars(select(Conversation).where(
+            Conversation.acompanhamento_whatsapp_id==identity,
+            Conversation.status.in_(OPEN)).order_by(Conversation.id).with_for_update()))
         row=append_event(db,follow,state='REVOGADA',origin='PORTAL_PROFISSIONAL',occurred=now,
             actor=context['actor'],key=key,fingerprint=fingerprint,reason=payload.motivo)
-        for c in db.scalars(select(Conversation).where(Conversation.acompanhamento_whatsapp_id==identity,
-                                                     Conversation.status.in_(OPEN)).with_for_update()):
+        for c in conversations:
             c.status='CANCELADA'
         db.flush()
     else:
