@@ -9,11 +9,8 @@ from app.models.whatsapp_convite import WhatsAppConviteEnvio as Envio, WhatsAppC
 
 
 def lock_message(db, phone_number_id, wamid):
-    # Same key on acceptance and callback: an early callback cannot remain orphaned
-    # because its insert raced the sender's correlation UPDATE.
-    value = json.dumps(['invitation-status-v1', phone_number_id, wamid], separators=(',', ':'))
-    key = int.from_bytes(hashlib.sha256(value.encode()).digest()[:8], 'big', signed=True)
-    db.execute(text('SELECT pg_advisory_xact_lock(:key)'), {'key': key})
+    from app.services.whatsapp_locks import acquire, message
+    acquire(db, [message(phone_number_id, wamid)])
 
 
 def parse_statuses(value, recipient):
@@ -68,9 +65,10 @@ def persist_statuses(db, events):
         return
     try:
         pairs = sorted({(e['phone_number_id'], e['wamid']) for e in events})
+        from app.services.whatsapp_locks import acquire, message
+        acquire(db, [message(emitter, wamid) for emitter, wamid in pairs])
         bindings = {}
         for emitter, wamid in pairs:
-            lock_message(db, emitter, wamid)
             bindings[emitter, wamid] = db.scalar(select(Envio.id).where(
                 Envio.phone_number_id == emitter, Envio.wamid == wamid))
         for event in events:

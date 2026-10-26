@@ -115,10 +115,10 @@ def deliver(db, identity, context, explicit_retry=False):
         wamid = capture_wamid(result)
         # Record acceptance even if consent/state changed during the network call.
         # Only the transport timestamp changes; never overwrite clinical state.
-        conversation = locked(db, Conversation, identity)
-        attempt = db.scalar(select(Envio).where(Envio.id == attempt_id).with_for_update())
         from app.services.whatsapp_convite_status import lock_message
         lock_message(db, emitter, wamid)
+        conversation = locked(db, Conversation, identity)
+        attempt = db.scalar(select(Envio).where(Envio.id == attempt_id).with_for_update())
         from app.services.whatsapp_transporte import capture
         capture(db, result, emitter=emitter, requested=phone, contextual=identity, origin='META_CONVITE')
         attempt.wamid = wamid
