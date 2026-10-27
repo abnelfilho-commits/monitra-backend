@@ -48,6 +48,8 @@ class MentalWhatsAppTests(unittest.TestCase):
 
     def setUp(self):
         fixture.CheckinTests.setUp(self)
+        from whatsapp_runtime_fixture import activate
+        activate(self.engine)
         emitter=patch.dict(os.environ, {'WHATSAPP_PHONE_NUMBER_ID':'123'})
         emitter.start();self.addCleanup(emitter.stop)
         self.app.include_router(api.router)
@@ -130,20 +132,23 @@ class MentalWhatsAppTests(unittest.TestCase):
         self.prepare();self.incoming('sim');self.incoming('1')
         self.db.execute(text("UPDATE whatsapp_conversas_contextuais SET created_at=clock_timestamp()-interval '25 hours',expires_at=clock_timestamp()-interval '1 hour' WHERE id=:i"),{'i':self.cid});self.db.commit()
         self.incoming('1')
-        self.assertEqual(self.db.get(Conversation,self.cid).status,'EXPIRADA')
+        self.assertEqual(self.db.get(Conversation,self.cid).status,'EM_ANDAMENTO')  # Refused selection has no clinical mutation.
         self.assertEqual(self.counts(),(0,0,0))
         legacy=Mock(return_value='legacy')
-        self.assertEqual(dispatch(self.db,self.phone,'oi',legacy),'legacy');legacy.assert_called_once()
+        with self.assertRaisesRegex(CheckinInvalid,'SELECTED_INGRESS'):dispatch(self.db,self.phone,'oi',legacy)
+        legacy.assert_not_called()
 
     def test_dispatch_precedence_and_absent_completed_fallback(self):
         self.config()
         legacy=Mock(return_value='legacy')
-        self.assertEqual(dispatch(self.db,self.phone,'oi',legacy),'legacy')
+        with self.assertRaisesRegex(CheckinInvalid,'SELECTED_INGRESS'):dispatch(self.db,self.phone,'oi',legacy)
+        legacy.assert_not_called()
         c=self.w.prepare(self.db,self.aid);self.db.commit();self.cid=c.id
-        legacy.reset_mock();dispatch(self.db,self.phone,'sim',legacy);self.db.commit();legacy.assert_not_called()
+        self.incoming('sim');legacy.assert_not_called()
         for _ in range(7):self.incoming('1')
         self.incoming('2');self.incoming('2')
-        self.assertEqual(dispatch(self.db,self.phone,'oi',legacy),'legacy')
+        with self.assertRaisesRegex(CheckinInvalid,'SELECTED_INGRESS'):dispatch(self.db,self.phone,'oi',legacy)
+        legacy.assert_not_called()
 
     def test_denied_without_capability_outside_context_or_inactive_line(self):
         with self.assertRaises(CheckinDenied):self.w.configure(self.db,self.phone,**dict(self.scope,context=self.contexts[1]))
@@ -159,7 +164,7 @@ class MentalWhatsAppTests(unittest.TestCase):
         self.prepare();self.incoming('sim')
         self.db.execute(text('UPDATE contexto_assistencial_linhas SET ativo=false WHERE contexto_assistencial_id=:c AND modulo_id=3'),{'c':self.open});self.db.commit()
         self.incoming('1')
-        self.assertEqual(self.db.get(Conversation,self.cid).status,'CANCELADA')
+        self.assertEqual(self.db.get(Conversation,self.cid).status,'EM_ANDAMENTO')  # Resolver refuses before handler.
         self.assertIsNone(self.w.prepare(self.db,self.aid))
         self.assertEqual(self.counts(),(0,0,0))
 
@@ -180,10 +185,9 @@ class MentalWhatsAppTests(unittest.TestCase):
         self.assertIsNone(self.w.prepare(self.db,second_id))
         self.assertIsNone(self.db.get(Follow,second_id).proximo_envio_em)
         now=now_utc(self.db)
-        with self.assertRaises(IntegrityError):
-            with self.db.begin_nested():
-                self.db.add(Conversation(acompanhamento_whatsapp_id=second_id,contexto_assistencial_id=self.closed,paciente_id=a.paciente_id,telefone=self.phone,data_referencia=now.date(),expires_at=now+timedelta(hours=24)))
-                self.db.flush()
+        with self.db.begin_nested():
+            self.db.add(Conversation(acompanhamento_whatsapp_id=second_id,contexto_assistencial_id=self.closed,paciente_id=a.paciente_id,telefone=self.phone,data_referencia=now.date(),expires_at=now+timedelta(hours=24)))
+            self.db.flush()  # Distinct followups may share a phone after controlled cutover.
         with self.assertRaises(IntegrityError):
             with self.db.begin_nested():
                 self.db.add(Conversation(acompanhamento_whatsapp_id=self.aid,contexto_assistencial_id=self.open,paciente_id=a.paciente_id,telefone='5511999999999',data_referencia=now.date(),expires_at=now+timedelta(hours=24)))
@@ -273,15 +277,16 @@ class MentalWhatsAppTests(unittest.TestCase):
         self.db.rollback()
         with self.db.get_bind().begin() as c:
             indexes={r['name']:r for r in inspect(c).get_indexes('whatsapp_conversas_contextuais')}
-            for name in ('uq_wcc_aberta_acompanhamento','uq_wcc_aberta_telefone'):
+            self.assertNotIn('uq_wcc_aberta_telefone',indexes)
+            for name in ('uq_wcc_aberta_acompanhamento',):
                 self.assertTrue(indexes[name]['unique'])
                 self.assertIn('AGUARDANDO_ACEITE',str(indexes[name]['dialect_options']))
             revision = c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar_one()
-            if revision in ('d92a_whatsapp_persistencia', 'd92e12_whatsapp_manual', 'd92e12c_autorizacao_whatsapp', 'e14b1_transporte', 'e14b2_referencia', 'e14b3a_multilinhas', 'e14b3b2_comunicacao'):
+            if revision in ('d92a_whatsapp_persistencia', 'd92e12_whatsapp_manual', 'd92e12c_autorizacao_whatsapp', 'e14b1_transporte', 'e14b2_referencia', 'e14b3a_multilinhas', 'e14b3b2_comunicacao', 'e14b_close_v1'):
                 # The new additive evidence migration deliberately forbids destructive rollback.
                 # Keep the historical roundtrip below for fixtures pinned to the W3 revision.
                 before = set(inspect(c).get_table_names())
-                with self.assertRaisesRegex(RuntimeError, 'delivery evidence must be preserved|Manual request evidence requires separately approved removal|Channel authorization evidence requires separately approved removal|Transport evidence removal requires an approved recovery procedure|Routing evidence removal requires an approved recovery procedure|Communication evidence removal requires an approved recovery procedure'):
+                with self.assertRaisesRegex(RuntimeError, 'delivery evidence must be preserved|Manual request evidence requires separately approved removal|Channel authorization evidence requires separately approved removal|Transport evidence removal requires an approved recovery procedure|Routing evidence removal requires an approved recovery procedure|Communication evidence removal requires an approved recovery procedure|Selected routing requires forward recovery'):
                     command.downgrade(config(c), 'w3_atendimento_mental_v1')
                 self.assertEqual(set(inspect(c).get_table_names()), before)
                 self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar_one(), revision)

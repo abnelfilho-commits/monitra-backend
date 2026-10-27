@@ -55,6 +55,10 @@ class MultilineTests(unittest.TestCase):
             self.db.add(ModuloClinico(id=module,nome='Synthetic '+line,slug=line.lower(),ativo=True));self.db.flush()
         if not self.db.scalar(select(PacienteModulo).where(PacienteModulo.paciente_id==patient.id,PacienteModulo.modulo_id==module)):
             self.db.add(PacienteModulo(paciente_id=patient.id,modulo_id=module,ativo=True))
+        from app.models.modular import FormularioModulo
+        if not self.db.scalar(select(FormularioModulo).where(FormularioModulo.modulo_id==module,FormularioModulo.tipo=='REGISTRO_DIARIO',FormularioModulo.ativo.is_(True))):
+            self.db.add(FormularioModulo(modulo_id=module,nome='Synthetic',tipo='REGISTRO_DIARIO',ativo=True))
+            self.db.flush()
         c = Legacy(responsavel_id=responsible.id,paciente_id=patient.id,telefone=responsible.telefone,
             care_line=line,etapa_atual='SONO' if line=='NEURO' else 'CARDIO_0',data_referencia=date.today())
         self.db.add(c);self.db.commit()
@@ -218,8 +222,9 @@ class MultilineTests(unittest.TestCase):
         mid='live-'+uuid4().hex
         process_message(self.db,mid,'12345',self.phone,'SIM')
         self.assertEqual(self.db.get(Receipt,mid).resolucao,'CONTEXTUAL_ATUAL')
-        self.assertIsNone(self.db.get(Audit,mid))
-        self.assertTrue(self.db.execute(text("SELECT 1 FROM pg_indexes WHERE indexname='uq_wcc_aberta_telefone'")).scalar())
+        self.assertEqual(self.db.get(Audit,mid).decisao['outcome'],'SELECIONADA')
+        self.assertTrue(self.db.execute(text("SELECT 1 FROM pg_indexes WHERE indexname='ix_wcc_aberta_telefone'")).scalar())
+        self.assertIsNone(self.db.execute(text("SELECT 1 FROM pg_indexes WHERE indexname='uq_wcc_aberta_telefone'")).scalar())
 
     def test_safe_fallback_only_bound_exact_responsible(self):
         c=self.legacy(phone='551100000010');responsible=c.responsavel_id

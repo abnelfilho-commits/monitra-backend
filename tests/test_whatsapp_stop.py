@@ -180,7 +180,7 @@ class StopTests(unittest.TestCase):
             self.assertFalse(deliver(self.db,self.mid,self.sender));http.assert_not_called()
 
     def test_ingress_does_not_execute_clinical_handlers_for_stop(self):
-        with patch('app.services.whatsapp_mental.WhatsAppMentalService.receive') as mental,patch('app.services.whatsapp_ingress.processar_mensagem') as legacy:
+        with patch('app.services.whatsapp_mental.WhatsAppMentalService.receive') as mental,patch('app.services.whatsapp_conversation_service.processar_mensagem') as legacy:
             self.incoming();mental.assert_not_called();legacy.assert_not_called()
 
     def test_direct_receivers_refuse_unaudited_stop(self):

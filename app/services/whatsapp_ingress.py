@@ -4,10 +4,6 @@ import hmac
 import json
 import os
 from fastapi import HTTPException
-from sqlalchemy import text
-from sqlalchemy.dialects.postgresql import insert
-from app.models.whatsapp_mensagem import WhatsAppMensagem
-from app.services.whatsapp_conversation_service import processar_mensagem, normalizar_telefone
 
 
 def authenticated_events(body, signature):
@@ -67,57 +63,15 @@ def authenticated_events(body, signature):
 
 
 def process_message(db, identity, recipient, sender, content, context_wamid=None):
-    """PostgreSQL owns dedup and sender serialization; no intermediate commits.
-
-    Reply is retained without logging clinical contents.
-    Durable executions block retries after uncertain transport failure; clinical writes
-    and conversation transitions are processed only once per message identity.
-    """
+    """Authenticated selected ingress; no phone-search fallback or external IO."""
+    from app.services.whatsapp_runtime import require_active
     from app.services.whatsapp_stop import is_stop, process as process_stop
-    if is_stop(content):
-        return process_stop(db, identity, recipient, sender, content, context_wamid)
+    from app.services.whatsapp_selected import process_selected
     try:
-        # Transport coordination precedes existing routing/clinical locks.
-        from app.services.whatsapp_comunicacao import coordinate
-        if context_wamid is not None:
-            from app.services.whatsapp_referencia import lock_reference
-            lock_reference(db, recipient, sender, context_wamid, operation='ingress:'+identity)
-        else:
-            coordinate(db, recipient, sender, operation='ingress:'+identity, identity_check=False)
-            key = int.from_bytes(hashlib.sha256(normalizar_telefone(sender).encode()).digest()[:8],
-                                 'big', signed=True)
-            db.execute(text('SELECT pg_advisory_xact_lock(:key)'), {'key': key})
-        fingerprint = hashlib.sha256(json.dumps([recipient, sender, content], ensure_ascii=False).encode()).hexdigest()
-        # v1 receipts remain replayable using their original fingerprint contract.
-        legacy_fingerprint = fingerprint
-        fingerprint = hashlib.sha256(json.dumps([recipient, sender, content, context_wamid], ensure_ascii=False).encode()).hexdigest()
-        claimed = db.execute(insert(WhatsAppMensagem).values(
-            message_id=identity, phone_number_id=recipient, fingerprint=fingerprint, fingerprint_versao=2, context_wamid=context_wamid, resposta='').on_conflict_do_nothing(
-                index_elements=['message_id']).returning(WhatsAppMensagem.message_id)).scalar()
-        if claimed is None:
-            receipt = db.query(WhatsAppMensagem).filter_by(message_id=identity).one()
-            if receipt.phone_number_id != recipient or receipt.fingerprint != (legacy_fingerprint if receipt.fingerprint_versao == 1 else fingerprint):
-                raise HTTPException(409, 'Webhook identity conflict.')
-            response = receipt.resposta
-        else:
-            from app.services.whatsapp_mental import dispatch
-            observation = {}
-            def legacy(session, phone, message):
-                return processar_mensagem(session, phone, message, observation=observation)
-            if context_wamid is not None:
-                from app.services.whatsapp_referencia import resolve
-                response = resolve(db, recipient, sender, context_wamid, content,
-                                   message_id=identity, observation=observation)
-            else:
-                response = dispatch(db, sender, content, legacy, message_id=identity, observation=observation)
-            if observation.get('conversa_legada_id') is not None:
-                from app.models.whatsapp_conversa import WhatsAppConversa
-                from app.services.whatsapp_transporte import legacy_state
-                db.flush()
-                observation['legado_estado_sha256'] = legacy_state(db.get(WhatsAppConversa, observation['conversa_legada_id']))
-            db.query(WhatsAppMensagem).filter_by(message_id=identity).update(dict(observation, resposta=response))
-        db.commit()
-        return response
+        require_active(db)
+        if is_stop(content):
+            return process_stop(db, identity, recipient, sender, content, context_wamid)
+        return process_selected(db, identity, recipient, sender, content, context_wamid)
     except Exception:
         db.rollback()
         raise

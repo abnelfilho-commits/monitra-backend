@@ -159,9 +159,10 @@ class WhatsAppMentalService:
         from app.services.whatsapp_autorizacao import authorized_follow_exists
         active_line = select(Line.id).where(Line.contexto_assistencial_id == Context.id,
             Line.modulo_id == 3, Line.ativo.is_(True)).exists()
-        busy_phone = select(Conversation.id).where(Conversation.telefone == Follow.telefone,
-            Conversation.status.in_(OPEN),
-            or_(Conversation.acompanhamento_whatsapp_id != Follow.id, Conversation.expires_at > func.clock_timestamp())).exists()
+        from app.services.whatsapp_runtime import require_active
+        require_active(db)
+        busy_phone = select(Conversation.id).where(Conversation.acompanhamento_whatsapp_id == Follow.id,
+            Conversation.status.in_(OPEN), Conversation.expires_at > func.clock_timestamp()).exists()
         return tuple(db.scalars(select(Follow.id).join(Context, Context.id == Follow.contexto_assistencial_id)
             .join(Paciente, Paciente.id == Context.paciente_id).join(Pessoa, Pessoa.id == Paciente.pessoa_id)
             .where(Follow.status == 'ATIVO', Follow.consentimento_status != 'REVOGADO',
@@ -172,6 +173,8 @@ class WhatsAppMentalService:
 
     def prepare(self, db, identity, *, manual=False):
         """Caller commits before delivery. A blocked phone never advances the schedule."""
+        from app.services.whatsapp_runtime import require_active
+        require_active(db)
         initial = db.get(Follow, identity)
         if initial is None: raise CheckinInvalid('FOLLOW_UP_NOT_FOUND')
         phone = initial.telefone
@@ -191,10 +194,6 @@ class WhatsAppMentalService:
         except CheckinInvalid:
             if manual: raise
             return None
-        # Temporary compatibility guard: the global phone index still exists.
-        # Even expired OPEN rows from other followups must remain untouched.
-        if db.scalar(select(Conversation.id).where(Conversation.telefone == phone,
-                Conversation.acompanhamento_whatsapp_id != identity, Conversation.status.in_(OPEN))): return None
         # Expire only the requested followup; replies cannot extend its window.
         for old in db.scalars(select(Conversation).where(Conversation.acompanhamento_whatsapp_id == identity, Conversation.status.in_(OPEN)).order_by(Conversation.id).with_for_update()):
             if old.expires_at <= now: old.status = 'EXPIRADA'
@@ -274,13 +273,4 @@ class WhatsAppMentalService:
 
 
 def dispatch(db, sender, content, legacy, *, message_id=None, observation=None):
-    phone = normalizar_telefone(sender)
-    lock_phone(db, phone)
-    identity = db.scalar(select(Conversation.id).where(Conversation.telefone == phone, Conversation.status.in_(OPEN)))
-    if identity is None:
-        if observation is not None:
-            observation['resolucao'] = 'LEGADO_SEM_CONVERSA'
-        return legacy(db, sender, content)
-    if observation is not None:
-        observation.update(resolucao='CONTEXTUAL_ATUAL', conversa_contextual_id=identity)
-    return WhatsAppMentalService().receive(db, identity, content, message_id=message_id)
+    raise CheckinInvalid('SELECTED_INGRESS_REQUIRED')

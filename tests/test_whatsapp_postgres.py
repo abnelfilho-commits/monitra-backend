@@ -38,6 +38,14 @@ class WhatsAppPostgresTests(unittest.TestCase):
         with self.admin.begin() as conn: conn.execute(text('CREATE SCHEMA '+self.schema))
         self.engine=create_engine(URL,connect_args={'options':'-c search_path='+self.schema+',public'})
         Base.metadata.create_all(self.engine)
+        spec=importlib.util.spec_from_file_location('runtime_migration','alembic_canonical/versions/e14b_close_v1.py')
+        migration=importlib.util.module_from_spec(spec);spec.loader.exec_module(migration)
+        with self.engine.begin() as conn:
+            conn.execute(text('DROP INDEX ix_wcc_aberta_telefone'))
+            conn.execute(text("CREATE UNIQUE INDEX uq_wcc_aberta_telefone ON whatsapp_conversas_contextuais(telefone) WHERE status IN ('AGUARDANDO_ACEITE','EM_ANDAMENTO')"))
+            with Operations.context(MigrationContext.configure(conn)):migration.upgrade()
+        from whatsapp_runtime_fixture import activate
+        activate(self.engine)
         self.db=Session(self.engine)
         self.db.add(Clinica(id=1,nome='Synthetic'));self.db.flush()
         self.db.add_all([ModuloClinico(id=i,nome=str(i),slug=str(i),ativo=True) for i in (1,2)])
@@ -165,7 +173,7 @@ class WhatsAppPostgresTests(unittest.TestCase):
         c.paciente_id=None;self.db.commit()
         from app.services.whatsapp_referencia import UNAVAILABLE
         self.assertEqual(process_message(self.db,'unbound','12345','556500000000','1',ref),UNAVAILABLE)
-        self.assertEqual(self.db.get(WhatsAppMensagem,'unbound').resolucao_motivo,'SEM_VINCULO_ASSISTENCIAL')
+        self.assertEqual(self.db.get(WhatsAppMensagem,'unbound').resolucao_motivo,'REFERENCIA_DESATUALIZADA')
 
     def test_explicit_reference_denies_reused_episode(self):
         c,ref=self.reference_legacy()
@@ -193,7 +201,7 @@ class WhatsAppPostgresTests(unittest.TestCase):
         self.db.query(WhatsAppMensagemRoteavel).filter_by(wamid=ref).one().legado_estado_sha256=None;self.db.commit()
         from app.services.whatsapp_referencia import UNAVAILABLE
         self.assertEqual(process_message(self.db,'legacy-insufficient','12345','556500000000','1',ref),UNAVAILABLE)
-        self.assertEqual(self.db.get(WhatsAppMensagem,'legacy-insufficient').resolucao_motivo,'EVIDENCIA_LEGADA_INSUFICIENTE')
+        self.assertEqual(self.db.get(WhatsAppMensagem,'legacy-insufficient').resolucao_motivo,'REFERENCIA_DESATUALIZADA')
 
     def test_explicit_reference_denies_changed_patient_with_unchanged_timestamp(self):
         c,ref=self.reference_legacy()
@@ -215,8 +223,9 @@ class WhatsAppPostgresTests(unittest.TestCase):
         self.assertEqual(original,legacy_state(c))
         ref='wamid.race-'+uuid.uuid4().hex
         def sent(*args, **kwargs):
-            with self.engine.begin() as connection:
+            with Session(self.engine) as connection:
                 connection.execute(text("UPDATE whatsapp_conversas SET etapa_atual='CARDIO_0' WHERE id=:i"),{'i':c.id})
+                connection.commit()
             return {'messages':[{'id':ref}],'contacts':[{'input':c.telefone,'wa_id':c.telefone}]}
         with patch('app.services.whatsapp_sender_service.WhatsAppSenderService.enviar_texto',side_effect=sent):
             deliver_reply(self.db,'race-start',c.telefone)
@@ -227,7 +236,7 @@ class WhatsAppPostgresTests(unittest.TestCase):
 
     def test_explicit_reference_unknown_never_reaches_legacy(self):
         from app.services.whatsapp_referencia import UNAVAILABLE
-        with patch('app.services.whatsapp_ingress.processar_mensagem',side_effect=AssertionError('fallback')):
+        with patch('app.services.whatsapp_conversation_service.processar_mensagem',side_effect=AssertionError('fallback')):
             self.assertEqual(process_message(self.db,'unknown-ref','12345','5565999990002','oi','wamid.unknown'),UNAVAILABLE)
         self.assertEqual(self.db.query(WhatsAppConversa).count(),0)
 
@@ -304,12 +313,12 @@ class WhatsAppPostgresTests(unittest.TestCase):
         self.assertEqual(self.db.query(WhatsAppConversa).count(),1)
 
     def test_failed_transaction_rolls_back_receipt_and_conversation(self):
-        from app.services import whatsapp_ingress
-        original=whatsapp_ingress.processar_mensagem
+        from app.services import whatsapp_conversation_service
+        original=whatsapp_conversation_service.processar_mensagem
         def fail(db,*args,**kwargs):
             original(db,*args,**kwargs)
             raise RuntimeError('synthetic failure')
-        with patch.object(whatsapp_ingress,'processar_mensagem',side_effect=fail):
+        with patch.object(whatsapp_conversation_service,'processar_mensagem',side_effect=fail):
             with self.assertRaises(RuntimeError):
                 process_message(self.db,'failure','12345','5565999990002','oi')
         self.assertEqual(self.db.query(WhatsAppMensagem).count(),0)

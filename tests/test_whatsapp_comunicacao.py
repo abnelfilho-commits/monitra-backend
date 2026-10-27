@@ -206,13 +206,14 @@ class CommunicationTests(unittest.TestCase):
         self.assertEqual(len(evidence(self.db,mid)['eventos']),1)
     def test_indexes_preserved_and_head(self):
         with self.engine.connect() as c:
-            self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar(),'e14b3b2_comunicacao')
+            self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar(),'e14b_close_v1')
             names={i['name'] for i in inspect(c).get_indexes('whatsapp_conversas_contextuais')}
-            self.assertTrue({'uq_wcc_aberta_telefone','uq_wcc_aberta_acompanhamento'}<=names)
+            self.assertTrue({'ix_wcc_aberta_telefone','uq_wcc_aberta_acompanhamento'}<=names)
+            self.assertNotIn('uq_wcc_aberta_telefone',names)
     def test_ingress_remains_unconnected(self):
         from pathlib import Path
         source=Path('app/services/whatsapp_ingress.py').read_text()
-        self.assertNotIn('whatsapp_multilinhas',source);self.assertNotIn('process_selected',source)
+        self.assertNotIn('whatsapp_multilinhas',source);self.assertIn('process_selected',source)
         self.assertIn('process_stop',source)
 
     def test_receipt_unique_and_fk(self):

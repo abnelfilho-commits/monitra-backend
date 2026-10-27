@@ -25,7 +25,7 @@ class ReferenceTests(unittest.TestCase):
     def setUp(self):
         delivery.DeliveryTests.setUp(self)
         self.phone=self.db.get(Conversation,self.cid).telefone
-        self.wa='556500000000'
+        self.wa='5565'+str(self.cid).zfill(8)  # Each fixture owns its transport identity.
         self.ref='wamid.'+uuid4().hex
         self.mid='inbound-'+uuid4().hex
         capture(self.db,{'messages':[{'id':self.ref}], 'contacts':[{'input':self.phone,'wa_id':self.wa}]},
@@ -35,7 +35,7 @@ class ReferenceTests(unittest.TestCase):
     def receive(self, **changes):
         args=dict(identity=self.mid,recipient='12345',sender=self.wa,content='SIM',context_wamid=self.ref)
         args.update(changes)
-        with patch('app.services.whatsapp_ingress.processar_mensagem',side_effect=AssertionError('NO FALLBACK')):
+        with patch('app.services.whatsapp_conversation_service.processar_mensagem',side_effect=AssertionError('NO FALLBACK')):
             return process_message(self.db,**args)
 
     def refused(self,reason,**changes):
@@ -56,7 +56,7 @@ class ReferenceTests(unittest.TestCase):
             self.assertEqual((row.resolucao,row.conversa_contextual_id,row.context_wamid),('REFERENCIA_CONTEXTUAL',self.cid,self.ref))
 
     def test_incompatible_sender(self):
-        self.refused('IDENTIDADE_INCOMPATIVEL',sender='5511999999999')
+        self.refused('IDENTIDADE_RECUSADA',sender='5511999999999')
 
     def test_different_emitter(self):
         self.refused('REFERENCIA_DESCONHECIDA',recipient='99999')
@@ -84,7 +84,7 @@ class ReferenceTests(unittest.TestCase):
         from app.models.whatsapp_transporte import WhatsAppMensagemRoteavel
         row=self.db.scalar(select(WhatsAppMensagemRoteavel).where(WhatsAppMensagemRoteavel.wamid==self.ref))
         row.evidencia_estado='AUSENTE';row.wa_id=None;self.db.commit()
-        self.refused('IDENTIDADE_INCOMPATIVEL')
+        self.refused('IDENTIDADE_RECUSADA')
 
     def test_absent_contacts_exact_destination(self):
         from app.models.whatsapp_transporte import WhatsAppMensagemRoteavel
@@ -110,7 +110,7 @@ class ReferenceTests(unittest.TestCase):
         self.assertEqual(self.db.query(Receipt).filter_by(message_id=self.mid).count(),1)
 
     def test_without_reference_keeps_dispatch(self):
-        self.assertNotEqual(process_message(self.db,self.mid,'12345',self.phone,'SIM'),UNAVAILABLE)
+        self.assertNotEqual(process_message(self.db,self.mid,'12345',self.wa,'SIM'),UNAVAILABLE)
         self.assertEqual(self.db.get(Receipt,self.mid).resolucao,'CONTEXTUAL_ATUAL')
 
     def test_parar_delegates_unchanged(self):
@@ -139,13 +139,13 @@ class ReferenceTests(unittest.TestCase):
         from app.models.whatsapp_transporte import WhatsAppMensagemRoteavel
         row=self.db.scalar(select(WhatsAppMensagemRoteavel).where(WhatsAppMensagemRoteavel.wamid==self.ref))
         row.evidencia_estado='INVALIDA';row.wa_id=None;self.db.commit()
-        self.refused('IDENTIDADE_INCOMPATIVEL',sender=self.phone)
+        self.refused('IDENTIDADE_RECUSADA',sender=self.phone)
 
     def test_evidence_for_different_destination_cannot_select_patient(self):
         from app.models.whatsapp_transporte import WhatsAppMensagemRoteavel
         row=self.db.scalar(select(WhatsAppMensagemRoteavel).where(WhatsAppMensagemRoteavel.wamid==self.ref))
         row.destinatario_solicitado='5511999999999';self.db.commit()
-        self.refused('IDENTIDADE_INCOMPATIVEL')
+        self.refused('IDENTIDADE_RECUSADA')
 
     def test_signed_webhook_reference(self):
         import os

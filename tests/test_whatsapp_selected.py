@@ -143,7 +143,7 @@ class SelectedTests(unittest.TestCase):
     def test_reference_without_clinical_link(self):
         c=self.legacy();c.paciente_id=None;c.etapa_atual='INICIO';self.db.commit()
         e=self.evidence(legacy=c.id);self.run_message(reference=e.wamid)
-        self.assertEqual(self.outcome(),'SEM_VINCULO_ASSISTENCIAL')
+        self.assertEqual(self.outcome(),'NAVEGACAO')
     def test_explicit_conflicting_identity_is_refused(self):
         e=self.evidence(mental=self.cid);self.evidence(mental=self.cid,sender='551100000005')
         self.run_message(reference=e.wamid);self.assertEqual(self.outcome(),'IDENTIDADE_RECUSADA')
@@ -173,7 +173,7 @@ class SelectedTests(unittest.TestCase):
         c=self.legacy(phone=('55119'+str(self.cid).zfill(8)));cid=c.id
         self.db.delete(c);self.db.commit()
         self.run_message(content='OI',sender=('55119'+str(self.cid).zfill(8)))
-        self.assertEqual(self.outcome(),'NAVEGACAO_REQUER_PLANO')
+        self.assertEqual(self.outcome(),'NAVEGACAO_NOVA')
         self.assertIsNone(self.db.get(WhatsAppConversa,cid))
 
     def separate_legacy(self, phone, different_institution=False):

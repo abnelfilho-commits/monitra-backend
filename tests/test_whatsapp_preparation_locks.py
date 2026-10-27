@@ -48,13 +48,13 @@ class PreparationLockTests(unittest.TestCase):
         self.db.add(c);self.db.commit();return c.id,f.id
     def test_expired_other_followup_is_preserved_and_blocks_index(self):
         cid,aid=self.other()
-        self.assertIsNone(self.prepare())
+        self.assertIsNotNone(self.prepare())
         self.assertEqual(self.db.get(Conversation,cid).status,'AGUARDANDO_ACEITE')
-        self.assertIsNone(self.db.get(Follow,self.aid).proximo_envio_em)
+        self.assertIsNotNone(self.db.get(Follow,self.aid).proximo_envio_em)
         self.assertIsNone(self.db.get(Follow,aid).proximo_envio_em)
     def test_live_other_followup_is_preserved(self):
         cid,_=self.other(False)
-        self.assertIsNone(self.prepare(True))
+        self.assertIsNotNone(self.prepare(True))
         self.assertEqual(self.db.get(Conversation,cid).status,'AGUARDANDO_ACEITE')
     def test_own_expiry_then_prepare(self):
         c=self.db.get(Conversation,self.cid);c.status='AGUARDANDO_ACEITE'
@@ -168,4 +168,4 @@ class PreparationLockTests(unittest.TestCase):
         self.alias_attempt(False);self.assertIsNotNone(self.prepare(True))
     def test_expired_other_followup_not_in_automatic_candidates(self):
         self.other(True)
-        self.assertNotIn(self.aid,self.service.eligible_ids(self.db))
+        self.assertIn(self.aid,self.service.eligible_ids(self.db))

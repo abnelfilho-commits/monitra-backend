@@ -322,6 +322,7 @@ def processar_mensagem(db, telefone, mensagem, *, observation=None, selected=Non
     try:
         return _processar_mensagem(db, telefone, mensagem, observation=observation, selected=selected)
     except ValueError:
+        if selected is not None: raise
         return 'Não foi possível validar este acompanhamento. Procure a equipe responsável.'
 
 

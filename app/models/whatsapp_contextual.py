@@ -56,5 +56,5 @@ class WhatsAppConversaContextual(Base):
         CheckConstraint("status IN ('AGUARDANDO_ACEITE','EM_ANDAMENTO','CONCLUIDA','EXPIRADA','CANCELADA')", name='ck_wcc_status'),
         CheckConstraint('expires_at > created_at', name='ck_wcc_janela'),
         Index('uq_wcc_aberta_acompanhamento','acompanhamento_whatsapp_id',unique=True,postgresql_where=text(OPEN)),
-        Index('uq_wcc_aberta_telefone','telefone',unique=True,postgresql_where=text(OPEN)),
+        Index('ix_wcc_aberta_telefone','telefone',postgresql_where=text(OPEN)),
     )

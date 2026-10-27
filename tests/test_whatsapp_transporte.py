@@ -161,7 +161,7 @@ class TransportPostgresTests(unittest.TestCase):
     def test_model_and_index_preserved(self):
         inspector=inspect(self.engine)
         self.assertEqual({x['name'] for x in inspector.get_columns(Message.__tablename__)},set(Message.__table__.c.keys()))
-        self.assertTrue(any(x['name']=='uq_wcc_aberta_telefone' and x['unique'] for x in inspector.get_indexes('whatsapp_conversas_contextuais')))
+        self.assertTrue(any(x['name']=='ix_wcc_aberta_telefone' and not x['unique'] for x in inspector.get_indexes('whatsapp_conversas_contextuais')))
 
 
 @unittest.skipUnless(delivery.foundation.URL, 'Exclusive disposable PostgreSQL required')

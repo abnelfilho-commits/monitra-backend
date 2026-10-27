@@ -115,6 +115,8 @@ def blocked(db, emitter, phone, *, follow_id=None):
 def require_output(db, emitter, phone, *, conversation_id=None, invitation=False):
     """Caller already owns coordinate() before any care/receipt row lock."""
     from app.services.whatsapp_autorizacao import require_prior_authorization
+    from app.services.whatsapp_runtime import require_active
+    require_active(db)
     follow = None
     if conversation_id is not None:
         conversation = db.get(Conversation, conversation_id, populate_existing=True)
