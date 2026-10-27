@@ -311,6 +311,14 @@ def iniciar_datas(
     )
 
 def processar_mensagem(db, telefone, mensagem, *, observation=None, selected=None):
+    from app.services.whatsapp_stop import is_stop, BLOCKED
+    from app.services.checkin_bem_estar import CheckinInvalid
+    from app.services.whatsapp_comunicacao import blocked
+    import os
+    if is_stop(mensagem):
+        raise CheckinInvalid('STOP_REQUIRES_AUTHENTICATED_INGRESS')
+    if blocked(db, os.getenv('WHATSAPP_PHONE_NUMBER_ID', ''), normalizar_telefone(telefone)):
+        return BLOCKED
     try:
         return _processar_mensagem(db, telefone, mensagem, observation=observation, selected=selected)
     except ValueError:

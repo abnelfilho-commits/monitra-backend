@@ -153,11 +153,13 @@ class AuthorizationTests(unittest.TestCase):
         phone=self.db.get(Follow,self.aid).telefone;self.db.rollback()
         process_message(self.db,identity,'12345',phone,'PARAR')
         process_message(self.db,identity,'12345',phone,'PARAR')
-        rows=self.rows();self.assertEqual(len(rows),2)
-        self.assertEqual(rows[-1].origem,'WHATSAPP_PARAR');self.assertEqual(rows[-1].mensagem_id,identity)
-        self.assertIsNone(rows[-1].usuario_id);self.assertEqual(rows[-1].conversa_id,self.cid)
-        with self.assertRaisesRegex(CheckinInvalid,'FOLLOW_UP_NOT_ELIGIBLE'):
-            self.grant(key=uuid4().hex,payload=evidence(now_utc(self.db)))
+        rows=self.rows();self.assertEqual(len(rows),1)
+        self.assertEqual(rows[0].estado,'AUTORIZADA')
+        from app.services.whatsapp_comunicacao import read
+        state=read(self.db,self.scope)
+        self.assertEqual(state['estado'],'WHATSAPP_INTERROMPIDO')
+        self.assertEqual(len(state['eventos']),1)
+        self.assertEqual(self.db.get(Follow,self.aid).status,'ATIVO')
         self.db.rollback()
 
     def test_sim_does_not_create_or_change_prior_authorization(self):

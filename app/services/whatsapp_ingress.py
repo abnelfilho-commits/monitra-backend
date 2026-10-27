@@ -73,6 +73,9 @@ def process_message(db, identity, recipient, sender, content, context_wamid=None
     Durable executions block retries after uncertain transport failure; clinical writes
     and conversation transitions are processed only once per message identity.
     """
+    from app.services.whatsapp_stop import is_stop, process as process_stop
+    if is_stop(content):
+        return process_stop(db, identity, recipient, sender, content, context_wamid)
     try:
         # Transport coordination precedes existing routing/clinical locks.
         from app.services.whatsapp_comunicacao import coordinate

@@ -216,15 +216,15 @@ class WhatsAppMentalService:
         return deliver(db, identity, context, explicit_retry=explicit_retry)
 
     def receive(self, db, identity, content, *, message_id=None):
+        from app.services.whatsapp_stop import is_stop, BLOCKED
+        if is_stop(content):
+            raise CheckinInvalid('STOP_REQUIRES_AUTHENTICATED_INGRESS')
+        from app.services.whatsapp_comunicacao import blocked
+        import os
         a, conversation, c, patient, person, now = lock_execution_scope(db, identity)
+        if blocked(db, os.getenv('WHATSAPP_PHONE_NUMBER_ID', ''), conversation.telefone, follow_id=a.id):
+            return BLOCKED
         if conversation.status not in OPEN: return 'Esta execução já foi encerrada.'
-        if content.strip().upper() == 'PARAR':
-            from app.services.whatsapp_autorizacao import revoke_internal
-            revoke_internal(db, a, origin='WHATSAPP_PARAR', reason='PARAR', conversation=conversation.id, message=message_id)
-            a.status, a.consentimento_status, a.revogado_em = 'ENCERRADO', 'REVOGADO', now
-            conversation.status = 'CANCELADA'
-            db.flush()
-            return 'Acompanhamento WhatsApp encerrado. Não enviaremos novos convites.'
         if conversation.expires_at <= now:
             conversation.status = 'EXPIRADA'
             db.flush()
@@ -238,8 +238,8 @@ class WhatsAppMentalService:
             if answer == 'NAO':
                 conversation.status = 'CANCELADA'
                 db.flush()
-                return 'Tudo bem. Este check-in foi cancelado. Envie PARAR durante um próximo convite para encerrar o acompanhamento.'
-            if answer != 'SIM': return 'Integra Care — Check-in de Bem-Estar. Aceita participar? 1. Sim 2. Não. PARAR encerra o acompanhamento.'
+                return 'Tudo bem. Este check-in foi cancelado. Envie PARAR para interromper as comunicações por WhatsApp.'
+            if answer != 'SIM': return 'Integra Care — Check-in de Bem-Estar. Aceita participar? 1. Sim 2. Não. PARAR interrompe as comunicações por WhatsApp.'
             a.consentimento_status = 'CONSENTIDO'
             if a.consentido_em is None: a.consentido_em = now
             conversation.status, conversation.etapa_atual = 'EM_ANDAMENTO', ORDER[0]

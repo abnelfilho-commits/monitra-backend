@@ -115,13 +115,13 @@ class ReferenceTests(unittest.TestCase):
 
     def test_parar_delegates_unchanged(self):
         self.receive(content='PARAR')
-        self.assertEqual(self.db.get(Conversation,self.cid).status,'CANCELADA')
-        self.assertEqual(self.db.execute(text('SELECT consentimento_status FROM acompanhamentos_whatsapp WHERE id=(SELECT acompanhamento_whatsapp_id FROM whatsapp_conversas_contextuais WHERE id=:i)'),{'i':self.cid}).scalar(),'REVOGADO')
+        self.assertEqual(self.db.get(Conversation,self.cid).status,'AGUARDANDO_ACEITE')
+        self.assertEqual(self.db.execute(text('SELECT consentimento_status FROM acompanhamentos_whatsapp WHERE id=(SELECT acompanhamento_whatsapp_id FROM whatsapp_conversas_contextuais WHERE id=:i)'),{'i':self.cid}).scalar(),'PENDENTE')
 
     def test_parar_preserves_canonical_revocation_after_temporal_expiry(self):
         self.db.execute(text("UPDATE whatsapp_conversas_contextuais SET created_at=clock_timestamp()-interval '2 days',expires_at=clock_timestamp()-interval '1 day' WHERE id=:i"),{'i':self.cid});self.db.commit();self.db.expire_all()
         self.receive(content='PARAR')
-        self.assertEqual(self.db.get(Conversation,self.cid).status,'CANCELADA')
+        self.assertEqual(self.db.get(Conversation,self.cid).status,'AGUARDANDO_ACEITE')
         self.assertEqual(self.db.get(Receipt,self.mid).conversa_contextual_id,self.cid)
 
     def test_receipt_and_clinical_atomic_rollback(self):

@@ -50,6 +50,10 @@ def refuse(observation, reason):
 
 
 def resolve(db, emitter, sender, reference, content, *, message_id, observation):
+    from app.services.whatsapp_stop import is_stop
+    from app.services.checkin_bem_estar import CheckinInvalid
+    if is_stop(content):
+        raise CheckinInvalid('STOP_REQUIRES_AUTHENTICATED_INGRESS')
     row = evidence(db, emitter, reference)
     if row is None:
         return refuse(observation, 'REFERENCIA_DESCONHECIDA')
@@ -60,12 +64,11 @@ def resolve(db, emitter, sender, reference, content, *, message_id, observation)
             return refuse(observation, 'IDENTIDADE_INCOMPATIVEL')
         if a.telefone != conversation.telefone or conversation.paciente_id != a.paciente_id or conversation.contexto_assistencial_id != a.contexto_assistencial_id:
             return refuse(observation, 'VINCULO_INCOMPATIVEL')
-        stop = content.strip().upper() == 'PARAR'
-        if conversation.status not in OPEN or (conversation.expires_at <= now and not stop):
+        if conversation.status not in OPEN or conversation.expires_at <= now:
             return refuse(observation, 'CONVERSA_INDISPONIVEL')
-        if not stop and not valid_scope(db, a, context, patient, person, now):
+        if not valid_scope(db, a, context, patient, person, now):
             return refuse(observation, 'ACOMPANHAMENTO_INDISPONIVEL')
-        # The clinical receiver continues to own SIM/PARAR and all transitions.
+        # The clinical receiver continues to own SIM and clinical transitions.
         response = WhatsAppMentalService().receive(db, conversation.id, content, message_id=message_id)
         observation.update(resolucao='REFERENCIA_CONTEXTUAL', conversa_contextual_id=conversation.id)
         return response

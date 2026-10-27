@@ -1,4 +1,4 @@
-"""Communication controls; interruption entry point is NOT connected to ingress.
+"""Durable communication controls; PARAR is integrated by whatsapp_stop.
 
 The ledger is the timeline source of truth, not a clinical record. Callers commit
 atomically with the receipt. No automatic replies, grants or clinical transitions.
@@ -152,51 +152,10 @@ def append(db, *, scope, emitter, phone, state, key, fingerprint, follow=None,
     return row
 
 
-def interrupt(db, *, message_id, emitter, sender, content, context_wamid=None):
-    """Dormant authenticated-ingress command; existing receipt must match exactly.
-
-    Explicit reference uses the Stage 2 identity contract. Without reference the
-    Stage 3A resolver is used ONLY to propose a communication target, never to
-    dispatch clinical data. Ambiguity produces a recipient barrier, no timeline.
-    """
-    if content.strip().upper() != 'PARAR': raise CheckinInvalid('STOP_REQUIRED')
-    coordinate(db, emitter, sender, operation=message_id)
-    receipt = db.get(Receipt, message_id)
-    expected = digest(json.dumps([emitter,sender,content,context_wamid],ensure_ascii=False))
-    if not receipt or receipt.phone_number_id != emitter or receipt.fingerprint_versao != 2 or receipt.fingerprint != expected or receipt.context_wamid != context_wamid:
-        raise CheckinInvalid('RECEIPT_IDENTITY_CONFLICT')
-    key = digest('stop:' + message_id)
-    previous = db.scalar(select(Event).where(Event.chave == key))
-    if previous:
-        if previous.comando_sha256 != expected: raise CheckinInvalid('IDEMPOTENCY_CONFLICT')
-        return previous
-    selected = None
-    if context_wamid:
-        from app.services.whatsapp_referencia import evidence, identity_matches
-        row = evidence(db, emitter, context_wamid)
-        if row is None or not row.conversa_contextual_id: raise CheckinInvalid('MENTAL_REFERENCE_REQUIRED')
-        conversation = db.get(Conversation, row.conversa_contextual_id)
-        if not conversation or not identity_matches(db,row,sender,conversation.telefone):
-            raise CheckinInvalid('TRANSPORT_IDENTITY_CONFLICT')
-        selected = conversation.id
-    else:
-        from app.services.whatsapp_multilinhas import resolve
-        decision = resolve(db, emitter, sender, 'SIM')
-        if decision.outcome == 'UNICA' and decision.selected[0] == 'MENTAL':
-            selected = decision.selected[1]
-        elif decision.outcome != 'AMBIGUA':
-            raise CheckinInvalid('MENTAL_STOP_UNRESOLVED')
-    follow = None
-    if selected is not None:
-        from app.services.whatsapp_mental import lock_execution_scope, OPEN
-        follow, conversation, context, patient, person, now = lock_execution_scope(db, selected)
-        if (not context or not person or not context.ativo or not person.ativo
-            or follow.paciente_id != conversation.paciente_id or follow.contexto_assistencial_id != conversation.contexto_assistencial_id
-            or follow.telefone != conversation.telefone or conversation.status not in OPEN):
-            raise CheckinInvalid('MENTAL_STOP_UNAVAILABLE')
-    scope = follow_scope(follow.id) if follow else recipient_scope(emitter, sender)
-    return append(db,scope=scope,emitter=emitter,phone=sender,state='INTERROMPIDA',
-                  key=key,fingerprint=expected,follow=follow,message=message_id)
+def interrupt(db, **command):
+    """Compatibility entry to the authenticated communication stop command."""
+    from app.services.whatsapp_stop import interrupt as stop
+    return stop(db, **command)
 
 
 def reactivate(db, context, key, payload):

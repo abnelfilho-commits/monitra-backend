@@ -116,15 +116,15 @@ class MentalWhatsAppTests(unittest.TestCase):
     def test_stop_before_and_during_questionnaire(self):
         self.prepare();self.incoming('sim');self.incoming('PARAR')
         a=self.db.get(Follow,self.aid)
-        self.assertEqual((a.status,a.consentimento_status),('ENCERRADO','REVOGADO'))
-        self.assertIsNotNone(a.revogado_em)
-        self.assertEqual(self.db.get(Conversation,self.cid).status,'CANCELADA')
+        self.assertEqual((a.status,a.consentimento_status),('ATIVO','CONSENTIDO'))
+        self.assertIsNone(a.revogado_em)
+        self.assertEqual(self.db.get(Conversation,self.cid).status,'EM_ANDAMENTO')
         self.assertIsNone(self.w.prepare(self.db,self.aid))
         self.assertEqual(self.counts(),(0,0,0))
 
     def test_stop_at_invitation(self):
         self.prepare();self.incoming('PARAR')
-        self.assertEqual(self.db.get(Follow,self.aid).consentimento_status,'REVOGADO')
+        self.assertEqual(self.db.get(Follow,self.aid).consentimento_status,'PENDENTE')
 
     def test_fixed_expiry_no_partial_record_and_future_fallback(self):
         self.prepare();self.incoming('sim');self.incoming('1')

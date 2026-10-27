@@ -60,7 +60,7 @@ class CommunicationTests(unittest.TestCase):
     def test_stop_no_clinical_or_authorization_mutation(self):
         mid=self.receipt();before=self.snapshot()
         self.stop(mid);self.db.commit()
-        self.assertEqual({k:v[1] for k,v in before.items()},{k:v[1] for k,v in self.snapshot().items()})
+        self.assertEqual({k:v[1] for k,v in before.items() if k != 'whatsapp_mensagens'},{k:v[1] for k,v in self.snapshot().items() if k != 'whatsapp_mensagens'})
         c=self.db.get(Conversation,self.cid);a=self.db.get(Follow,c.acompanhamento_whatsapp_id)
         self.assertEqual(c.status,'AGUARDANDO_ACEITE');self.assertEqual(a.status,'ATIVO')
         self.assertEqual(a.consentimento_status,'PENDENTE')
@@ -81,8 +81,10 @@ class CommunicationTests(unittest.TestCase):
         self.assertEqual(read(self.db,self.scope)['estado'],'WHATSAPP_INTERROMPIDO')
     def test_heuristic_alias_rejected(self):
         self.sender='5511'+str(self.cid).zfill(8)
-        with self.assertRaises(CheckinInvalid):self.stop()
-        self.db.rollback()
+        row=self.stop();self.db.commit()
+        self.assertIsNone(row.acompanhamento_id)
+        self.assertTrue(blocked(self.db,self.emitter,self.sender))
+        self.assertFalse(blocked(self.db,self.emitter,self.phone))
     def test_stop_duplicate_one_event(self):
         mid=self.receipt();a=self.stop(mid);identity=a.id;self.db.commit()
         self.assertEqual(self.stop(mid).id,identity);self.db.commit()
@@ -210,7 +212,8 @@ class CommunicationTests(unittest.TestCase):
     def test_ingress_remains_unconnected(self):
         from pathlib import Path
         source=Path('app/services/whatsapp_ingress.py').read_text()
-        self.assertNotIn('whatsapp_multilinhas',source);self.assertNotIn('interrupt(',source)
+        self.assertNotIn('whatsapp_multilinhas',source);self.assertNotIn('process_selected',source)
+        self.assertIn('process_stop',source)
 
     def test_receipt_unique_and_fk(self):
         row=self.stop();self.db.commit()
@@ -376,5 +379,6 @@ class CommunicationTests(unittest.TestCase):
         with self.assertRaises(CheckinDenied):read(self.db,self.scope)
     def test_unknown_reference_never_selects_another_followup(self):
         ref='wamid.unknown';mid=self.receipt(reference=ref)
-        with self.assertRaises(CheckinInvalid):self.stop(mid,ref)
-        self.db.rollback();self.assertEqual(read(self.db,self.scope)['eventos'],[])
+        self.stop(mid,ref);self.db.commit()
+        state=read(self.db,self.scope)
+        self.assertEqual(state['eventos'],[]);self.assertTrue(state['bloqueio_preventivo'])

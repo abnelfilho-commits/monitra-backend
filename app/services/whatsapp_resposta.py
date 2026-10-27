@@ -13,6 +13,10 @@ def deliver(db, identity, sender):
     from app.services.whatsapp_convite_envio import capture_wamid
     emitter = os.getenv('WHATSAPP_PHONE_NUMBER_ID','')
     try:
+        from app.models.whatsapp_resolucao import WhatsAppResolucao
+        decision = db.get(WhatsAppResolucao, identity)
+        if decision is not None and decision.decisao.get('operation') == 'PARAR':
+            db.rollback();return False  # A durable stop never authorizes outbound IO.
         coordinate(db,emitter,sender,operation='reply:'+identity)
         initial=db.get(Receipt,identity)
         if initial is None or initial.phone_number_id != emitter:
