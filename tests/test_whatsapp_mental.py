@@ -96,6 +96,13 @@ class MentalWhatsAppTests(unittest.TestCase):
         self.assertEqual((p.canal,p.modalidade,p.registrador_profissional_id,p.registrador_pessoa_id),('WHATSAPP','AUTORRELATO',None,self.person))
         c=self.db.get(Conversation,self.cid)
         self.assertEqual(c.status,'CONCLUIDA');self.assertEqual(c.expires_at,expiry)
+        from app.services.checkin_bem_estar import CheckinBemEstarService
+        persisted = self.db.execute(text('SELECT data_registro, criado_em FROM registros_longitudinais WHERE id=:i'), {'i': p.registro_id}).one()
+        outputs = CheckinBemEstarService.read_outputs(self.db.execute(CheckinBemEstarService.read_query()))
+        output = next(item for item in outputs[self.open] if item.id == p.registro_id)
+        self.assertEqual(output.data_registro, persisted.data_registro)
+        self.assertEqual(output.data_hora.replace(tzinfo=None), persisted.criado_em)
+
         self.assertEqual(c.respostas_json['humor'],'MUITO_RUIM');self.assertEqual(c.respostas_json['pedido_ajuda'],'SIM')
         self.assertIsNone(self.db.scalar(text('SELECT criado_por_usuario_id FROM registros_longitudinais WHERE id=:id'),{'id':p.registro_id}))
 

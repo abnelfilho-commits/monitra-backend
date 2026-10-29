@@ -1,15 +1,30 @@
 """Real canonical persistence and lifecycle races on disposable PostgreSQL 18."""
 import os
+from datetime import datetime, timezone
 import unittest
 from unittest.mock import patch
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from app.schemas.checkin_bem_estar import CheckinCreate
+from app.schemas.checkin_bem_estar import CheckinCreate, CheckinOut
 from app.services.checkin_bem_estar import CheckinBemEstarService, CheckinDenied
 from app.services.checkin_contract import FIELDS
 import test_saude_mental as foundation
+
+
+class CheckinDateContractTests(unittest.TestCase):
+    def test_missing_date_remains_compatible_and_null(self):
+        payload = dict(id=1, data_hora='2026-10-29T00:30:00Z', baseline=True,
+                       respondente_pessoa_id=1, registrador_profissional_id=None,
+                       canal='WHATSAPP', modalidade='AUTORRELATO', respostas={})
+        for extra in ({}, {'data_registro': None}):
+            output = CheckinOut(**payload, **extra)
+            self.assertIsNone(output.data_registro)
+            self.assertIsNone(output.model_dump(mode='json')['data_registro'])
+        dated = CheckinOut(**payload, data_registro='2020-02-29')
+        self.assertEqual(dated.model_dump(mode='json')['data_registro'], '2020-02-29')
+        self.assertNotEqual(dated.data_registro, dated.data_hora.date())
 
 
 @unittest.skipUnless(os.getenv('M0_TEST_POSTGRES_URL'),'Disposable PostgreSQL 18 required')
@@ -52,6 +67,19 @@ class CheckinTests(unittest.TestCase):
         journey=self.client.get(self.path()).json()['bem_estar']
         self.assertTrue(journey['pode_registrar']);self.assertEqual(journey['checkins'][0]['respostas'],payload['respostas'])
         self.assertNotIn('score',str(journey))
+
+    def test_clinical_date_and_creation_timestamp_are_independent(self):
+        response = self.post()
+        self.assertEqual(response.status_code, 201, response.text)
+        created = response.json()
+        persisted = self.db.execute(text('SELECT data_registro, criado_em FROM registros_longitudinais WHERE id=:i'), {'i': created['id']}).one()
+        self.assertEqual(created['data_registro'], persisted.data_registro.isoformat())
+        self.assertEqual(datetime.fromisoformat(created['data_hora'].replace('Z', '+00:00')), persisted.criado_em.replace(tzinfo=timezone.utc))
+        # Only the disposable test fixture is changed; no production/history backfill.
+        self.db.execute(text("UPDATE registros_longitudinais SET data_registro=DATE '2020-02-29' WHERE id=:i"), {'i': created['id']})
+        read = self.client.get(self.path()).json()['bem_estar']['checkins'][0]
+        self.assertEqual(read['data_registro'], '2020-02-29')
+        self.assertEqual(read['data_hora'], created['data_hora'])
 
     def test_second_allowed_baseline_is_first(self):
         a=self.post();b=self.post()

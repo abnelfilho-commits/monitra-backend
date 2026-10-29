@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 
@@ -28,6 +28,7 @@ class FormularioCheckin(BaseModel):
 class CheckinOut(BaseModel):
     id: int
     data_hora: datetime
+    data_registro: Optional[date] = None
     baseline: bool
     respondente_pessoa_id: int
     registrador_profissional_id: Optional[int]

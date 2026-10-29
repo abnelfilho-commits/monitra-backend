@@ -75,7 +75,7 @@ class CheckinBemEstarService:
         for r, p, name, value in rows:
             items = groups.setdefault(r.contexto_assistencial_id, {})
             if r.id not in items:
-                items[r.id] = CheckinOut(id=r.id, data_hora=r.criado_em.replace(tzinfo=timezone.utc), baseline=not items,
+                items[r.id] = CheckinOut(id=r.id, data_registro=r.data_registro, data_hora=r.criado_em.replace(tzinfo=timezone.utc), baseline=not items,
                     respondente_pessoa_id=p.respondente_pessoa_id, registrador_profissional_id=p.registrador_profissional_id,
                     canal=p.canal, modalidade=p.modalidade, respostas={})
             items[r.id].respostas[name] = value
@@ -187,6 +187,6 @@ class CheckinBemEstarService:
         db.flush()
         # Write and read capabilities are independent: return only this command's result.
         first=db.execute(select(RegistroLongitudinal.id).where(RegistroLongitudinal.contexto_assistencial_id==context,RegistroLongitudinal.modulo_id==3,RegistroLongitudinal.formulario_id==form.id).order_by(RegistroLongitudinal.criado_em,RegistroLongitudinal.id).limit(1)).scalar_one()
-        return CheckinOut(id=record.id,data_hora=now.replace(tzinfo=timezone.utc),baseline=first==record.id,
+        return CheckinOut(id=record.id,data_registro=record.data_registro,data_hora=now.replace(tzinfo=timezone.utc),baseline=first==record.id,
         respondente_pessoa_id=person,registrador_profissional_id=professional_id,canal=channel,modalidade=modality,
         respostas={r.nome_campo:description if r.nome_campo=='evento_descricao' else answers[r.nome_campo] for r in fields if r.nome_campo!='evento_descricao' or description})
