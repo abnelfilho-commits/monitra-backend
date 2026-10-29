@@ -253,7 +253,7 @@ class ActivationTests(unittest.TestCase):
         with self.engine.begin() as c:
             with self.assertRaisesRegex(RuntimeError,'forward recovery'):
                 command.downgrade(config(c),'e14b3b2_comunicacao')
-            self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar(),'e14b_close_v1')
+            self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar(),'mh_weekly_config_v1')
 
 
 @unittest.skipUnless(delivery.foundation.URL, 'Owned disposable PostgreSQL required')

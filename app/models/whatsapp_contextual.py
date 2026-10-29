@@ -1,5 +1,5 @@
 """Contextual WhatsApp configuration and fixed-window executions."""
-from sqlalchemy import (Column, Integer, String, Date, DateTime, JSON, ForeignKey,
+from sqlalchemy import (Column, Integer, String, Date, DateTime, Time, Boolean, JSON, ForeignKey,
                         ForeignKeyConstraint, UniqueConstraint, CheckConstraint, Index, text, func)
 from app.database import Base
 
@@ -17,6 +17,10 @@ class AcompanhamentoWhatsApp(Base):
     revogado_em = Column(DateTime(timezone=True))
     frequencia = Column(String(16), nullable=False, server_default='SEMANAL')
     proximo_envio_em = Column(DateTime(timezone=True))
+    dia_semana = Column(Integer)
+    horario_local = Column(Time(timezone=False))
+    programacao_ativa = Column(Boolean, nullable=False, server_default=text('false'))
+    configurado_por_usuario_id = Column(Integer, ForeignKey('usuarios.id', ondelete='RESTRICT'))
     status = Column(String(16), nullable=False, server_default='ATIVO')
     criado_por_usuario_id = Column(Integer, ForeignKey('usuarios.id', ondelete='RESTRICT'), nullable=False)
     criado_em = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -29,6 +33,8 @@ class AcompanhamentoWhatsApp(Base):
         CheckConstraint("consentimento_status IN ('PENDENTE','CONSENTIDO','REVOGADO')", name='ck_aw_consentimento'),
         CheckConstraint("status IN ('ATIVO','PAUSADO','ENCERRADO')", name='ck_aw_status'),
         CheckConstraint("frequencia = 'SEMANAL'", name='ck_aw_frequencia'),
+        CheckConstraint('dia_semana BETWEEN 0 AND 6', name='ck_aw_dia_semana'),
+        CheckConstraint("(dia_semana IS NULL AND horario_local IS NULL AND configurado_por_usuario_id IS NULL AND NOT programacao_ativa) OR (dia_semana IS NOT NULL AND horario_local IS NOT NULL AND configurado_por_usuario_id IS NOT NULL)", name='ck_aw_programacao'),
         Index('ix_aw_envio', 'status', 'proximo_envio_em'),
     )
 

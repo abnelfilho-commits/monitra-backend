@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_usuario_atual
 from app.database import get_db
 from app.models.whatsapp_contextual import AcompanhamentoWhatsApp, WhatsAppConversaContextual
-from app.schemas.whatsapp_mental import WhatsAppConfig, WhatsAppState
+from app.schemas.whatsapp_mental import WhatsAppConfig, WhatsAppState, WhatsAppProgramacao
 from app.services.whatsapp_mental import WhatsAppMentalService, OPEN
 from app.services.checkin_bem_estar import CheckinDenied, CheckinInvalid
 from app.services.whatsapp_sender_service import invitation_diagnostics
@@ -52,6 +52,12 @@ def state(db: Session = Depends(get_db), context=Depends(scope)):
 @router.put('', response_model=WhatsAppState)
 def configure(payload: WhatsAppConfig, db: Session = Depends(get_db), context=Depends(scope)):
     return command(db, lambda: service.configure(db, payload.telefone, **context))
+
+
+@router.put('/programacao', response_model=WhatsAppState)
+def schedule(payload: WhatsAppProgramacao, db: Session = Depends(get_db), context=Depends(scope)):
+    from app.services.whatsapp_programacao import configure
+    return command(db, lambda: configure(db, payload, **context))
 
 
 @router.post('/pausar', response_model=WhatsAppState)

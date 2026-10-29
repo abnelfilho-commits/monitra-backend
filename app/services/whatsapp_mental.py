@@ -165,7 +165,8 @@ class WhatsAppMentalService:
             Conversation.status.in_(OPEN), Conversation.expires_at > func.clock_timestamp()).exists()
         return tuple(db.scalars(select(Follow.id).join(Context, Context.id == Follow.contexto_assistencial_id)
             .join(Paciente, Paciente.id == Context.paciente_id).join(Pessoa, Pessoa.id == Paciente.pessoa_id)
-            .where(Follow.status == 'ATIVO', Follow.consentimento_status != 'REVOGADO',
+            .where(Follow.dia_semana.is_(None),  # Configured schedules await the approved executor.
+                Follow.status == 'ATIVO', Follow.consentimento_status != 'REVOGADO',
                 Follow.paciente_id == Context.paciente_id, Context.ativo.is_(True), Context.data_fim.is_(None),
                 Context.data_inicio <= func.current_date(), Pessoa.ativo.is_(True), active_line, ~busy_phone, authorized_follow_exists(),
                 or_(Follow.proximo_envio_em.is_(None), Follow.proximo_envio_em <= func.clock_timestamp()))
@@ -185,6 +186,8 @@ class WhatsAppMentalService:
         a = locked(db, Follow, identity)
         now = now_utc(db)
         if a.telefone != phone: raise CheckinInvalid('DESTINATION_CHANGED')
+        if not manual and a.dia_semana is not None:
+            raise CheckinInvalid('WEEKLY_EXECUTION_NOT_ENABLED')
         from app.services.whatsapp_manual import blocking_attempt, require_prior_authorization
         if blocking_attempt(db, phone, follow_id=identity): return None
         if blocked(db, os.environ['WHATSAPP_PHONE_NUMBER_ID'].strip(), phone, follow_id=identity): return None

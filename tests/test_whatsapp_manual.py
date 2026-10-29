@@ -79,6 +79,23 @@ class ManualTests(unittest.TestCase):
             self.assertEqual(m.template_nome, os.environ['WHATSAPP_MENTAL_TEMPLATE_NAME'])
             self.assertEqual(db.get(Follow,self.aid).consentimento_status,'PENDENTE')
 
+    def test_configured_weekly_preferences_unchanged_by_manual_and_replay(self):
+        from app.schemas.whatsapp_mental import WhatsAppProgramacao
+        from app.services.whatsapp_programacao import configure
+        self.allowed()
+        configure(self.db, WhatsAppProgramacao(dia_semana=4, horario_local='19:00', programacao_ativa=True), **self.scope)
+        self.db.commit()
+        fields = ('dia_semana','horario_local','programacao_ativa','proximo_envio_em','configurado_por_usuario_id')
+        before = tuple(getattr(self.db.get(Follow,self.aid),field) for field in fields)
+        self.db.rollback()
+        with patch('app.services.whatsapp_sender_service.requests.post', return_value=self.response()) as post:
+            first = self.invoke()
+            self.assertEqual(first['estado'], 'ACEITO')
+            self.assertEqual(self.invoke(), first)
+            post.assert_called_once()
+        with Session(self.engine) as db:
+            self.assertEqual(tuple(getattr(db.get(Follow,self.aid),field) for field in fields), before)
+
     def test_null_schedule(self):
         self.follow.proximo_envio_em=None;self.db.commit()
         with self.allowed(), patch('app.services.whatsapp_sender_service.requests.post', return_value=self.response()):

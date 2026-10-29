@@ -24,7 +24,7 @@ from test_m0_baseline import config
 from app.models.whatsapp_convite import WhatsAppConviteEnvio as Envio, WhatsAppConviteStatusEvento as Evento
 from app.models.whatsapp_contextual import AcompanhamentoWhatsApp as Follow, WhatsAppConversaContextual as Conversation
 
-HEAD = 'e14b_close_v1'
+HEAD = 'mh_weekly_config_v1'
 NEW = {'whatsapp_runtime', 'whatsapp_comunicacao_eventos', 'whatsapp_resposta_execucoes', 'whatsapp_resolucoes', 'whatsapp_mensagens_roteaveis', 'whatsapp_autorizacoes_comunicacao', 'whatsapp_solicitacoes_manuais', 'whatsapp_convite_envios', 'whatsapp_convite_status_eventos'}
 
 
@@ -66,7 +66,7 @@ class PersistenceTests(unittest.TestCase):
             result = {}
             added = {'legado_estado_sha256','resolucao_motivo','fingerprint_versao','context_wamid','resolucao','conversa_contextual_id','conversa_legada_id'}
             for name in names:
-                columns = [x for x in inspect(c).get_columns(name) if name != 'whatsapp_mensagens' or x['name'] not in added]
+                columns = [x for x in inspect(c).get_columns(name) if (name != 'whatsapp_mensagens' or x['name'] not in added) and (name != 'acompanhamentos_whatsapp' or x['name'] not in {'dia_semana', 'horario_local', 'programacao_ativa', 'configurado_por_usuario_id'})]
                 projection = ','.join('"'+x['name']+'"' for x in columns)
                 digest = c.exec_driver_sql("SELECT md5(coalesce(string_agg(row_to_json(t)::text, chr(10) ORDER BY row_to_json(t)::text),'')) FROM (SELECT "+projection+' FROM "'+name+'") t').scalar()
                 result[name] = (columns, digest)
@@ -80,11 +80,10 @@ class PersistenceTests(unittest.TestCase):
         self.addCleanup(self.db.close)
         self.now = datetime.now(timezone.utc)
         patient = self.db.execute(text('SELECT paciente_id FROM contextos_assistenciais WHERE id=:c'), {'c': self.open}).scalar_one()
-        follow = Follow(contexto_assistencial_id=self.open, paciente_id=patient,
-                        telefone='5511000000000', criado_por_usuario_id=self.actor)
-        self.db.add(follow); self.db.flush()
-        conversation = Conversation(acompanhamento_whatsapp_id=follow.id, contexto_assistencial_id=self.open,
-                                    paciente_id=patient, telefone=follow.telefone, data_referencia=self.now.date(),
+        # Historical seed uses historical columns, not the current ORM contract.
+        follow_id = self.db.execute(text("INSERT INTO acompanhamentos_whatsapp(contexto_assistencial_id,paciente_id,telefone,criado_por_usuario_id) VALUES (:c,:p,'5511000000000',:u) RETURNING id"), dict(c=self.open,p=patient,u=self.actor)).scalar_one()
+        conversation = Conversation(acompanhamento_whatsapp_id=follow_id, contexto_assistencial_id=self.open,
+                                    paciente_id=patient, telefone='5511000000000', data_referencia=self.now.date(),
                                     expires_at=self.now+timedelta(hours=24), status='CONCLUIDA')
         self.db.add(conversation); self.db.commit()
         self.cid = conversation.id
@@ -93,7 +92,7 @@ class PersistenceTests(unittest.TestCase):
         with self.engine.begin() as c:
             command.upgrade(config(c), HEAD)
         from whatsapp_runtime_fixture import activate
-        if HEAD == 'e14b_close_v1': activate(self.engine)
+        if HEAD in ('e14b_close_v1', 'mh_weekly_config_v1'): activate(self.engine)
         after = self.snapshot()
         # Compare full rows and column definitions, excluding SQLAlchemy type object identity.
         self.assertEqual({k: ([(x['name'], str(x['type']), x['nullable'], x['default']) for x in v[0]], v[1]) for k,v in before.items()},
@@ -119,6 +118,7 @@ class PersistenceTests(unittest.TestCase):
         with self.engine.connect() as c:
             self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar(), HEAD)
             self.assertTrue(NEW <= set(inspect(c).get_table_names()))
+            self.assertEqual(c.execute(text('SELECT dia_semana,horario_local,programacao_ativa,configurado_por_usuario_id FROM acompanhamentos_whatsapp WHERE contexto_assistencial_id=:c'),dict(c=self.open)).one(), (None,None,False,None))
             self.assertEqual(c.execute(text('SELECT convite_enviado_em FROM whatsapp_conversas_contextuais WHERE id=:i'), {'i': self.cid}).scalar(), None)
 
     def test_persistence_and_context_relationship_new_connection(self):
