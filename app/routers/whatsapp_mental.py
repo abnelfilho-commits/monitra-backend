@@ -223,3 +223,11 @@ def reactivate_communication(payload: AuthorizationCreate,
         db: Session = Depends(get_db), context=Depends(scope)):
     from app.services.whatsapp_comunicacao import reactivate
     return authorization_command(db, lambda: reactivate(db, context, idempotency_key, payload))
+
+
+@router.get('/agenda')
+def agenda(limite: int = Query(default=50, ge=1, le=100),
+           offset: int = Query(default=0, ge=0, le=100000),
+           db: Session = Depends(get_db), context=Depends(scope)):
+    from app.services.whatsapp_agenda import read
+    return authorization_command(db, lambda: read(db, context, limit=limite, offset=offset), write=False)

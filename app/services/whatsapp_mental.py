@@ -121,6 +121,8 @@ class WhatsAppMentalService:
                 raise CheckinInvalid('OPEN_CONVERSATION')
             from app.services.whatsapp_autorizacao import revoke_internal
             revoke_internal(db, a, origin='TROCA_TELEFONE', reason='TROCA_TELEFONE', actor=scope['actor'])
+            from app.services.whatsapp_agenda import invalidate
+            invalidate(db, a, reason='DESTINATION_CHANGED', actor=scope['actor'], cancel=True)
             a.telefone = phone
             a.consentimento_status = 'PENDENTE'
             a.consentido_em = None
@@ -151,6 +153,9 @@ class WhatsAppMentalService:
             elif a.status != 'ENCERRADO': a.status = 'PAUSADO'
             for conversation in conversations:
                 conversation.status = 'CANCELADA'
+            from app.services.whatsapp_agenda import invalidate
+            invalidate(db, a, reason='FOLLOW_UP_' + a.status, actor=scope['actor'],
+                       cancel=action == 'encerrar')
         db.flush()
         return a
 

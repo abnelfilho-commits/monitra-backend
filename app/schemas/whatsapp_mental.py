@@ -1,4 +1,4 @@
-from datetime import datetime, time
+from datetime import date, datetime, time
 from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -22,6 +22,9 @@ class WhatsAppState(BaseModel):
     dia_semana: Optional[int] = None
     horario_local: Optional[time] = None
     programacao_ativa: bool = False
+    programacao_data_fim: Optional[date] = None
+    programacao_versao: int = 0
+    execucao_automatica_ativa: bool = False
     configurado_por_usuario_id: Optional[int] = None
     status: str
     criado_por_usuario_id: int
@@ -35,6 +38,9 @@ class WhatsAppProgramacao(BaseModel):
     dia_semana: int = Field(ge=0, le=6, strict=True)
     horario_local: time
     programacao_ativa: bool = Field(strict=True)
+
+    programacao_data_fim: Optional[date] = None
+    versao_esperada: Optional[int] = Field(default=None, ge=0, strict=True)
 
     @field_validator('horario_local', mode='before')
     @classmethod

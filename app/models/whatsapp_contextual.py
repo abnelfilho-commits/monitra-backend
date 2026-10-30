@@ -19,6 +19,8 @@ class AcompanhamentoWhatsApp(Base):
     proximo_envio_em = Column(DateTime(timezone=True))
     dia_semana = Column(Integer)
     horario_local = Column(Time(timezone=False))
+    programacao_data_fim = Column(Date)
+    programacao_versao = Column(Integer, nullable=False, server_default='0')
     programacao_ativa = Column(Boolean, nullable=False, server_default=text('false'))
     configurado_por_usuario_id = Column(Integer, ForeignKey('usuarios.id', ondelete='RESTRICT'))
     status = Column(String(16), nullable=False, server_default='ATIVO')
@@ -35,6 +37,8 @@ class AcompanhamentoWhatsApp(Base):
         CheckConstraint("frequencia = 'SEMANAL'", name='ck_aw_frequencia'),
         CheckConstraint('dia_semana BETWEEN 0 AND 6', name='ck_aw_dia_semana'),
         CheckConstraint("(dia_semana IS NULL AND horario_local IS NULL AND configurado_por_usuario_id IS NULL AND NOT programacao_ativa) OR (dia_semana IS NOT NULL AND horario_local IS NOT NULL AND configurado_por_usuario_id IS NOT NULL)", name='ck_aw_programacao'),
+        CheckConstraint('programacao_versao >= 0', name='ck_aw_versao'),
+        CheckConstraint('programacao_data_fim IS NULL OR (dia_semana IS NOT NULL AND programacao_versao > 0)', name='ck_aw_agenda'),
         Index('ix_aw_envio', 'status', 'proximo_envio_em'),
     )
 
@@ -58,6 +62,7 @@ class WhatsAppConversaContextual(Base):
     __table_args__ = (
         ForeignKeyConstraint(['acompanhamento_whatsapp_id','contexto_assistencial_id','paciente_id'], ['acompanhamentos_whatsapp.id','acompanhamentos_whatsapp.contexto_assistencial_id','acompanhamentos_whatsapp.paciente_id'], name='fk_wcc_acompanhamento', ondelete='RESTRICT'),
         CheckConstraint("telefone ~ '^[0-9]{8,15}$'", name='ck_wcc_telefone').ddl_if(dialect='postgresql'),
+        UniqueConstraint('id', 'acompanhamento_whatsapp_id', name='uq_wcc_agenda_identidade'),
         CheckConstraint("care_line = 'MENTAL_HEALTH'", name='ck_wcc_linha'),
         CheckConstraint("status IN ('AGUARDANDO_ACEITE','EM_ANDAMENTO','CONCLUIDA','EXPIRADA','CANCELADA')", name='ck_wcc_status'),
         CheckConstraint('expires_at > created_at', name='ck_wcc_janela'),

@@ -59,3 +59,5 @@ from app.models.whatsapp_transporte import WhatsAppMensagemRoteavel
 from .whatsapp_resolucao import WhatsAppResolucao
 
 from .whatsapp_comunicacao import WhatsAppComunicacaoEvento, WhatsAppRespostaExecucao
+
+from .whatsapp_agenda import WhatsAppAgendaCheckin, WhatsAppAgendaEvento

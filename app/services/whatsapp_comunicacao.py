@@ -151,6 +151,9 @@ def append(db, *, scope, emitter, phone, state, key, fingerprint, follow=None,
         origem='WHATSAPP' if message else 'PROFISSIONAL',mensagem_id=message,usuario_id=actor,
         chave=key,comando_sha256=fingerprint,evidencia_referencia=reference,evidencia_sha256=evidence_hash,evidencia_obtida_em=obtained,**values)
     db.add(row); db.flush()
+    if follow is not None and state == 'INTERROMPIDA':
+        from app.services.whatsapp_agenda import invalidate
+        invalidate(db, follow, reason='WHATSAPP_INTERROMPIDO', actor=actor)
     return row
 
 

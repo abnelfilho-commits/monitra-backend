@@ -206,7 +206,7 @@ class CommunicationTests(unittest.TestCase):
         self.assertEqual(len(evidence(self.db,mid)['eventos']),1)
     def test_indexes_preserved_and_head(self):
         with self.engine.connect() as c:
-            self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar(),'e14b_close_v1')
+            self.assertEqual(c.exec_driver_sql('SELECT version_num FROM alembic_version').scalar(),delivery.foundation.HEAD)
             names={i['name'] for i in inspect(c).get_indexes('whatsapp_conversas_contextuais')}
             self.assertTrue({'ix_wcc_aberta_telefone','uq_wcc_aberta_acompanhamento'}<=names)
             self.assertNotIn('uq_wcc_aberta_telefone',names)

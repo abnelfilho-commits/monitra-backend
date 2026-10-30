@@ -58,6 +58,10 @@ def configure(db, payload, **scope):
         raise CheckinInvalid('DESTINATION_CHANGED')
     if follow.status == 'ENCERRADO' or follow.consentimento_status == 'REVOGADO':
         raise CheckinInvalid('FOLLOW_UP_CLOSED')
+    if (follow.programacao_data_fim is not None or 'programacao_data_fim' in payload.model_fields_set
+            or payload.versao_esperada is not None):
+        from app.services.whatsapp_agenda import configure as configure_agenda
+        return configure_agenda(db, follow, payload, scope['actor'])
     preference = (payload.dia_semana, payload.horario_local, payload.programacao_ativa)
     if (preference == (follow.dia_semana, follow.horario_local, follow.programacao_ativa)
             and (not payload.programacao_ativa or follow.proximo_envio_em is not None)):

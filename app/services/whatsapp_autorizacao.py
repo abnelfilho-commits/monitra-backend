@@ -56,6 +56,9 @@ def append_event(db, follow, *, state, origin, occurred, actor=None, key=None,
         comando_sha256=fingerprint,destino_sha256=destination(follow.telefone),
         referencia_evidencia=reference,evidencia_sha256=digest,motivo=reason,conversa_id=conversation,mensagem_id=message)
     db.add(row);db.flush()
+    if state == 'REVOGADA':
+        from app.services.whatsapp_agenda import invalidate
+        invalidate(db, follow, reason='AUTHORIZATION_REVOKED', actor=actor, cancel=True)
     return row
 
 

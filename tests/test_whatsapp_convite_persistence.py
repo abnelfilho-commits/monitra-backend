@@ -24,8 +24,8 @@ from test_m0_baseline import config
 from app.models.whatsapp_convite import WhatsAppConviteEnvio as Envio, WhatsAppConviteStatusEvento as Evento
 from app.models.whatsapp_contextual import AcompanhamentoWhatsApp as Follow, WhatsAppConversaContextual as Conversation
 
-HEAD = 'mh_weekly_config_v1'
-NEW = {'whatsapp_runtime', 'whatsapp_comunicacao_eventos', 'whatsapp_resposta_execucoes', 'whatsapp_resolucoes', 'whatsapp_mensagens_roteaveis', 'whatsapp_autorizacoes_comunicacao', 'whatsapp_solicitacoes_manuais', 'whatsapp_convite_envios', 'whatsapp_convite_status_eventos'}
+HEAD = 'mh_agenda_v1'
+NEW = {'whatsapp_agenda_checkins', 'whatsapp_agenda_eventos', 'whatsapp_runtime', 'whatsapp_comunicacao_eventos', 'whatsapp_resposta_execucoes', 'whatsapp_resolucoes', 'whatsapp_mensagens_roteaveis', 'whatsapp_autorizacoes_comunicacao', 'whatsapp_solicitacoes_manuais', 'whatsapp_convite_envios', 'whatsapp_convite_status_eventos'}
 
 
 @unittest.skipUnless(URL, 'Explicit disposable PostgreSQL required')
@@ -66,7 +66,7 @@ class PersistenceTests(unittest.TestCase):
             result = {}
             added = {'legado_estado_sha256','resolucao_motivo','fingerprint_versao','context_wamid','resolucao','conversa_contextual_id','conversa_legada_id'}
             for name in names:
-                columns = [x for x in inspect(c).get_columns(name) if (name != 'whatsapp_mensagens' or x['name'] not in added) and (name != 'acompanhamentos_whatsapp' or x['name'] not in {'dia_semana', 'horario_local', 'programacao_ativa', 'configurado_por_usuario_id'})]
+                columns = [x for x in inspect(c).get_columns(name) if (name != 'whatsapp_mensagens' or x['name'] not in added) and (name != 'acompanhamentos_whatsapp' or x['name'] not in {'programacao_data_fim', 'programacao_versao', 'dia_semana', 'horario_local', 'programacao_ativa', 'configurado_por_usuario_id'})]
                 projection = ','.join('"'+x['name']+'"' for x in columns)
                 digest = c.exec_driver_sql("SELECT md5(coalesce(string_agg(row_to_json(t)::text, chr(10) ORDER BY row_to_json(t)::text),'')) FROM (SELECT "+projection+' FROM "'+name+'") t').scalar()
                 result[name] = (columns, digest)
@@ -92,7 +92,7 @@ class PersistenceTests(unittest.TestCase):
         with self.engine.begin() as c:
             command.upgrade(config(c), HEAD)
         from whatsapp_runtime_fixture import activate
-        if HEAD in ('e14b_close_v1', 'mh_weekly_config_v1'): activate(self.engine)
+        if HEAD in ('e14b_close_v1', 'mh_weekly_config_v1', 'mh_agenda_v1'): activate(self.engine)
         after = self.snapshot()
         # Compare full rows and column definitions, excluding SQLAlchemy type object identity.
         self.assertEqual({k: ([(x['name'], str(x['type']), x['nullable'], x['default']) for x in v[0]], v[1]) for k,v in before.items()},
