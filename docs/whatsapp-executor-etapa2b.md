@@ -8,7 +8,7 @@ Duas condições independentes: `WHATSAPP_WEEKLY_EXECUTOR_ENABLED=true` no proce
 
 `whatsapp_executor_habilitacoes` é um ledger imutável. A ausência de evento ou último evento revogado desabilita a instituição. Cada evento identifica instituição, `EXECUTOR_SEMANAL_MENTAL`, decisão, autor humano da concessão/revogação, motivo e data. A autoria humana da concessão não é usada como credencial do executor.
 
-`set_executor_grant()` é um comando interno explícito, sem endpoint público. Exige ADMIN ativo, instituição ativa e vínculo institucional ativo, sob o serializador institucional existente. Não habilita instituições automaticamente. Grants iguais são idempotentes; revogação e nova concessão produzem novos IDs, invalidando capacidades anteriores.
+`set_executor_grant()` é um comando interno explícito, sem endpoint público. Exige ADMIN ativo e instituição ativa, sob o serializador institucional existente. Reutiliza `AutorizacaoInstitucionalService.authorize()`, que reconhece ADMIN global sem exigir vínculo institucional redundante. Não habilita instituições automaticamente. Grants iguais são idempotentes; revogação e nova concessão produzem novos IDs, invalidando capacidades anteriores.
 
 A identidade de execução é um objeto interno tipado com ocorrência, instituição, versão e ID da habilitação. Não aceita JWT humano, `actor=None` como autorização ou flag genérica. Cada preparação e ambas as revalidações do transporte verificam a evidência persistida; E12C, PARAR, runtime e elegibilidade mantêm seus controles. As APIs humanas continuam usando a autorização contextual existente. Conversas semanais não podem ser reenviadas pelo caminho humano de retry.
 

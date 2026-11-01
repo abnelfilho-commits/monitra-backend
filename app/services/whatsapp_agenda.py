@@ -181,17 +181,12 @@ def latest_grant(db, institution):
 def set_executor_grant(db, *, institution, actor, enabled, reason):
     """Explicit administrative command, caller commits. No HTTP route or auto-grant."""
     from app.services.permissao_assistencial import PermissaoAssistencialService
-    from app.models.autorizacao_institucional import UsuarioInstituicaoAcesso
+    from app.services.autorizacao_institucional import AutorizacaoInstitucionalService
     if type(enabled) is not bool or not isinstance(reason, str) or not 8 <= len(reason.strip()) <= 160:
         raise CheckinInvalid('INVALID_EXECUTOR_GRANT')
     permissions = PermissaoAssistencialService()
     permissions._gate(db, actor, institution, admin=True)
-    root = db.scalar(select(UsuarioInstituicaoAcesso).where(
-        UsuarioInstituicaoAcesso.usuario_id == actor,
-        UsuarioInstituicaoAcesso.instituicao_id == institution,
-        UsuarioInstituicaoAcesso.ativo.is_(True)))
-    if root is None:
-        raise CheckinInvalid('EXECUTOR_INSTITUTION_ACCESS_REQUIRED')
+    AutorizacaoInstitucionalService().authorize(db, actor, institution)
     old = latest_grant(db, institution)
     if old is not None and old.habilitado == enabled:
         return old

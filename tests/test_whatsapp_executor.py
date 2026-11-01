@@ -185,7 +185,8 @@ class ExecutorTests(unittest.TestCase):
 
     def test_audit_immutable_and_grant_authorization(self):
         self.scheduled()
-        with self.assertRaises(Exception):
+        from app.services.permissao_assistencial import PermissaoAssistencialErro
+        with self.assertRaisesRegex(PermissaoAssistencialErro, 'ADMIN_REQUIRED'):
             set_executor_grant(self.db,institution=self.institution,actor=self.actor,enabled=True,reason='Synthetic grant')
         self.db.rollback()
         for statement in ('UPDATE whatsapp_executor_habilitacoes SET habilitado=false','DELETE FROM whatsapp_executor_habilitacoes','TRUNCATE whatsapp_executor_habilitacoes'):
@@ -291,10 +292,45 @@ class ExecutorTests(unittest.TestCase):
         self.db.commit();self.assertGreater(second.id,first.id)
         self.assertEqual(first.identidade,'EXECUTOR_SEMANAL_MENTAL')
         self.assertFalse(second.habilitado)
-        self.db.execute(text('UPDATE usuario_instituicao_acessos SET ativo=false WHERE usuario_id=:u AND instituicao_id=:i'),{'u':self.actor,'i':self.institutions[1]});self.db.commit()
-        with self.assertRaises(CheckinInvalid):
-            set_executor_grant(self.db,institution=self.institutions[1],actor=self.actor,enabled=True,reason='Synthetic wrong institution')
+
+    def test_global_admin_without_root_preserves_institutional_audit(self):
+        actor = self.db.execute(text("INSERT INTO usuarios(nome,email,senha_hash,perfil,ativo) VALUES ('Synthetic global admin',:email,'synthetic','ADMIN',true) RETURNING id"),
+            {'email': 'global-executor-' + str(self.actor) + '@example.test'}).scalar_one()
+        self.db.commit()
+        with patch('app.services.whatsapp_sender_service.requests.post') as post:
+            first = set_executor_grant(self.db, institution=self.institution, actor=actor,
+                enabled=True, reason='Synthetic global admin approval')
+            self.db.commit()
+            self.assertEqual(first.usuario_id, actor)
+            self.assertEqual(first.instituicao_id, self.institution)
+            self.assertEqual(first.motivo, 'Synthetic global admin approval')
+            self.assertIsNone(self.db.scalar(select(Grant).where(Grant.instituicao_id == self.institutions[1])))
+            second = set_executor_grant(self.db, institution=self.institution, actor=actor,
+                enabled=False, reason='Synthetic global admin revocation')
+            self.db.commit()
+            self.assertGreater(second.id, first.id)
+            self.assertFalse(second.habilitado)
+            self.assertTrue(first.habilitado)
+            self.assertIsNone(self.db.scalar(select(Grant).where(Grant.instituicao_id == self.institutions[1])))
+            post.assert_not_called()
+
+    def test_grant_rejects_inactive_admin_and_institution(self):
+        from app.services.permissao_assistencial import PermissaoAssistencialErro
+        self.db.execute(text("UPDATE usuarios SET perfil='ADMIN', ativo=false WHERE id=:i"), {'i': self.actor})
+        self.db.commit()
+        with self.assertRaisesRegex(PermissaoAssistencialErro, 'ADMIN_REQUIRED'):
+            set_executor_grant(self.db, institution=self.institution, actor=self.actor,
+                enabled=True, reason='Synthetic inactive admin')
         self.db.rollback()
+        self.db.execute(text('UPDATE usuarios SET ativo=true WHERE id=:i'), {'i': self.actor})
+        self.db.execute(text('UPDATE instituicoes SET ativo=false WHERE id=:i'), {'i': self.institution})
+        self.db.commit()
+        with self.assertRaisesRegex(PermissaoAssistencialErro, 'INSTITUTION_INACTIVE'):
+            set_executor_grant(self.db, institution=self.institution, actor=self.actor,
+                enabled=False, reason='Synthetic inactive institution')
+        self.db.rollback()
+        self.assertIsNone(self.db.scalar(select(Grant).where(Grant.instituicao_id == self.institution)))
+
 
 
 @unittest.skipUnless(os.getenv('M0_TEST_POSTGRES_URL'), 'Disposable PostgreSQL required')
