@@ -45,6 +45,11 @@ def deliver(db, identity, context, explicit_retry=False):
     from app.services.whatsapp_mental import (WhatsAppMentalService, lock_execution_scope,
                                              valid_scope, locked, Conversation, now_utc)
     service = WhatsAppMentalService()
+    from app.services.whatsapp_agenda import WeeklyExecution
+    from app.models.whatsapp_agenda import WhatsAppAgendaCheckin
+    weekly_link = db.scalar(select(WhatsAppAgendaCheckin.id).where(WhatsAppAgendaCheckin.conversa_id == identity))
+    if weekly_link is not None and (type(context) is not WeeklyExecution or explicit_retry):
+        raise ValueError('Weekly delivery requires its internal occurrence capability')
     # Read configuration before creating an attempt; never persist credentials.
     emitter = os.getenv('WHATSAPP_PHONE_NUMBER_ID', '')
     required = (emitter, os.getenv('WHATSAPP_ACCESS_TOKEN', ''),
@@ -57,8 +62,13 @@ def deliver(db, identity, context, explicit_retry=False):
     if initial is None: raise ValueError('Conversation unavailable')
     coordinate(db, emitter, initial.telefone)
     a, conversation, c, patient, person, now = lock_execution_scope(db, identity)
-    service.authorized(db, **context)
-    if (context['context'] != conversation.contexto_assistencial_id
+    from app.services.whatsapp_agenda import WeeklyExecution, authorize_delivery
+    if type(context) is WeeklyExecution:
+        authorized_context = authorize_delivery(db, context, a, conversation)
+    else:
+        service.authorized(db, **context)
+        authorized_context = context
+    if (authorized_context['context'] != conversation.contexto_assistencial_id
             or conversation.convite_enviado_em is not None
             or conversation.status != 'AGUARDANDO_ACEITE' or conversation.expires_at <= now
             or not valid_scope(db, a, c, patient, person, now)):
@@ -73,7 +83,7 @@ def deliver(db, identity, context, explicit_retry=False):
     authorization = require_prior_authorization(db, a)
     require_output(db, emitter, conversation.telefone, conversation_id=identity, invitation=True)
     if manual is not None:
-        if (manual.usuario_id != context['actor'] or manual.instituicao_id != context['institution']
+        if (manual.usuario_id != authorized_context['actor'] or manual.instituicao_id != authorized_context['institution']
                 or manual.acompanhamento_id != a.id or manual.tentativa_id is not None
                 or manual.template_nome != required[2] or manual.template_idioma != required[3]):
             db.rollback()
@@ -102,7 +112,12 @@ def deliver(db, identity, context, explicit_retry=False):
     if initial is None: raise ValueError('Conversation unavailable')
     coordinate(db, emitter, initial.telefone)
     a, conversation, c, patient, person, now = lock_execution_scope(db, identity)
-    service.authorized(db, **context)
+    from app.services.whatsapp_agenda import WeeklyExecution, authorize_delivery
+    if type(context) is WeeklyExecution:
+        authorized_context = authorize_delivery(db, context, a, conversation)
+    else:
+        service.authorized(db, **context)
+        authorized_context = context
     attempt = db.scalar(select(Envio).where(Envio.id == attempt_id).with_for_update())
     if (attempt.estado != 'PREPARADO' or conversation.convite_enviado_em is not None
             or conversation.status != 'AGUARDANDO_ACEITE' or conversation.expires_at <= now

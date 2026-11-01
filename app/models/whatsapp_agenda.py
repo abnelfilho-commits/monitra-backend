@@ -1,5 +1,5 @@
 """Planned occurrences are never delivery authorization or Meta attempts."""
-from sqlalchemy import (Column, Integer, String, DateTime, JSON, ForeignKey,
+from sqlalchemy import (Column, Integer, String, DateTime, JSON, Boolean, ForeignKey,
                         ForeignKeyConstraint, CheckConstraint, UniqueConstraint, Index, func)
 from app.database import Base
 
@@ -53,4 +53,21 @@ class WhatsAppAgendaEvento(Base):
         CheckConstraint("estado_anterior IS NULL OR estado_anterior IN ('AGENDADO','PROCESSANDO','EXECUTADO','CANCELADO','PERDIDO','BLOQUEADO')", name='ck_wage_anterior'),
         CheckConstraint("estado_novo IS NULL OR estado_novo IN ('AGENDADO','PROCESSANDO','EXECUTADO','CANCELADO','PERDIDO','BLOQUEADO')", name='ck_wage_novo'),
         Index('ix_wage_acompanhamento', 'acompanhamento_id', 'id'),
+    )
+
+
+class WhatsAppExecutorHabilitacao(Base):
+    """Append-only institutional grants. Absence or latest revoked = disabled."""
+    __tablename__ = 'whatsapp_executor_habilitacoes'
+    id = Column(Integer, primary_key=True)
+    instituicao_id = Column(Integer, ForeignKey('instituicoes.id', ondelete='RESTRICT'), nullable=False)
+    identidade = Column(String(32), nullable=False, server_default='EXECUTOR_SEMANAL_MENTAL')
+    habilitado = Column(Boolean, nullable=False, server_default='false')
+    usuario_id = Column(Integer, ForeignKey('usuarios.id', ondelete='RESTRICT'), nullable=False)
+    motivo = Column(String(160), nullable=False)
+    criado_em = Column(DateTime(timezone=True), nullable=False, server_default=func.clock_timestamp())
+    __table_args__ = (
+        CheckConstraint("identidade = 'EXECUTOR_SEMANAL_MENTAL'", name='ck_weh_identidade'),
+        CheckConstraint('length(trim(motivo)) BETWEEN 8 AND 160', name='ck_weh_motivo'),
+        Index('ix_weh_instituicao', 'instituicao_id', 'id'),
     )

@@ -61,3 +61,5 @@ from .whatsapp_resolucao import WhatsAppResolucao
 from .whatsapp_comunicacao import WhatsAppComunicacaoEvento, WhatsAppRespostaExecucao
 
 from .whatsapp_agenda import WhatsAppAgendaCheckin, WhatsAppAgendaEvento
+
+from .whatsapp_agenda import WhatsAppExecutorHabilitacao

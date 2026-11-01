@@ -31,6 +31,9 @@ def command(db, operation, write=True):
     try:
         result = operation()
         output = WhatsAppState.model_validate(result).model_dump(mode='json') if result else None
+        if result is not None:
+            from app.services.whatsapp_agenda import automation_active
+            output['execucao_automatica_ativa'] = automation_active(db, result)
         if write: db.commit()
         return output
     except CheckinDenied:

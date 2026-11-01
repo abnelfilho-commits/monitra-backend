@@ -177,7 +177,7 @@ class WhatsAppMentalService:
                 or_(Follow.proximo_envio_em.is_(None), Follow.proximo_envio_em <= func.clock_timestamp()))
             .order_by(Follow.id).limit(limit)))
 
-    def prepare(self, db, identity, *, manual=False):
+    def prepare(self, db, identity, *, manual=False, weekly=None):
         """Caller commits before delivery. A blocked phone never advances the schedule."""
         from app.services.whatsapp_runtime import require_active
         require_active(db)
@@ -191,7 +191,11 @@ class WhatsAppMentalService:
         a = locked(db, Follow, identity)
         now = now_utc(db)
         if a.telefone != phone: raise CheckinInvalid('DESTINATION_CHANGED')
-        if not manual and a.dia_semana is not None:
+        if weekly is not None:
+            from app.services.whatsapp_agenda import authorize_weekly
+            if manual: raise CheckinInvalid('INVALID_WEEKLY_MODE')
+            authorize_weekly(db, weekly, a)
+        elif not manual and a.dia_semana is not None:
             raise CheckinInvalid('WEEKLY_EXECUTION_NOT_ENABLED')
         from app.services.whatsapp_manual import blocking_attempt, require_prior_authorization
         if blocking_attempt(db, phone, follow_id=identity): return None
@@ -207,14 +211,14 @@ class WhatsAppMentalService:
             if old.expires_at <= now: old.status = 'EXPIRADA'
         db.flush()
         if not valid_scope(db, a, c, patient, person, now): return None
-        if not manual and a.proximo_envio_em is not None and a.proximo_envio_em > now: return None
+        if not manual and weekly is None and a.proximo_envio_em is not None and a.proximo_envio_em > now: return None
         if db.scalar(select(Conversation.id).where(Conversation.acompanhamento_whatsapp_id == identity, Conversation.status.in_(OPEN))): return None
         conversation = Conversation(acompanhamento_whatsapp_id=a.id, contexto_assistencial_id=c.id,
             paciente_id=patient.id, telefone=phone, care_line='MENTAL_HEALTH', etapa_atual='ACEITE',
             respostas_json={}, status='AGUARDANDO_ACEITE', data_referencia=now.date(),
             created_at=now, expires_at=now+timedelta(hours=24))
         db.add(conversation)
-        if not manual: a.proximo_envio_em = now+timedelta(days=7)
+        if not manual and weekly is None: a.proximo_envio_em = now+timedelta(days=7)
         db.flush()
         return conversation
 

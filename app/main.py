@@ -51,7 +51,9 @@ from app.routers.instituicoes import router as instituicoes_router
 
 from app.routers import pessoas, contextos_assistenciais
 
-app = FastAPI(title="Integra Care API")
+from app.services.whatsapp_agenda import executor_lifespan
+
+app = FastAPI(title="Integra Care API", lifespan=executor_lifespan)
 app.include_router(pessoas.router)
 app.include_router(contextos_assistenciais.router)
 app.include_router(instituicoes_router)
