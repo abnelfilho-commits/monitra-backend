@@ -140,3 +140,51 @@ class OperationalAuthorizationTests(unittest.TestCase):
         self.assertEqual(self.participation().json()['detail']['code'],'PROFESSIONAL_LINK_INELIGIBLE')
         state=self.op(method='GET',role='SUPORTE').json()
         self.assertNotIn(self.professional_links['PROFISSIONAL'],[p['id'] for p in state['profissionais']])
+
+    def test_context_identifiers_admin_operator_and_unauthorized_isolation(self):
+        def contexts(role, institution=None):
+            response = self.request('GET', '/operacao-assistencial/contextos',
+                params={'instituicao_id': institution or self.institution}, role=role)
+            self.assertEqual(response.status_code, 200, response.text)
+            return response.json()
+
+        # Another patient's context in the same institution: no authority inheritance.
+        with self.engine.begin() as c:
+            person = c.exec_driver_sql("INSERT INTO pessoas(nome_completo) VALUES ('Other synthetic') RETURNING id").scalar()
+            patient = c.execute(text("INSERT INTO pacientes(nome,pessoa_id) VALUES ('Other synthetic',:p) RETURNING id"), {'p': person}).scalar()
+            link = c.execute(text("INSERT INTO paciente_instituicoes(paciente_id,instituicao_id,tipo_vinculo,data_inicio) VALUES (:p,:i,'ASSISTENCIAL','2026-01-01') RETURNING id"), {'p': patient, 'i': self.institution}).scalar()
+        second = self.request('POST', '/admin/contextos-assistenciais/',
+            dict(paciente_instituicao_id=link, data_inicio='2026-01-01')).json()['id']
+        other = self.request('POST', '/admin/contextos-assistenciais/',
+            dict(paciente_instituicao_id=self.links[1], data_inicio='2026-01-01')).json()['id']
+        with patch.object(self.db, 'commit', wraps=self.db.commit) as commit:
+            admin = contexts('ADMIN')
+            commit.assert_not_called()
+        self.assertEqual({r['id'] for r in admin}, {self.context, second})
+        row = next(r for r in admin if r['id'] == second)
+        self.assertEqual((row['pessoa_id'], row['paciente_id'], row['paciente_instituicao_id'], row['instituicao_id']),
+            (person, patient, link, self.institution))
+        self.assertEqual(set(row), {'id','data_inicio','data_fim','pessoa_id','paciente_id','paciente_instituicao_id','instituicao_id'})
+        self.assertEqual([r['id'] for r in contexts('ADMIN', self.other)], [other])
+        self.assertEqual(contexts('UNKNOWN'), [])
+        self.nominate(); self.grant('ADMIN_CLINICA', 'CONTEXTO_ADMINISTRAR')
+        operator = contexts('ADMIN_CLINICA')
+        self.assertEqual([r['id'] for r in operator], [self.context])
+        self.assertEqual((operator[0]['pessoa_id'], operator[0]['paciente_id'], operator[0]['paciente_instituicao_id']),
+            (self.person, self.patient, self.links[0]))
+        self.assertEqual(contexts('ADMIN_CLINICA', self.other), [])
+        self.assertEqual(contexts('UNKNOWN'), [])
+        self.assertEqual(self.request('GET', '/operacao-assistencial/contextos', params={'instituicao_id':self.institution}, role=None).status_code, 401)
+        self.db.rollback()
+        with self.engine.begin() as c:
+            c.execute(text("UPDATE usuario_instituicao_acessos SET ativo=false WHERE id=:id"), {'id':self.root['ADMIN_CLINICA']})
+        self.assertEqual(contexts('ADMIN_CLINICA'), [])
+
+    def test_context_legacy_patient_does_not_infer_person(self):
+        self.db.rollback()
+        with self.engine.begin() as c:
+            c.execute(text('UPDATE pacientes SET pessoa_id=NULL WHERE id=:id'), {'id':self.patient})
+        response = self.request('GET', '/operacao-assistencial/contextos', params={'instituicao_id':self.institution})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()[0]['id'], self.context)
+        self.assertIsNone(response.json()[0]['pessoa_id'])

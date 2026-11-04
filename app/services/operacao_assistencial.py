@@ -1,6 +1,7 @@
 """Minimal operational metadata and adapters. No role-based clinical shortcut."""
 from app.models.usuario import Usuario
 from app.models.pessoa import Pessoa
+from app.models.paciente import Paciente
 from app.models.profissional import Profissional
 from app.models.institucional import Instituicao, ProfissionalInstituicao
 from app.models.autorizacao_institucional import UsuarioInstituicaoAcesso as Root
@@ -71,10 +72,14 @@ class OperacaoAssistencialService(PermissaoAssistencialService):
         actor = self.actor(db, actor_id)
         if not self._row(db, Instituicao, institution).ativo:
             raise PermissaoAssistencialErro('INSTITUTION_INACTIVE')
-        rows = db.query(Context).filter_by(instituicao_id=institution, ativo=True).order_by(Context.id).all()
-        # Structural metadata only: no person names, clinical history or record payloads.
-        return [dict(id=r.id, data_inicio=r.data_inicio.isoformat(), data_fim=r.data_fim.isoformat() if r.data_fim else None)
-                for r in rows if actor.perfil == 'ADMIN' or any(self.rights(db, actor, institution, r.id))]
+        rows = db.query(Context, Paciente.pessoa_id).outerjoin(Paciente, Paciente.id == Context.paciente_id).filter(
+            Context.instituicao_id == institution, Context.ativo.is_(True)).order_by(Context.id).all()
+        # Canonical FK identity only, after the unchanged authorization predicate.
+        # A legacy patient without Pessoa stays visible with pessoa_id=None; never infer it.
+        return [dict(id=r.id, data_inicio=r.data_inicio.isoformat(), data_fim=r.data_fim.isoformat() if r.data_fim else None,
+                     instituicao_id=r.instituicao_id, paciente_instituicao_id=r.paciente_instituicao_id,
+                     paciente_id=r.paciente_id, pessoa_id=person_id)
+                for r, person_id in rows if actor.perfil == 'ADMIN' or any(self.rights(db, actor, institution, r.id))]
 
     def state(self, db, actor_id, institution, context):
         actor, row, caps, participation = self.scope(db, actor_id, institution, context)
