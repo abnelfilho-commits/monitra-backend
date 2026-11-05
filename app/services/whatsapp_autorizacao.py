@@ -8,7 +8,9 @@ import json
 import re
 from sqlalchemy import select, text, func
 from sqlalchemy.orm import aliased
-from app.models.whatsapp_autorizacao import WhatsAppAutorizacaoComunicacao as Authorization
+from app.models.whatsapp_autorizacao import WhatsAppAutorizacaoComunicacao as Authorization, WhatsAppConfirmacaoOperacional
+from app.schemas.whatsapp_autorizacao import OperationalConfirmation
+OPERATIONAL_ATTESTATION = "Confirmo que verifiquei a permissão prévia do destinatário para contato desta instituição, nesta finalidade e neste destino. Esta é uma atestação profissional, não uma manifestação direta do titular."
 from app.models.whatsapp_contextual import AcompanhamentoWhatsApp as Follow, WhatsAppConversaContextual as Conversation
 from app.services.checkin_bem_estar import CheckinInvalid
 
@@ -71,12 +73,20 @@ def revoke_internal(db, follow, *, origin, reason, actor=None, conversation=None
                         actor=actor,reason=reason,conversation=conversation,message=message)
 
 
-def view(row):
-    return dict(id=row.id, acompanhamento_id=row.acompanhamento_id,estado=row.estado,
+def view(row, db=None):
+    result = dict(id=row.id, acompanhamento_id=row.acompanhamento_id,estado=row.estado,
         origem=row.origem,ocorrido_em=row.ocorrido_em,registrado_em=row.registrado_em,
         usuario_id=row.usuario_id,anterior_id=row.anterior_id,
         referencia_evidencia=row.referencia_evidencia,evidencia_sha256=row.evidencia_sha256,
         motivo=row.motivo,conversa_id=row.conversa_id,mensagem_id=row.mensagem_id)
+
+    if row.origem == 'CONFIRMACAO_OPERACIONAL' and db is not None:
+        details = db.get(WhatsAppConfirmacaoOperacional, row.id)
+        if details is None:
+            raise CheckinInvalid('OPERATIONAL_CONFIRMATION_INCOMPLETE')
+        result.update(chave=row.chave, modalidade=details.modalidade, versao_atestacao=details.versao_atestacao,
+                      texto_atestacao=details.texto_atestacao)
+    return result
 
 
 def register(db, context, key, payload, *, revoke=False):
@@ -100,7 +110,7 @@ def register(db, context, key, payload, *, revoke=False):
         Authorization.usuario_id==context['actor'],Authorization.chave==key))
     if old:
         if old.comando_sha256 != fingerprint: raise CheckinInvalid('IDEMPOTENCY_CONFLICT')
-        return dict(view(old), repetido=True, estado_atual=latest(db, identity).estado)  # Never reactivate.
+        return dict(view(old, db), repetido=True, estado_atual=latest(db, identity).estado)  # Never reactivate.
     previous=latest(db,identity)
     now=now_utc(db)
     if revoke:
@@ -121,13 +131,19 @@ def register(db, context, key, payload, *, revoke=False):
         if previous is not None:
             if previous.estado=='AUTORIZADA': raise CheckinInvalid('AUTHORIZATION_ALREADY_ACTIVE')
             if payload.obtida_em <= previous.registrado_em: raise CheckinInvalid('NEW_AUTHORIZATION_EVIDENCE_REQUIRED')
-        if db.scalar(select(Authorization.id).where(Authorization.acompanhamento_id==identity,
+        operational = isinstance(payload, OperationalConfirmation)
+        if not operational and db.scalar(select(Authorization.id).where(Authorization.acompanhamento_id==identity,
                                                    Authorization.evidencia_sha256==payload.evidencia_sha256)):
             raise CheckinInvalid('AUTHORIZATION_EVIDENCE_ALREADY_USED')
-        row=append_event(db,follow,state='AUTORIZADA',origin=payload.origem,occurred=payload.obtida_em,
+        row=append_event(db,follow,state='AUTORIZADA',origin='CONFIRMACAO_OPERACIONAL' if operational else payload.origem,occurred=payload.obtida_em,
             actor=context['actor'],key=key,fingerprint=fingerprint,
-            reference=payload.referencia_evidencia,digest=payload.evidencia_sha256)
-    return dict(view(row), repetido=False, estado_atual=row.estado)
+            reference=None if operational else payload.referencia_evidencia,
+            digest=None if operational else payload.evidencia_sha256)
+        if operational:
+            db.add(WhatsAppConfirmacaoOperacional(autorizacao_id=row.id, modalidade=payload.modalidade,
+                versao_atestacao='v1', texto_atestacao=OPERATIONAL_ATTESTATION))
+            db.flush()
+    return dict(view(row, db), repetido=False, estado_atual=row.estado)
 
 
 def read(db, context):
@@ -137,4 +153,4 @@ def read(db, context):
     rows=list(db.scalars(select(Authorization).where(Authorization.acompanhamento_id==follow.id).order_by(Authorization.id)))
     state=rows[-1].estado if rows else 'AUSENTE'
     if rows and state=='AUTORIZADA' and rows[-1].destino_sha256!=destination(follow.telefone):state='DESTINO_DIVERGENTE'
-    return dict(acompanhamento_id=follow.id,estado=state,historico=[view(row) for row in rows])
+    return dict(acompanhamento_id=follow.id,estado=state,historico=[view(row, db) for row in rows])

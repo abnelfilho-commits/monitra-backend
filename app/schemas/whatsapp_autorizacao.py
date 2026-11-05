@@ -25,3 +25,23 @@ class AuthorizationCreate(BaseModel):
 class AuthorizationRevoke(BaseModel):
     model_config = ConfigDict(extra='forbid')
     motivo: Literal['SOLICITACAO_TITULAR','ERRO_REGISTRO']
+
+
+class OperationalConfirmation(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    modalidade: Literal['PRESENCIAL', 'TELEFONE', 'CANAL_ELETRONICO']
+    obtida_em: AwareDatetime
+    permissao_previa_identificada: StrictBool
+    atestacao: StrictBool
+
+    @field_validator('obtida_em')
+    @classmethod
+    def utc(cls, value):
+        return value.astimezone(timezone.utc)
+
+    @field_validator('permissao_previa_identificada', 'atestacao')
+    @classmethod
+    def confirmed(cls, value):
+        if value is not True:
+            raise ValueError('Explicit prior permission attestation required')
+        return value

@@ -2,7 +2,7 @@
 import logging
 from typing import Optional
 from app.schemas.whatsapp_manual import ManualRequest
-from app.schemas.whatsapp_autorizacao import AuthorizationCreate, AuthorizationRevoke
+from app.schemas.whatsapp_autorizacao import AuthorizationCreate, AuthorizationRevoke, OperationalConfirmation
 from app.schemas.whatsapp_comunicacao import EstadoComunicacao, EventoComunicacao
 from fastapi import Header, APIRouter, Depends, HTTPException, Query, Path
 from sqlalchemy import select
@@ -194,6 +194,14 @@ def authorization_command(db, operation, *, write=True):
 
 @router.post('/autorizacao-comunicacao')
 def authorize_communication(payload: AuthorizationCreate,
+        idempotency_key: str = Header(..., alias='Idempotency-Key', min_length=16, max_length=128),
+        db: Session = Depends(get_db), context=Depends(scope)):
+    from app.services.whatsapp_autorizacao import register
+    return authorization_command(db, lambda: register(db, context, idempotency_key, payload))
+
+
+@router.post('/confirmacao-operacional')
+def confirm_prior_permission(payload: OperationalConfirmation,
         idempotency_key: str = Header(..., alias='Idempotency-Key', min_length=16, max_length=128),
         db: Session = Depends(get_db), context=Depends(scope)):
     from app.services.whatsapp_autorizacao import register

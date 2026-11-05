@@ -36,17 +36,29 @@ class WhatsAppAutorizacaoComunicacao(Base):
             name='fk_wac_anterior', ondelete='RESTRICT'),
         UniqueConstraint('instituicao_id','usuario_id','chave', name='uq_wac_comando'),
         CheckConstraint("estado IN ('AUTORIZADA','REVOGADA')", name='ck_wac_estado'),
-        CheckConstraint("origem IN ('PRESENCIAL','DOCUMENTO_ELETRONICO','CANAL_EXTERNO','PORTAL_PROFISSIONAL','WHATSAPP_PARAR','ENCERRAMENTO','TROCA_TELEFONE')", name='ck_wac_origem'),
+        CheckConstraint("origem IN ('PRESENCIAL','DOCUMENTO_ELETRONICO','CANAL_EXTERNO','CONFIRMACAO_OPERACIONAL','PORTAL_PROFISSIONAL','WHATSAPP_PARAR','ENCERRAMENTO','TROCA_TELEFONE')", name='ck_wac_origem'),
         CheckConstraint('ocorrido_em <= registrado_em', name='ck_wac_tempo'),
         CheckConstraint("origem = 'WHATSAPP_PARAR' OR usuario_id IS NOT NULL", name='ck_wac_autoria'),
         CheckConstraint("origem NOT IN ('PRESENCIAL','DOCUMENTO_ELETRONICO','CANAL_EXTERNO','PORTAL_PROFISSIONAL') OR chave IS NOT NULL", name='ck_wac_comando_humano'),
         CheckConstraint("estado <> 'REVOGADA' OR origem IN ('PORTAL_PROFISSIONAL','WHATSAPP_PARAR','ENCERRAMENTO','TROCA_TELEFONE')", name='ck_wac_origem_revogacao'),
         CheckConstraint("length(destino_sha256) = 64", name='ck_wac_destino'),
-        CheckConstraint("estado <> 'AUTORIZADA' OR (origem IN ('PRESENCIAL','DOCUMENTO_ELETRONICO','CANAL_EXTERNO') AND usuario_id IS NOT NULL AND chave IS NOT NULL AND referencia_evidencia IS NOT NULL AND length(trim(referencia_evidencia)) >= 8 AND evidencia_sha256 IS NOT NULL AND length(evidencia_sha256) = 64 AND motivo IS NULL)", name='ck_wac_evidencia'),
+        CheckConstraint("estado <> 'AUTORIZADA' OR (origem IN ('PRESENCIAL','DOCUMENTO_ELETRONICO','CANAL_EXTERNO') AND usuario_id IS NOT NULL AND chave IS NOT NULL AND referencia_evidencia IS NOT NULL AND length(trim(referencia_evidencia)) >= 8 AND evidencia_sha256 IS NOT NULL AND length(evidencia_sha256) = 64 AND motivo IS NULL) OR (estado='AUTORIZADA' AND origem='CONFIRMACAO_OPERACIONAL' AND usuario_id IS NOT NULL AND chave IS NOT NULL AND referencia_evidencia IS NULL AND evidencia_sha256 IS NULL AND motivo IS NULL)", name='ck_wac_evidencia'),
         CheckConstraint("estado <> 'REVOGADA' OR (motivo IS NOT NULL AND motivo IN ('SOLICITACAO_TITULAR','ERRO_REGISTRO','ENCERRAMENTO','TROCA_TELEFONE','PARAR'))", name='ck_wac_revogacao'),
         CheckConstraint("(chave IS NULL AND comando_sha256 IS NULL) OR (chave IS NOT NULL AND length(chave) BETWEEN 16 AND 128 AND comando_sha256 IS NOT NULL AND length(comando_sha256) = 64 AND usuario_id IS NOT NULL)", name='ck_wac_chave'),
         CheckConstraint("origem <> 'WHATSAPP_PARAR' OR (estado='REVOGADA' AND usuario_id IS NULL AND conversa_id IS NOT NULL AND mensagem_id IS NOT NULL)", name='ck_wac_parar'),
         Index('uq_wac_raiz','acompanhamento_id',unique=True,postgresql_where=text('anterior_id IS NULL')),
         Index('uq_wac_evidencia','acompanhamento_id','evidencia_sha256',unique=True,postgresql_where=text("estado='AUTORIZADA'")),
         Index('ix_wac_historico','acompanhamento_id','id'),
+    )
+
+
+class WhatsAppConfirmacaoOperacional(Base):
+    __tablename__ = 'whatsapp_confirmacoes_operacionais'
+    autorizacao_id = Column(Integer, ForeignKey('whatsapp_autorizacoes_comunicacao.id', ondelete='RESTRICT'), primary_key=True)
+    modalidade = Column(String(24), nullable=False)
+    versao_atestacao = Column(String(16), nullable=False)
+    texto_atestacao = Column(String(1000), nullable=False)
+    __table_args__ = (
+        CheckConstraint("modalidade IN ('PRESENCIAL','TELEFONE','CANAL_ELETRONICO')", name='ck_wco_modalidade'),
+        CheckConstraint("versao_atestacao = 'v1' AND length(trim(texto_atestacao)) > 0", name='ck_wco_atestacao'),
     )
