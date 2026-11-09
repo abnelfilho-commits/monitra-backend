@@ -28,6 +28,7 @@ from reportlab.platypus import (
     KeepTogether,
     Table,
     TableStyle,
+    CondPageBreak,
 )
 
 
@@ -160,7 +161,7 @@ class PDFRenderer(BaseRenderer):
         canvas.drawRightString(
             width - 2 * cm,
             height - 1.55 * cm,
-            "Relatório Longitudinal Inteligente",
+            getattr(document, "report_header", "Relatório Longitudinal Inteligente"),
         )
 
         # Linha do cabeçalho
@@ -236,6 +237,9 @@ class PDFRenderer(BaseRenderer):
             bottomMargin=2 * cm,
         )
 
+        if report.report_code == 'CLN-MENTAL-001':
+            document.report_header = "Relatório Longitudinal - Saúde Mental"
+
         story = []
 
         story.append(
@@ -279,11 +283,15 @@ class PDFRenderer(BaseRenderer):
         for section in report.sections:
 
             section_story = []
+            if report.report_code == "CLN-MENTAL-001":
+                # Reserve room for the heading and the beginning of its first block.
+                section_story.append(CondPageBreak(3 * cm))
 
             section_story.append(
                 Paragraph(
                     section.title,
-                    styles["section"],
+                    ParagraphStyle("MentalSection", parent=styles["section"], keepWithNext=False)
+                    if report.report_code == "CLN-MENTAL-001" else styles["section"],
                 )
             )
 
@@ -1254,6 +1262,28 @@ class PDFRenderer(BaseRenderer):
                         Spacer(1, 0.35 * cm)
                     )
 
+                if component.type == "MENTAL_BLOCK":
+                    data = component.data or {}
+                    compact = data.get('compact', False)
+                    body = ParagraphStyle('MentalBlockBody', parent=styles['body'],
+                        fontSize=8 if compact else 10, leading=11 if compact else 15,
+                        spaceAfter=0)
+                    paragraphs = data.get('paragraphs') or ['Sem registros elegíveis no período.']
+                    rows = [[Paragraph(escape(str(value)), body)] for value in paragraphs]
+                    block = Table(rows, colWidths=[document.width],
+                        repeatRows=1 if len(rows) > 1 else 0, splitByRow=1, splitInRow=1)
+                    block.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F8FAFC')),
+                        ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#E2E8F0')),
+                        ('LINEBEFORE', (0, 0), (0, -1), 2, colors.HexColor('#2563EB')),
+                        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                        ('LEFTPADDING', (0, 0), (-1, -1), 10),
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+                        ('TOPPADDING', (0, 0), (-1, -1), 4 if compact else 6),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 4 if compact else 6),
+                    ]))
+                    section_story.extend([block, Spacer(1, 0.12 * cm)])
+
                 if component.type == "PLAIN_TEXT":
                     for paragraph in str(component.data or '').split('\n'):
                         if paragraph.strip():
@@ -1283,7 +1313,7 @@ class PDFRenderer(BaseRenderer):
                             Spacer(1, 0.25 * cm)
                         )
                         
-            if any(component.type == 'PLAIN_TEXT' for component in section.components):
+            if any(component.type in ('PLAIN_TEXT', 'MENTAL_BLOCK') for component in section.components):
                 story.extend(section_story)
             else:
                 story.append(KeepTogether(section_story))
