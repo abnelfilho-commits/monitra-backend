@@ -11,6 +11,9 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models.financeiro import PacienteContrato
+from app.models.paciente import Paciente
+from app.models.pessoa import Pessoa
+from app.services.financeiro.configuracao import patient_display_name
 from app.schemas.financeiro import (
     InstitutionalPreviewRequest, InstitutionalPreviewResult, InstitutionalSummary,
     InstitutionalItem, ResolutionEvidence, LinkEvidence, PatientTotal,
@@ -61,6 +64,9 @@ class InstitutionalProjectionService:
         details, patients = [], []
         for offset in range(0, len(population), batch_size):
             ids = population[offset:offset + batch_size]
+            names = dict(db.execute(select(Paciente.id, patient_display_name())
+                .outerjoin(Pessoa, Pessoa.id == Paciente.pessoa_id)
+                .where(Paciente.id.in_(ids))).all())
             reader = read_neuro_batch if request.modulo_id == NEURO.module_id else read_mental_health_batch
             plans = reader(db, ids, request)
             links = defaultdict(list)
@@ -74,7 +80,7 @@ class InstitutionalProjectionService:
             for pid in ids:
                 plan = plans[pid]
                 items = resolve_items(plan, contract, table, links[pid], inputs)
-                patients.append(PatientTotal(paciente_id=pid, **summarize(items),
+                patients.append(PatientTotal(paciente_id=pid, paciente_nome=names.get(pid), **summarize(items),
                                              agendas_sem_sessoes_elegiveis=plan.agendas_without_sessions))
                 for session, item in zip(plan.sessions, items):
                     mapping = mappings.get(session.agenda_id)

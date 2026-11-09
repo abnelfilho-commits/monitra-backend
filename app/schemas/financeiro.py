@@ -269,6 +269,7 @@ class InstitutionalItem(PreviewValue):
 
 class PatientTotal(PreviewTotal):
     paciente_id: int
+    paciente_nome: Optional[str] = None
     agendas_sem_sessoes_elegiveis: tuple[int, ...]
 
 

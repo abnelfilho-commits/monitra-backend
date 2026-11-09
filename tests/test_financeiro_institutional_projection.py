@@ -70,6 +70,41 @@ class InstitutionalPostgresTests(unittest.TestCase):
             self.session(self.start, agenda=agenda, patient=pid)
         return pid, agenda
 
+    def test_names_batch_fallback_homonyms_and_financial_invariance(self):
+        legacy, _ = self.add_patient()
+        homonym, _ = self.add_patient()
+        excluded, _ = self.add_patient(linked=False)
+        before = self.run_preview()
+        with self.engine.begin() as c:
+            for pid in (self.patient, homonym, excluded):
+                person = c.exec_driver_sql("INSERT INTO pessoas(nome_completo) VALUES ('Antônio João') RETURNING id").scalar()
+                c.execute(text('UPDATE pacientes SET pessoa_id=:person WHERE id=:pid'), dict(person=person, pid=pid))
+        queries = []
+        def capture(conn, cursor, statement, parameters, context, executemany):
+            if 'coalesce(pessoas.nome_completo' in statement:
+                queries.append((statement, parameters))
+        event.listen(self.engine, 'before_cursor_execute', capture)
+        try:
+            after = self.run_preview(batch_size=2)
+        finally:
+            event.remove(self.engine, 'before_cursor_execute', capture)
+        names = {p.paciente_id: p.paciente_nome for p in after.pacientes}
+        self.assertEqual(names, {self.patient: 'Antônio João', homonym: 'Antônio João', legacy: 'Synthetic'})
+        self.assertNotIn(excluded, names)
+        self.assertEqual(len(queries), 2)  # ceil(3 authorized patients / batch of 2)
+        queried = {v for _, params in queries for v in params.values()}
+        self.assertEqual(queried, set(names))
+        self.assertEqual(before.resumo, after.resumo)
+        self.assertEqual(before.detalhes, after.detalhes)
+        self.assertEqual(before.totais_por_mes, after.totais_por_mes)
+        self.assertEqual(before.totais_por_servico, after.totais_por_servico)
+        self.assertEqual(before.pendencias, after.pendencias)
+        for old, new in zip(before.pacientes, after.pacientes):
+            self.assertEqual(old.model_dump(exclude={'paciente_nome'}), new.model_dump(exclude={'paciente_nome'}))
+        from app.schemas.financeiro import PatientTotal
+        old_payload = after.pacientes[0].model_dump(exclude={'paciente_nome'})
+        self.assertIsNone(PatientTotal.model_validate(old_payload).paciente_nome)
+
     def test_composition_matches_individuals_exactly(self):
         second, _ = self.add_patient(mapped=False)
         third, _ = self.add_patient(care=False)
@@ -179,7 +214,7 @@ class InstitutionalPostgresTests(unittest.TestCase):
             large=self.run_preview(batch_size=100)
             count=len(statements);statements.clear()
             small=self.run_preview(batch_size=1)
-            self.assertEqual(len(statements)-count,3*8)
+            self.assertEqual(len(statements)-count,3*9)
         finally:event.remove(self.engine,'before_cursor_execute',capture)
         self.assertEqual(large,small)
         for value in (0,-1,True,1.5):
