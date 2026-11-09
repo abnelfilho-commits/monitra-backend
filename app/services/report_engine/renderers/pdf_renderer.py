@@ -220,6 +220,98 @@ class PDFRenderer(BaseRenderer):
 
         canvas.restoreState()
 
+    @staticmethod
+    def _mental_metrics(metrics, width, styles):
+        """Neuro's numeric card treatment, with explicit Mental labels and no scoring."""
+        flowables = []
+        value_style = ParagraphStyle('MentalIndicatorValue', parent=styles['indicator_value'],
+                                     fontSize=18, leading=22, textColor=colors.HexColor('#1D4ED8'))
+        for offset in range(0, len(metrics), 5):
+            group = metrics[offset:offset + 5]
+            column = width / len(group)
+            cards = []
+            for label, value in group:
+                card = Table([
+                    [Paragraph(escape(str(value)), value_style)],
+                    [Paragraph(escape(str(label)), styles['indicator_label'])],
+                ], colWidths=[column - 6])
+                card.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F8FAFC')),
+                    ('BOX', (0, 0), (-1, -1), .7, colors.HexColor('#E2E8F0')),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('TOPPADDING', (0, 0), (-1, -1), 8),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ]))
+                cards.append(card)
+            row = Table([cards], colWidths=[column] * len(group), hAlign='LEFT')
+            row.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                                    ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                                    ('RIGHTPADDING', (0, 0), (-1, -1), 6)]))
+            flowables.extend([row, Spacer(1, .15 * cm)])
+        return flowables
+
+    def _mental_component(self, component, width, styles, keep_compact=True):
+        data = component.data
+        compact = data.get('compact', False)
+        body = ParagraphStyle('MentalBody', parent=styles['body'],
+                              fontSize=8 if compact else 10,
+                              leading=11 if compact else 15, spaceAfter=3,
+                              allowWidows=0, allowOrphans=0)
+        para = lambda value, style=body: Paragraph(escape(str(value)), style)
+        if component.type == 'MENTAL_TEXT':
+            return [para(p) for p in data['paragraphs']]
+        heading = data.get('heading', '')
+        output = [CondPageBreak(2 * cm)]
+        if component.type == 'MENTAL_METRICS':
+            output.append(para(heading, styles['section']))
+            output.extend(self._mental_metrics(data['metrics'], width, styles))
+            output.extend(para(p, styles['metadata']) for p in data['paragraphs'])
+            return output
+        # Field names stay visible; long notes and objectives split across pages.
+        rows = [[para(heading, styles['status_value']), '']]
+        commands = [('SPAN', (0, 0), (1, 0)),
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#EFF6FF'))]
+        for label, value in data.get('fields', []):
+            rows.append([para(label, styles['metadata']), para(value)])
+        table = Table(rows, colWidths=[width * .32, width * .68],
+                      repeatRows=1, splitByRow=1, splitInRow=1, hAlign='LEFT')
+        table.setStyle(TableStyle(commands + [
+            ('BOX', (0, 0), (-1, -1), .7, colors.HexColor('#E2E8F0')),
+            ('LINEBELOW', (0, 0), (-1, 0), .5, colors.HexColor('#CBD5E1')),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 9),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        # Scores/domains use the same highlighted numeric treatment as journey cards.
+        if data.get('metrics'):
+            output.append(para(heading, styles['status_value']))
+            output.extend(self._mental_metrics(data['metrics'], width, styles))
+        output.append(table)
+        if data.get('paragraphs'):
+            # A separate full-width table avoids ReportLab's spanned-cell split
+            # measuring long narrative text at the narrow label-column width.
+            notes = Table([[para(heading, styles['metadata'])]] +
+                          [[para(text)] for text in data['paragraphs']],
+                          colWidths=[width], repeatRows=1, splitByRow=1, splitInRow=1, hAlign='LEFT')
+            notes.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F8FAFC')),
+                ('BOX', (0, 0), (-1, -1), .5, colors.HexColor('#E2E8F0')),
+                ('LEFTPADDING', (0, 0), (-1, -1), 9),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 9),
+                ('TOPPADDING', (0, 0), (-1, -1), 5),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ]))
+            output.append(notes)
+        output.append(Spacer(1, .25 * cm))
+        # Keep compact records (score, fields and official interpretation) together.
+        # Long narratives retain the split-capable tables above.
+        height = sum(item.wrap(width, 10000)[1] for item in output[1:])
+        if keep_compact and height <= 14 * cm:
+            return [KeepTogether(output[1:])]
+        return output
+
     def render(
         self,
         report: CanonicalReport,
@@ -245,7 +337,8 @@ class PDFRenderer(BaseRenderer):
         story.append(
             Paragraph(
                 report.report_name,
-                styles["title"],
+                ParagraphStyle('MentalTitle', parent=styles['title'], fontSize=18, leading=22)
+                if report.report_code == 'CLN-MENTAL-001' else styles['title'],
             )
         )
 
@@ -280,12 +373,17 @@ class PDFRenderer(BaseRenderer):
             Spacer(1, 0.7 * cm)
         )
 
-        for section in report.sections:
+        if report.report_code == 'CLN-MENTAL-001':
+            story.append(Paragraph(
+                f"<b>Período:</b> {format_date_pt_br(report.period_start)} a {format_date_pt_br(report.period_end)}",
+                styles['metadata']))
+
+        for section in (sorted(report.sections, key=lambda item: item.order) if report.report_code == 'CLN-MENTAL-001' else report.sections):
 
             section_story = []
             if report.report_code == "CLN-MENTAL-001":
                 # Reserve room for the heading and the beginning of its first block.
-                section_story.append(CondPageBreak(3 * cm))
+                section_story.append(CondPageBreak(4 * cm))
 
             section_story.append(
                 Paragraph(
@@ -1262,27 +1360,14 @@ class PDFRenderer(BaseRenderer):
                         Spacer(1, 0.35 * cm)
                     )
 
-                if component.type == "MENTAL_BLOCK":
-                    data = component.data or {}
-                    compact = data.get('compact', False)
-                    body = ParagraphStyle('MentalBlockBody', parent=styles['body'],
-                        fontSize=8 if compact else 10, leading=11 if compact else 15,
-                        spaceAfter=0)
-                    paragraphs = data.get('paragraphs') or ['Sem registros elegíveis no período.']
-                    rows = [[Paragraph(escape(str(value)), body)] for value in paragraphs]
-                    block = Table(rows, colWidths=[document.width],
-                        repeatRows=1 if len(rows) > 1 else 0, splitByRow=1, splitInRow=1)
-                    block.setStyle(TableStyle([
-                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F8FAFC')),
-                        ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#E2E8F0')),
-                        ('LINEBEFORE', (0, 0), (0, -1), 2, colors.HexColor('#2563EB')),
-                        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                        ('LEFTPADDING', (0, 0), (-1, -1), 10),
-                        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
-                        ('TOPPADDING', (0, 0), (-1, -1), 4 if compact else 6),
-                        ('BOTTOMPADDING', (0, 0), (-1, -1), 4 if compact else 6),
-                    ]))
-                    section_story.extend([block, Spacer(1, 0.12 * cm)])
+                if component.type in ('MENTAL_TEXT', 'MENTAL_RECORD', 'MENTAL_METRICS'):
+                    first_record = component is section.components[0] and component.type == 'MENTAL_RECORD'
+                    blocks = self._mental_component(component, document.width, styles, keep_compact=not first_record)
+                    if first_record and sum(item.wrap(document.width, 10000)[1] for item in blocks) <= 14 * cm:
+                        # Use one bounded group, never nested KeepTogether objects.
+                        section_story[-1:] = [KeepTogether([section_story[-1]] + blocks[1:])]
+                    else:
+                        section_story.extend(blocks)
 
                 if component.type == "PLAIN_TEXT":
                     for paragraph in str(component.data or '').split('\n'):
@@ -1313,7 +1398,7 @@ class PDFRenderer(BaseRenderer):
                             Spacer(1, 0.25 * cm)
                         )
                         
-            if any(component.type in ('PLAIN_TEXT', 'MENTAL_BLOCK') for component in section.components):
+            if report.report_code == 'CLN-MENTAL-001' or any(component.type == 'PLAIN_TEXT' for component in section.components):
                 story.extend(section_story)
             else:
                 story.append(KeepTogether(section_story))

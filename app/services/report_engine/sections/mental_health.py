@@ -4,16 +4,25 @@ from ..models import ReportSection, ReportComponent
 from .base_section import BaseSectionBuilder
 
 
-def section(code, title, order, paragraphs, starts=None):
+def section(code, title, order, paragraphs):
     result = ReportSection(code, title, order)
-    paragraphs = paragraphs or ['Sem registros elegíveis no período.']
-    starts = sorted(set(starts or range(len(paragraphs))))
-    for i, start in enumerate(starts):
-        end = starts[i + 1] if i + 1 < len(starts) else len(paragraphs)
-        result.add_component(ReportComponent('MENTAL_BLOCK', {
-            'paragraphs': paragraphs[start:end],
-            'compact': code == 'MENTAL_PROVENANCE',
+    for i, paragraph in enumerate(paragraphs or ['Sem registros elegíveis no período.']):
+        result.add_component(ReportComponent('MENTAL_TEXT', {
+            'paragraphs': [paragraph], 'compact': code == 'MENTAL_PROVENANCE',
         }, order=i))
+    return result
+
+
+def record(result, title, fields=(), paragraphs=(), metrics=()):
+    result.add_component(ReportComponent('MENTAL_RECORD', {
+        'heading': title, 'fields': list(fields), 'paragraphs': list(paragraphs),
+        'metrics': list(metrics),
+    }, order=len(result.components)))
+
+
+def empty(result):
+    if not result.components:
+        record(result, 'Sem registros elegíveis no período.')
     return result
 
 
@@ -37,7 +46,7 @@ class Identification(BaseSectionBuilder):
 class Period(BaseSectionBuilder):
     code = 'MENTAL_PERIOD'
     def build(self, c):
-        return section(self.code, 'Período analisado', 1, [
+        return section(self.code, 'Escopo temporal e limitações', 9, [
             f'{date_text(c.period_start)} a {date_text(c.period_end)}, inclusive; timestamps considerados em UTC.',
             'A síntese oficial utiliza somente as evidências selecionadas neste período. Não reconstrói um prontuário histórico imutável.',
             'PTS e planejamentos: sobreposição com o período; status, objetivos e dados cadastrais são os atuais, sem reconstrução histórica. Sessões usam data de realização quando existente; caso contrário, data agendada.'])
@@ -46,80 +55,113 @@ class Period(BaseSectionBuilder):
 class Summary(BaseSectionBuilder):
     code = 'MENTAL_SUMMARY'
     def build(self, c):
-        return section(self.code, 'Síntese assistencial', 2, [c.clinical_reading.summary or 'Síntese indisponível.'])
+        d = data(c)
+        result = section(self.code, 'Resumo Executivo', 1,
+                         [c.clinical_reading.summary or 'Síntese indisponível.'])
+        latest = max((r.data_hora for r in d['checkins']), default=None)
+        record(result, 'Situação Atual', [
+            ('Referência da leitura oficial', date_text(getattr(c.clinical_reading, 'reference_date', None))),
+            ('Último check-in no período', date_text(latest)),
+            ('Status atuais dos PTS selecionados', ', '.join(sorted({r.status for r in d['plans']})) or 'Sem PTS no recorte'),
+        ])
+        result.add_component(ReportComponent('MENTAL_METRICS', {
+            'heading': 'Indicadores da Jornada',
+            'metrics': [('Check-ins', len(d['checkins'])),
+                        ('Aplicações', sum(len(g['applications']) for g in d['assessments'].values())),
+                        ('Objetivos PTS', sum(len(r.objetivos) for r in d['plans'])),
+                        ('Planejamentos', len(d['planning'])),
+                        ('Sessões', len(d['sessions']))],
+            'paragraphs': ['Contagens dos registros selecionados; não representam escores clínicos.'],
+        }, order=len(result.components)))
+        return result
 
 
 class Wellbeing(BaseSectionBuilder):
     code = 'MENTAL_WELLBEING'
     def build(self, c):
-        paragraphs, starts = [], []
+        paragraphs = []
         for r in data(c)['checkins']:
-            starts.append(len(paragraphs))
             paragraphs.append(f'Check-in #{r.id} — {date_text(r.data_hora)}. ' + ('Baseline inicial.' if r.baseline else 'Acompanhamento.'))
             for key, label, options in FIELDS:
                 if key in r.respostas:
                     label = 'Solicitação de apoio autorreferida' if key == 'pedido_ajuda' else label
                     paragraphs.append(f'{label}: {dict(options).get(r.respostas[key], r.respostas[key])}')
-        return section(self.code, 'Bem-estar longitudinal', 3, paragraphs, starts)
+        return section(self.code, 'Check-ins detalhados de bem-estar', 8, paragraphs)
 
 
 class Assessments(BaseSectionBuilder):
     code = 'MENTAL_ASSESSMENTS'
     def build(self, c):
-        paragraphs, starts = [], []
+        result = ReportSection(self.code, 'Instrumentos de rastreamento', 2)
         for group in data(c)['assessments'].values():
             for application in group['applications']:
-                starts.append(len(paragraphs))
                 r = application['result']
-                paragraphs.append(f"{r.get('instrumento_label', application['instrument'])} — {application['recorded_at']}; aplicação #{application['application_id']}; versão {r.get('versao', 'não informada')}.")
+                metrics = []
                 if r.get('score') is not None:
-                    paragraphs.append(f"Resultado oficial: {r['score']}. Classificação do instrumento: {r.get('classificacao', 'não informada')}.")
-                for domain in r.get('dominios', []):
-                    paragraphs.append(f"{domain.get('nome', domain.get('label', domain['codigo']))}: {domain['score']}/100.")
-                if r.get('interpretacao'): paragraphs.append(r['interpretacao'])
-                paragraphs.extend(r.get('alertas', []))
-        return section(self.code, 'Instrumentos de rastreamento', 4, paragraphs, starts)
+                    metrics.append(('Resultado oficial', r['score']))
+                metrics.extend((domain.get('nome', domain.get('label', domain['codigo'])),
+                                f"{domain['score']}/100") for domain in r.get('dominios', []))
+                fields = [('Data/hora registrada', application['recorded_at']),
+                          ('Aplicação', f"#{application['application_id']}"),
+                          ('Versão', r.get('versao', 'não informada'))]
+                if r.get('score') is not None:
+                    fields.append(('Classificação do instrumento', r.get('classificacao', 'não informada')))
+                paragraphs = ([r['interpretacao']] if r.get('interpretacao') else []) + r.get('alertas', [])
+                record(result, r.get('instrumento_label', application['instrument']), fields, paragraphs, metrics)
+        return empty(result)
 
 
 class Diagnoses(BaseSectionBuilder):
     code = 'MENTAL_DIAGNOSES'
     def build(self, c):
-        return section(self.code, 'Diagnósticos', 5, [
-            f'{date_text(r.data_diagnostico)} — #{r.id}; {r.tipo}; {r.status}; CID: {r.cid or "Não informado"}. {r.descricao_clinica}. Profissional informado: {r.medico_nome}.'
-            for r in data(c)['diagnoses']])
+        result = ReportSection(self.code, 'Diagnósticos', 3)
+        for r in data(c)['diagnoses']:
+            record(result, f'Diagnóstico #{r.id}', [
+                ('Data', date_text(r.data_diagnostico)), ('Tipo', r.tipo), ('Status', r.status),
+                ('CID', r.cid or 'Não informado'), ('Profissional informado', r.medico_nome),
+            ], [r.descricao_clinica])
+        return empty(result)
 
 
 class Interventions(BaseSectionBuilder):
     code = 'MENTAL_INTERVENTIONS'
     def build(self, c):
-        return section(self.code, 'Intervenções', 6, [
-            f'{date_text(r.data_intervencao)} — #{r.id}; {r.tipo}. {r.descricao or ""}' for r in data(c)['interventions']])
+        result = ReportSection(self.code, 'Intervenções', 4)
+        for r in data(c)['interventions']:
+            record(result, f'Intervenção #{r.id}', [('Data', date_text(r.data_intervencao)),
+                   ('Tipo', r.tipo)], [r.descricao or ''])
+        return empty(result)
 
 
 class Plans(BaseSectionBuilder):
     code = 'MENTAL_PLANS'
     def build(self, c):
-        paragraphs, starts = [], []
+        result = ReportSection(self.code, 'PTS e planejamento assistencial', 5)
         for r in data(c)['plans']:
-            starts.append(len(paragraphs))
-            paragraphs.append(f'PTS #{r.id}: {r.objetivo_geral or "Não informado"}. {date_text(r.data_inicio)} a {date_text(r.data_fim)}; status atual: {r.status}.')
-            for o in r.objetivos: paragraphs.append(f'Objetivo #{o.id}: {o.descricao}. Status atual: {o.status}.')
+            record(result, f'PTS #{r.id}', [('Objetivo geral', r.objetivo_geral or 'Não informado'),
+                ('Início', date_text(r.data_inicio)), ('Término', date_text(r.data_fim)),
+                ('Status atual', r.status)] + [(f'Objetivo #{o.id} - {o.status}', o.descricao) for o in r.objetivos])
         for r in data(c)['planning']:
-            starts.append(len(paragraphs))
-            paragraphs.append(f'Planejamento #{r.id}, PTS #{r.pts_id}, objetivo #{r.objetivo_id}: {r.atividade_nome}; {r.ocupacao_nome}; {r.profissional_nome}. '
-                f'{date_text(r.data_inicio)} a {date_text(r.data_fim)}; {r.frequencia_semanal}/semana; {r.duracao_minutos} minutos; {r.quantidade_sessoes} sessões previstas no planejamento integral. Status atual: {r.status}.')
-        return section(self.code, 'PTS e planejamento assistencial', 7, paragraphs, starts)
+            record(result, f'Planejamento #{r.id}', [
+                ('PTS / Objetivo', f'#{r.pts_id} / #{r.objetivo_id}'), ('Atividade', r.atividade_nome),
+                ('Ocupação', r.ocupacao_nome), ('Profissional', r.profissional_nome),
+                ('Início', date_text(r.data_inicio)), ('Término', date_text(r.data_fim)),
+                ('Frequência semanal', f'{r.frequencia_semanal}/semana'),
+                ('Duração', f'{r.duracao_minutos} minutos'),
+                ('Sessões previstas no planejamento integral', r.quantidade_sessoes), ('Status atual', r.status)])
+        return empty(result)
 
 
 class Sessions(BaseSectionBuilder):
     code = 'MENTAL_SESSIONS'
     def build(self, c):
-        paragraphs, starts = [], []
+        result = ReportSection(self.code, 'Sessões e acompanhamento', 6)
         for r in data(c)['sessions']:
-            starts.append(len(paragraphs))
-            paragraphs.append(f'Sessão #{r.id}, agenda #{r.agenda_cuidado_id}: {r.status}. Agendada: {date_text(r.data_agendada)}; realizada: {date_text(r.data_realizacao)}. Profissional: {r.profissional_nome or "Não informado"}.')
-            if r.narrativa: paragraphs.append('Registro de atendimento: ' + r.narrativa)
-        return section(self.code, 'Sessões e acompanhamento', 8, paragraphs, starts)
+            record(result, f'Sessão #{r.id}', [('Agenda', f'#{r.agenda_cuidado_id}'), ('Status', r.status),
+                ('Agendada', date_text(r.data_agendada)), ('Realizada', date_text(r.data_realizacao)),
+                ('Profissional', r.profissional_nome or 'Não informado')],
+                ['Registro de atendimento: ' + r.narrativa] if r.narrativa else [])
+        return empty(result)
 
 
 class Narrative(BaseSectionBuilder):
@@ -131,7 +173,7 @@ class Narrative(BaseSectionBuilder):
         events += [(r.data_intervencao.isoformat()[:10], f'Intervenção #{r.id}: {r.tipo}') for r in d['interventions']]
         events += [(r['recorded_at'][:10], f"{r['instrument']} — aplicação #{r['application_id']}") for g in d['assessments'].values() for r in g['applications']]
         events += [((r.data_realizacao or r.data_agendada).isoformat(), f'Sessão #{r.id}: {r.status}') for r in d['sessions']]
-        return section(self.code, 'Narrativa longitudinal factual', 9, [f'{day}: {text}.' for day, text in sorted(events)])
+        return section(self.code, 'Narrativa longitudinal factual', 7, [f'{day}: {text}.' for day, text in sorted(events)])
 
 
 class Considerations(BaseSectionBuilder):
