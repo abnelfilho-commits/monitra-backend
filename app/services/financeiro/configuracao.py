@@ -3,13 +3,14 @@
 No endpoint, access grant, clinical write, price resolver or implicit commit.
 """
 from functools import wraps
-from sqlalchemy import text, or_
+from sqlalchemy import text, or_, func
 from sqlalchemy.exc import IntegrityError
 from app.models.financeiro import (ServicoEconomico, TabelaPreco, TabelaPrecoVersao,
     PrecoServico, ContratoFinanceiro, PacienteContrato, MapeamentoAgendaServico)
 from app.models.usuario import Usuario
 from app.models.institucional import Instituicao, PacienteInstituicao
 from app.models.paciente import Paciente
+from app.models.pessoa import Pessoa
 from app.models.atividade_terapeutica import OcupacaoProfissional
 from app.schemas.financeiro import (ServicoCreate, TabelaCreate, VersaoCreate,
     PrecoCreate, ContratoCreate, PacienteContratoCreate, MapeamentoCreate)
@@ -31,6 +32,11 @@ def atomic(method):
         with db.begin_nested():
             return method(self, db, *args, **kwargs)
     return run
+
+
+def patient_display_name():
+    """Canonical identity when linked; preserve unlinked legacy patients."""
+    return func.coalesce(Pessoa.nome_completo, Paciente.nome)
 
 
 class FinanceiroConfiguracaoService:
@@ -307,15 +313,16 @@ class FinanceiroConfiguracaoService:
         self._row(db, ContratoFinanceiro, contract_id)
 
         rows = (
-            db.query(PacienteContrato, Paciente)
+            db.query(PacienteContrato, Paciente, patient_display_name().label("paciente_nome"))
             .join(
                 Paciente,
                 Paciente.id == PacienteContrato.paciente_id,
             )
+            .outerjoin(Pessoa, Pessoa.id == Paciente.pessoa_id)
             .filter(PacienteContrato.contrato_id == contract_id)
             .populate_existing()
             .order_by(
-                Paciente.nome,
+                patient_display_name(),
                 PacienteContrato.inicio.desc(),
                 PacienteContrato.id.desc(),
             )
@@ -325,19 +332,20 @@ class FinanceiroConfiguracaoService:
         return [
             dict(
                 {c.name: getattr(link, c.name) for c in PacienteContrato.__table__.columns},
-                paciente_nome=paciente.nome,
+                paciente_nome=nome,
                 data_nascimento=paciente.data_nascimento,
             )
-            for link, paciente in rows
+            for link, paciente, nome in rows
         ]
 
     def get_beneficiary(self, db, identity):
         rows = (
-            db.query(PacienteContrato, Paciente)
+            db.query(PacienteContrato, Paciente, patient_display_name().label("paciente_nome"))
             .join(
                 Paciente,
                 Paciente.id == PacienteContrato.paciente_id,
             )
+            .outerjoin(Pessoa, Pessoa.id == Paciente.pessoa_id)
             .filter(PacienteContrato.id == identity)
             .populate_existing()
             .all()
@@ -346,10 +354,10 @@ class FinanceiroConfiguracaoService:
         if not rows:
             raise FinanceiroErro('NOT_FOUND')
 
-        link, paciente = rows[0]
+        link, paciente, nome = rows[0]
         return dict(
             {c.name: getattr(link, c.name) for c in PacienteContrato.__table__.columns},
-            paciente_nome=paciente.nome,
+            paciente_nome=nome,
             data_nascimento=paciente.data_nascimento,
         )
 
@@ -357,7 +365,8 @@ class FinanceiroConfiguracaoService:
         contract = self._row(db, ContratoFinanceiro, contract_id)
 
         rows = (
-            db.query(Paciente.id, Paciente.nome, Paciente.data_nascimento)
+            db.query(Paciente.id, patient_display_name().label("paciente_nome"), Paciente.data_nascimento)
+            .outerjoin(Pessoa, Pessoa.id == Paciente.pessoa_id)
             .join(
                 PacienteInstituicao,
                 PacienteInstituicao.paciente_id == Paciente.id,
@@ -368,7 +377,7 @@ class FinanceiroConfiguracaoService:
                 PacienteInstituicao.ativo.is_(True),
             )
             .distinct()
-            .order_by(Paciente.nome, Paciente.id)
+            .order_by(patient_display_name(), Paciente.id)
             .all()
         )
 
@@ -459,7 +468,7 @@ class FinanceiroConfiguracaoService:
         M, S = MapeamentoAgendaServico, ServicoEconomico
         query = db.query(
             A.id.label('agenda_cuidado_id'), PTS.paciente_id,
-            Paciente.nome.label('paciente_nome'), A.atividade_id,
+            patient_display_name().label('paciente_nome'), A.atividade_id,
             AtividadeTerapeutica.nome.label('atividade_nome'), A.ocupacao_id,
             OcupacaoProfissional.nome.label('ocupacao_nome'), A.duracao_minutos,
             PTS.modulo_id, ModuloClinico.nome.label('modulo_nome'),
@@ -467,7 +476,8 @@ class FinanceiroConfiguracaoService:
             A.status, M.id.label('mapeamento_id'), S.id.label('servico_id'),
             S.codigo.label('servico_codigo'), S.descricao.label('servico_descricao'),
             S.ativo.label('servico_ativo'),
-        ).join(PTS, PTS.id == A.pts_id).join(Paciente, Paciente.id == PTS.paciente_id).join(
+        ).join(PTS, PTS.id == A.pts_id).join(Paciente, Paciente.id == PTS.paciente_id).outerjoin(
+            Pessoa, Pessoa.id == Paciente.pessoa_id).join(
             AtividadeTerapeutica, AtividadeTerapeutica.id == A.atividade_id).join(
             OcupacaoProfissional, OcupacaoProfissional.id == A.ocupacao_id).outerjoin(
             ModuloClinico, ModuloClinico.id == PTS.modulo_id).outerjoin(
@@ -481,9 +491,9 @@ class FinanceiroConfiguracaoService:
         elif situacao == 'NAO_MAPEADOS':
             query = query.filter(M.id.is_(None))
         if busca and busca.strip():
-            query = query.filter(or_(Paciente.nome.icontains(busca.strip(), autoescape=True),
+            query = query.filter(or_(patient_display_name().icontains(busca.strip(), autoescape=True),
                                     AtividadeTerapeutica.nome.icontains(busca.strip(), autoescape=True)))
-        return [dict(row._mapping) for row in query.order_by(Paciente.nome, A.id).all()]
+        return [dict(row._mapping) for row in query.order_by(patient_display_name(), A.id).all()]
 
     @atomic
     def administer_mapping(self, db, *, payload=None, identity=None, servico_id=None):
