@@ -96,6 +96,18 @@ class FinanceiroConfiguracaoService:
         if institutional_link is None:
             raise FinanceiroErro('BENEFICIARY_PAYER_MISMATCH')
 
+    def _mapping_compatible(self, db, agenda_id, service_id):
+        from app.models.agenda_cuidado import AgendaCuidado
+        from app.services.financeiro.resolution import compatible_service
+        service = self._row(db, ServicoEconomico, service_id)
+        agenda = self._row(db, AgendaCuidado, agenda_id)
+        if not service.ativo:
+            raise FinanceiroErro('INACTIVE_SERVICE')
+        values = {key: getattr(service, key) for key in
+                  ('ativo', 'unidade', 'tipo_atendimento', 'ocupacao_id', 'duracao_minutos')}
+        if not compatible_service(values, agenda.ocupacao_id, agenda.duracao_minutos):
+            raise FinanceiroErro('INCOMPATIBLE_ECONOMIC_SERVICE_MAPPING')
+
     @atomic
     def create(self, db, model, payload):
         if model not in self.SCHEMAS:
@@ -108,6 +120,7 @@ class FinanceiroConfiguracaoService:
         if model is PrecoServico:
             self._draft(self._row(db, TabelaPrecoVersao, data.versao_id))
         if model is MapeamentoAgendaServico:
+            self._mapping_compatible(db, data.agenda_cuidado_id, data.servico_id)
             existing = db.query(model).filter_by(agenda_cuidado_id=data.agenda_cuidado_id).populate_existing().first()
             if existing:
                 if existing.servico_id != data.servico_id:
@@ -242,6 +255,7 @@ class FinanceiroConfiguracaoService:
     def change_mapping(self, db, identity, *, servico_id):
         row = self._row(db, MapeamentoAgendaServico, identity)
         data = MapeamentoCreate(agenda_cuidado_id=row.agenda_cuidado_id, servico_id=servico_id)
+        self._mapping_compatible(db, data.agenda_cuidado_id, data.servico_id)
         row.servico_id = data.servico_id
         db.flush()
         return row

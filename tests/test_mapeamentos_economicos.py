@@ -114,3 +114,41 @@ class MappingTests(unittest.TestCase):
         with patch.object(api.service,'list_mapping_agendas',return_value=[{}]):
             self.assertEqual(self.create().status_code,500)
         self.assertIsNone(self.req().json()[0]['mapeamento_id'])
+
+    def test_duration_mismatch_and_legacy_repair(self):
+        first = self.create().json()
+        self.db.rollback()
+        with self.engine.begin() as c:
+            c.execute(text('UPDATE agenda_cuidados SET duracao_minutos=50 WHERE id=:id'), {'id': self.agenda})
+            good = c.execute(text("INSERT INTO servicos_economicos(codigo,descricao,ocupacao_id,duracao_minutos) VALUES ('S50','Compatible',:o,50) RETURNING id"), {'o': self.occupation}).scalar()
+        rejected = self.req('PUT', '/'+str(first['mapeamento_id']), {'servico_id': self.second})
+        self.assertEqual(rejected.status_code, 422, rejected.text)
+        self.assertEqual(rejected.json()['detail']['code'], 'INCOMPATIBLE_ECONOMIC_SERVICE_MAPPING')
+        self.assertEqual(self.req().json()[0]['servico_id'], self.sid)
+        self.assertEqual(self.create().status_code, 422)
+        repaired = self.req('PUT', '/'+str(first['mapeamento_id']), {'servico_id': good})
+        self.assertEqual(repaired.status_code, 200, repaired.text)
+        self.assertEqual(repaired.json()['mapeamento_id'], first['mapeamento_id'])
+        self.assertEqual(repaired.json()['servico_id'], good)
+
+    def test_occupation_mismatch_does_not_create_mapping(self):
+        self.db.rollback()
+        with self.engine.begin() as c:
+            occupation = c.execute(text("INSERT INTO ocupacoes_profissionais(nome) VALUES ('Other occupation') RETURNING id")).scalar()
+            service = c.execute(text("INSERT INTO servicos_economicos(codigo,descricao,ocupacao_id,duracao_minutos) VALUES ('OTHER','Other',:o,45) RETURNING id"), {'o': occupation}).scalar()
+        response = self.create(service)
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertIsNone(self.req().json()[0]['mapeamento_id'])
+
+
+class CompatibilityTests(unittest.TestCase):
+    def test_same_pricing_predicate(self):
+        from app.services.financeiro.resolution import compatible_service
+        good = dict(ativo=True, unidade='SESSAO', tipo_atendimento='INDIVIDUAL', ocupacao_id=1, duracao_minutos=50)
+        self.assertTrue(compatible_service(good, 1, 50, 50))
+        for changes in ({'ativo':False}, {'unidade':'HORA'}, {'tipo_atendimento':'GRUPO'}, {'ocupacao_id':2}, {'duracao_minutos':45}):
+            with self.subTest(changes=changes):
+                self.assertFalse(compatible_service(dict(good, **changes), 1, 50))
+        self.assertFalse(compatible_service(good, 1, 50, 45))
+        self.assertFalse(compatible_service(good, 1, 50, None))
+        self.assertFalse(compatible_service(None, 1, 50))

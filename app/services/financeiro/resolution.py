@@ -10,6 +10,15 @@ from app.schemas.financeiro import PreviewItem
 from app.services.financeiro.calculator import subtotal
 
 
+def compatible_service(service, occupation, agenda_duration, session_duration=...):
+    """Same compatibility predicate for mapping validation and price resolution."""
+    return bool(service and service['ativo'] and service['unidade'] == 'SESSAO'
+                and service['tipo_atendimento'] == 'INDIVIDUAL'
+                and service['ocupacao_id'] == occupation
+                and service['duracao_minutos'] == agenda_duration
+                and (session_duration is ... or service['duracao_minutos'] == session_duration))
+
+
 def rows(db, model, *conditions):
     return db.execute(select(model.__table__).where(*conditions)).mappings().all()
 
@@ -71,11 +80,8 @@ def resolve_items(plan, contract, table, links, inputs):
             data['tabela_id'] = table['id']
             if not mapping:
                 pending = 'NO_ECONOMIC_SERVICE_MAPPING'
-            elif (not service or not service['ativo'] or service['unidade'] != 'SESSAO'
-                  or service['tipo_atendimento'] != 'INDIVIDUAL'
-                  or service['ocupacao_id'] != session.ocupacao_id
-                  or service['duracao_minutos'] != session.duracao_minutos
-                  or service['duracao_minutos'] != session.duracao_agenda):
+            elif not compatible_service(service, session.ocupacao_id, session.duracao_agenda,
+                                        session.duracao_minutos):
                 pending = 'INCOMPATIBLE_ECONOMIC_SERVICE_MAPPING'
             else:
                 pos = bisect_right(dates, day) - 1

@@ -26,7 +26,7 @@ def respond(db, operation, *, write=False):
     except FinanceiroErro as exc:
         db.rollback()
         status = {'NOT_FOUND': 404, 'MAPPING_CONFLICT': 409, 'INACTIVE_SERVICE': 422,
-                  'CLEAN_SESSION_REQUIRED': 409}.get(exc.code, 500)
+                  'INCOMPATIBLE_ECONOMIC_SERVICE_MAPPING': 422, 'CLEAN_SESSION_REQUIRED': 409}.get(exc.code, 500)
         raise HTTPException(status, {'code': exc.code if status != 500 else 'ECONOMIC_OPERATION_FAILED'}) from None
     except DBAPIError as exc:
         db.rollback()
