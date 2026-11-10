@@ -2,7 +2,7 @@
 import re
 from datetime import date, datetime
 from typing import Optional, Literal
-from pydantic import BaseModel, validator, root_validator
+from pydantic import BaseModel, Field, validator, root_validator
 
 
 def normalize_cnpj(value):
@@ -167,3 +167,20 @@ class PacienteProfissionalResponse(VinculoInstitucionalResponse):
     paciente_id: int
     paciente_instituicao_id: Optional[int]
     profissional_instituicao_id: int
+
+
+class CapacidadeProfissionalCreate(TemporalCreate):
+    minutos_semanais: int = Field(strict=True, gt=0, le=2147483647)
+
+
+class CapacidadeProfissionalRequest(CapacidadeProfissionalCreate, MotivoInstitucional):
+    pass
+
+
+class CapacidadeProfissionalResponse(VinculoInstitucionalResponse):
+    profissional_instituicao_id: int
+    instituicao_id: int
+    minutos_semanais: int
+    data_referencia: date
+    estado: Literal['INVALIDADO', 'FUTURO', 'ENCERRADO', 'VIGENTE']
+    vigente: bool

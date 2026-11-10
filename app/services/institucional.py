@@ -7,9 +7,11 @@ from datetime import date
 from sqlalchemy import text, or_
 from sqlalchemy.exc import IntegrityError
 from app.models.institucional import (Instituicao, InstituicaoPapel, PacienteInstituicao,
-                                     ProfissionalInstituicao, PacienteProfissional)
+                                     ProfissionalInstituicao, PacienteProfissional, CapacidadeProfissional)
 from app.schemas.institucional import (InstituicaoCreate, PapelCreate, PacienteInstituicaoCreate,
                                       ProfissionalInstituicaoCreate, PacienteProfissionalCreate, InstituicaoUpdate)
+from app.schemas.institucional import CapacidadeProfissionalCreate
+from app.models.profissional import Profissional
 from app.models.usuario import Usuario
 from app.models.institucional_operacao import InstitucionalOperacao
 
@@ -171,9 +173,10 @@ class InstitucionalService:
                 for c in row.__table__.columns if c.name not in ('criado_em', 'atualizado_em')}
 
     def _audit(self, db, row, actor, reason, operation, result, previous):
-        kind, column, _ = LINKS[type(row)]
+        kind, column, _ = (('CAPACIDADE_PROFISSIONAL', 'capacidade_profissional_id', ())
+                           if isinstance(row, CapacidadeProfissional) else LINKS[type(row)])
         institution = (db.get(ProfissionalInstituicao, row.profissional_instituicao_id).instituicao_id
-                       if isinstance(row, PacienteProfissional) else row.instituicao_id)
+                       if isinstance(row, (PacienteProfissional, CapacidadeProfissional)) else row.instituicao_id)
         db.add(InstitucionalOperacao(ator_usuario_id=actor, instituicao_id=institution,
             operacao=operation, tipo_alvo=kind, **{column: row.id}, motivo=reason.strip(),
             resultado=result, estado_anterior=previous, estado_final=self._snapshot(row)))
@@ -212,8 +215,14 @@ class InstitucionalService:
 
     @staticmethod
     def _dependencies(db, row, end=None, invalidating=False):
-        if isinstance(row, PacienteProfissional):
+        if isinstance(row, (PacienteProfissional, CapacidadeProfissional)):
             return
+        if isinstance(row, ProfissionalInstituicao):
+            capacities = db.query(CapacidadeProfissional).filter_by(profissional_instituicao_id=row.id, ativo=True)
+            if not invalidating:
+                capacities = capacities.filter(or_(CapacidadeProfissional.data_fim.is_(None), CapacidadeProfissional.data_fim > end))
+            if capacities.first() is not None:
+                raise InstitucionalErro('DEPENDENT_LINK_CONFLICT')
         child = PacienteProfissional
         field = child.paciente_instituicao_id if isinstance(row, PacienteInstituicao) else child.profissional_instituicao_id
         direct = db.query(child).filter(field == row.id, child.ativo.is_(True))
@@ -310,3 +319,86 @@ class InstitucionalService:
             raise ValueError('Vínculo temporal obrigatório')
         return db.query(model).filter(model.ativo.is_(True), model.data_inicio <= reference_date,
             or_(model.data_fim.is_(None), model.data_fim >= reference_date))
+
+
+    def _capacity_scope(self, db, institution_id, link_id, actor_id, *, lock=False):
+        # Same existing ADMIN authority as institutional link management.
+        self._admin(db, actor_id)
+        if type(institution_id) is not int or institution_id <= 0:
+            raise InstitucionalErro('EXPLICIT_INSTITUTION_REQUIRED')
+        institution = db.query(Instituicao).filter_by(id=institution_id).populate_existing()
+        if lock:
+            institution = institution.with_for_update()
+        institution = institution.first()
+        link = db.query(ProfissionalInstituicao).filter_by(id=link_id, instituicao_id=institution_id).populate_existing()
+        if lock:
+            link = link.with_for_update()
+        link = link.first()
+        if institution is None or link is None:
+            raise InstitucionalErro('LINK_NOT_FOUND')
+        professional = db.query(Profissional).filter_by(id=link.profissional_id).populate_existing()
+        if lock:
+            professional = professional.with_for_update()
+        return institution, link, professional.first()
+
+    def capacity_output(self, row, institution, link, professional, reference_date):
+        return dict(self._snapshot(row), criado_em=row.criado_em, atualizado_em=row.atualizado_em,
+            instituicao_id=institution.id, data_referencia=reference_date,
+            estado=self.state(row, reference_date),
+            vigente=bool(institution.ativo and professional and professional.ativo
+                and self.state(link, reference_date) == 'VIGENTE'
+                and self.state(row, reference_date) == 'VIGENTE'))
+
+    def capacities(self, db, *, instituicao_id, vinculo_id, actor_id, reference_date):
+        institution, link, professional = self._capacity_scope(db, instituicao_id, vinculo_id, actor_id)
+        rows = db.query(CapacidadeProfissional).filter_by(profissional_instituicao_id=link.id).order_by(
+            CapacidadeProfissional.data_inicio, CapacidadeProfissional.id).populate_existing().all()
+        return [self.capacity_output(row, institution, link, professional, reference_date) for row in rows]
+
+    def manage_capacity(self, db, *, instituicao_id, vinculo_id, actor_id, motivo,
+                        operation, reference_date, payload=None, identity=None, end=None):
+        # Shared advisory lock precedes parent and capacity locks. Caller commits.
+        self._write_gate(db, actor_id, motivo)
+        institution, link, professional = self._capacity_scope(db, instituicao_id, vinculo_id, actor_id, lock=True)
+        with db.begin_nested():
+            rows = db.query(CapacidadeProfissional).filter_by(profissional_instituicao_id=link.id).order_by(
+                CapacidadeProfissional.id).populate_existing().with_for_update().all()
+            if operation == 'CREATE_CAPACITY':
+                data = CapacidadeProfissionalCreate.model_validate(payload).model_dump()
+                if not institution.ativo or professional is None or not professional.ativo or not self._contains(link, data['data_inicio'], data['data_fim']):
+                    raise InstitucionalErro('PARENT_PERIOD_OR_STATE_CONFLICT')
+                for row in rows:
+                    if all(getattr(row, k) == v for k, v in data.items()):
+                        return self.capacity_output(row, institution, link, professional, reference_date)
+                    if row.ativo and (row.data_fim is None or data['data_inicio'] <= row.data_fim) and (data['data_fim'] is None or row.data_inicio <= data['data_fim']):
+                        raise InstitucionalErro('PERIOD_CONFLICT')
+                row = CapacidadeProfissional(profissional_instituicao_id=link.id, **data)
+                before = None
+                db.add(row)
+                result = 'CREATED'
+            else:
+                row = next((r for r in rows if r.id == identity), None)
+                if row is None:
+                    raise InstitucionalErro('LINK_NOT_FOUND')
+                before = self._snapshot(row)
+                if operation == 'CLOSE_CAPACITY':
+                    if not row.ativo:
+                        raise InstitucionalErro('LINK_INVALIDATED')
+                    if type(end) is not date or end < row.data_inicio:
+                        raise InstitucionalErro('INVALID_PERIOD')
+                    if row.data_fim == end:
+                        return self.capacity_output(row, institution, link, professional, reference_date)
+                    if row.data_fim is not None and end > row.data_fim:
+                        raise InstitucionalErro('CLOSE_CONFLICT')
+                    row.data_fim = end
+                    result = 'CLOSED'
+                elif operation == 'INVALIDATE_CAPACITY':
+                    if not row.ativo:
+                        return self.capacity_output(row, institution, link, professional, reference_date)
+                    row.ativo = False
+                    result = 'INVALIDATED'
+                else:
+                    raise InstitucionalErro('INVALID_TARGET')
+            db.flush()
+            self._audit(db, row, actor_id, motivo, operation, result, before)
+            return self.capacity_output(row, institution, link, professional, reference_date)

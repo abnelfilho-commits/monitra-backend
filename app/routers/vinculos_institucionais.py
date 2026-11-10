@@ -1,5 +1,9 @@
 """Global ADMIN transport for institutional links; domain rules stay in G2.B.1."""
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Optional
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
+from app.schemas.institucional import CapacidadeProfissionalRequest, CapacidadeProfissionalResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Path
 from fastapi.exceptions import RequestValidationError
 from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
@@ -148,3 +152,44 @@ def close_paciente_profissionais(identity: int, payload: CloseInstitucionalReque
 def invalidate_paciente_profissionais(identity: int, payload: MotivoInstitucional, db: Session = Depends(get_db), admin=Depends(exigir_admin)):
     return respond(db, lambda: service.invalidate(db, PacienteProfissional, identity,
         actor_id=admin.id, motivo=payload.motivo), PacienteProfissionalResponse, write=True)
+
+
+# Capacity is administrative allocation, never clinical access.
+
+
+def capacity_reference(data_referencia: Optional[date] = Query(None)):
+    return data_referencia or datetime.now(ZoneInfo('America/Cuiaba')).date()
+
+
+@router.get('/profissionais/{vinculo_id}/capacidades', response_model=list[CapacidadeProfissionalResponse])
+def list_capacities(vinculo_id: int = Path(..., gt=0), instituicao_id: int = Query(..., gt=0),
+                    reference_date=Depends(capacity_reference), db: Session = Depends(get_db), admin=Depends(exigir_admin)):
+    return respond(db, lambda: service.capacities(db, instituicao_id=instituicao_id, vinculo_id=vinculo_id,
+        actor_id=admin.id, reference_date=reference_date), CapacidadeProfissionalResponse, many=True)
+
+
+@router.post('/profissionais/{vinculo_id}/capacidades', response_model=CapacidadeProfissionalResponse)
+def create_capacity(payload: CapacidadeProfissionalRequest, vinculo_id: int = Path(..., gt=0),
+                    instituicao_id: int = Query(..., gt=0), reference_date=Depends(capacity_reference),
+                    db: Session = Depends(get_db), admin=Depends(exigir_admin)):
+    return respond(db, lambda: service.manage_capacity(db, instituicao_id=instituicao_id, vinculo_id=vinculo_id,
+        actor_id=admin.id, motivo=payload.motivo, operation='CREATE_CAPACITY', reference_date=reference_date,
+        payload=payload.model_dump(exclude={'motivo'})), CapacidadeProfissionalResponse, write=True)
+
+
+@router.post('/profissionais/{vinculo_id}/capacidades/{identity}/close', response_model=CapacidadeProfissionalResponse)
+def close_capacity(payload: CloseInstitucionalRequest, vinculo_id: int = Path(..., gt=0), identity: int = Path(..., gt=0),
+                   instituicao_id: int = Query(..., gt=0), reference_date=Depends(capacity_reference),
+                   db: Session = Depends(get_db), admin=Depends(exigir_admin)):
+    return respond(db, lambda: service.manage_capacity(db, instituicao_id=instituicao_id, vinculo_id=vinculo_id,
+        actor_id=admin.id, motivo=payload.motivo, operation='CLOSE_CAPACITY', identity=identity,
+        end=payload.data_fim, reference_date=reference_date), CapacidadeProfissionalResponse, write=True)
+
+
+@router.post('/profissionais/{vinculo_id}/capacidades/{identity}/invalidate', response_model=CapacidadeProfissionalResponse)
+def invalidate_capacity(payload: MotivoInstitucional, vinculo_id: int = Path(..., gt=0), identity: int = Path(..., gt=0),
+                        instituicao_id: int = Query(..., gt=0), reference_date=Depends(capacity_reference),
+                        db: Session = Depends(get_db), admin=Depends(exigir_admin)):
+    return respond(db, lambda: service.manage_capacity(db, instituicao_id=instituicao_id, vinculo_id=vinculo_id,
+        actor_id=admin.id, motivo=payload.motivo, operation='INVALIDATE_CAPACITY', identity=identity,
+        reference_date=reference_date), CapacidadeProfissionalResponse, write=True)

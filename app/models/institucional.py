@@ -77,3 +77,12 @@ class PacienteProfissional(Temporal, Base):
     paciente_instituicao_id = Column(Integer, ForeignKey('paciente_instituicoes.id', ondelete='RESTRICT', name='fk_paciente_profissionais_paciente_instituicao'), nullable=True, index=True)
     profissional_instituicao_id = Column(Integer, ForeignKey('profissional_instituicoes.id', ondelete='RESTRICT'), nullable=False, index=True)
     __table_args__ = temporal_constraints('paciente_profissional', ('paciente_id', 'profissional_instituicao_id'))
+
+
+class CapacidadeProfissional(Temporal, Base):
+    """Declared weekly allocation; never a clinical authorization."""
+    __tablename__ = 'capacidades_profissionais'
+    profissional_instituicao_id = Column(Integer, ForeignKey('profissional_instituicoes.id', ondelete='RESTRICT'), nullable=False, index=True)
+    minutos_semanais = Column(Integer, nullable=False)
+    __table_args__ = temporal_constraints('capacidade_profissional', ('profissional_instituicao_id',)) + (
+        CheckConstraint('minutos_semanais > 0', name='ck_capacidade_profissional_minutos_positivos'),)
