@@ -163,6 +163,11 @@ class ProfissionalInstituicaoResponse(VinculoInstitucionalResponse):
     ocupacao_id: int
 
 
+class ProfissionalInstituicaoListResponse(ProfissionalInstituicaoResponse):
+    profissional_nome: Optional[str] = None
+    ocupacao_nome: Optional[str] = None
+
+
 class PacienteProfissionalResponse(VinculoInstitucionalResponse):
     paciente_id: int
     paciente_instituicao_id: Optional[int]

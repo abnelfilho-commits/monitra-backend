@@ -14,7 +14,7 @@ from app.models.institucional import PacienteInstituicao, ProfissionalInstituica
 from app.schemas.institucional import (
     PacienteInstituicaoRequest, ProfissionalInstituicaoRequest, PacienteProfissionalRequest,
     PacienteInstituicaoResponse, ProfissionalInstituicaoResponse, PacienteProfissionalResponse,
-    CloseInstitucionalRequest, MotivoInstitucional,
+    CloseInstitucionalRequest, MotivoInstitucional, ProfissionalInstituicaoListResponse,
 )
 from app.services.institucional import InstitucionalService, InstitucionalErro
 
@@ -109,10 +109,10 @@ def get_profissionais(identity: int, db: Session = Depends(get_db), admin=Depend
     return respond(db, lambda: service.get(db, ProfissionalInstituicao, identity, actor_id=admin.id), ProfissionalInstituicaoResponse)
 
 
-@router.get('/profissionais', response_model=list[ProfissionalInstituicaoResponse])
+@router.get('/profissionais', response_model=list[ProfissionalInstituicaoListResponse])
 def list_profissionais(instituicao_id: int = Query(...), db: Session = Depends(get_db), admin=Depends(exigir_admin)):
-    return respond(db, lambda: service.list(db, ProfissionalInstituicao, instituicao_id=instituicao_id,
-        actor_id=admin.id), ProfissionalInstituicaoResponse, many=True)
+    return respond(db, lambda: service.professional_links_with_names(db, instituicao_id=instituicao_id,
+        actor_id=admin.id), ProfissionalInstituicaoListResponse, many=True)
 
 
 @router.post('/profissionais/{identity}/close', response_model=ProfissionalInstituicaoResponse)

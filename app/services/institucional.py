@@ -30,6 +30,10 @@ LINKS = {
 EXCLUSIONS = {'ex_paciente_instituicao_vigencia', 'ex_profissional_instituicao_vigencia', 'ex_paciente_profissional_vigencia'}
 
 
+# Same display rule for consolidation and the scoped administrative listing.
+PROFESSIONAL_DISPLAY_SQL = "COALESCE(NULLIF(btrim(pe.nome_social), ''), NULLIF(btrim(pe.nome_completo), ''), p.nome)"
+
+
 class InstitucionalService:
     CONTRACTS = {
         Instituicao: InstituicaoCreate,
@@ -303,6 +307,20 @@ class InstitucionalService:
             query = query.filter(model.instituicao_id == instituicao_id)
         return query.order_by(model.id).populate_existing().all()
 
+    def professional_links_with_names(self, db, *, instituicao_id, actor_id):
+        if instituicao_id is None:
+            raise InstitucionalErro('EXPLICIT_INSTITUTION_REQUIRED')
+        self._admin(db, actor_id)
+        return db.execute(text(f"""
+            SELECT v.*, {PROFESSIONAL_DISPLAY_SQL} AS profissional_nome, o.nome AS ocupacao_nome
+            FROM profissional_instituicoes v
+            LEFT JOIN profissionais p ON p.id = v.profissional_id
+            LEFT JOIN pessoas pe ON pe.id = p.pessoa_id
+            LEFT JOIN ocupacoes_profissionais o ON o.id = v.ocupacao_id
+            WHERE v.instituicao_id = :institution
+            ORDER BY v.id
+        """), {'institution': instituicao_id}).mappings().all()
+
     @staticmethod
     def state(row, reference_date):
         if not row.ativo:
@@ -412,13 +430,14 @@ class InstitucionalService:
         if type(reference_date) is not date or (ocupacao_id is not None and
                 (type(ocupacao_id) is not int or ocupacao_id <= 0)):
             raise InstitucionalErro('INVALID_CAPACITY_FILTER')
-        rows = db.execute(text('''
+        rows = db.execute(text(f'''
             WITH eligible AS (
                 SELECT v.id AS vinculo_id, v.instituicao_id, v.profissional_id,
-                       p.nome AS profissional_nome, v.ocupacao_id,
+                       {PROFESSIONAL_DISPLAY_SQL} AS profissional_nome, v.ocupacao_id,
                        v.data_inicio AS vinculo_data_inicio, v.data_fim AS vinculo_data_fim
                 FROM profissional_instituicoes v
                 JOIN profissionais p ON p.id=v.profissional_id AND p.ativo IS TRUE
+                LEFT JOIN pessoas pe ON pe.id=p.pessoa_id
                 WHERE v.instituicao_id=:institution AND v.ativo IS TRUE
                   AND v.data_inicio<=:reference AND (v.data_fim IS NULL OR v.data_fim>=:reference)
                   AND (CAST(:occupation AS integer) IS NULL OR v.ocupacao_id=:occupation)
