@@ -184,3 +184,43 @@ class CapacidadeProfissionalResponse(VinculoInstitucionalResponse):
     data_referencia: date
     estado: Literal['INVALIDADO', 'FUTURO', 'ENCERRADO', 'VIGENTE']
     vigente: bool
+
+
+class CapacidadeTotais(BaseModel):
+    minutos_semanais: int
+    horas_semanais: str
+    profissionais_distintos: int
+    vinculos_com_capacidade: int
+    vinculos_sem_capacidade: int
+    informacao_completa: bool
+
+
+class CapacidadeOcupacao(CapacidadeTotais):
+    ocupacao_id: int
+    ocupacao_nome: str
+    ocupacao_ativa: bool
+
+
+class CapacidadeVinculo(BaseModel):
+    vinculo_id: int
+    profissional_id: int
+    profissional_nome: str
+    ocupacao_id: int
+    ocupacao_nome: str
+    ocupacao_ativa: bool
+    vinculo_data_inicio: date
+    vinculo_data_fim: Optional[date]
+    capacidade_id: Optional[int]
+    capacidade_data_inicio: Optional[date]
+    capacidade_data_fim: Optional[date]
+    minutos_semanais: Optional[int]
+    situacao: Literal['INFORMADA', 'NAO_INFORMADA']
+
+
+class CapacidadeConsolidacao(BaseModel):
+    instituicao_id: int
+    data_referencia: date
+    ocupacao_id: Optional[int]
+    totais: CapacidadeTotais
+    ocupacoes: list[CapacidadeOcupacao]
+    vinculos: list[CapacidadeVinculo]

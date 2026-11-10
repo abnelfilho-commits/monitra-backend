@@ -402,3 +402,75 @@ class InstitucionalService:
             db.flush()
             self._audit(db, row, actor_id, motivo, operation, result, before)
             return self.capacity_output(row, institution, link, professional, reference_date)
+
+    def consolidate_capacity(self, db, *, instituicao_id, reference_date, actor_id, ocupacao_id=None):
+        """One data snapshot; current active flags evaluated at an inclusive civil date."""
+        from decimal import Decimal, ROUND_HALF_UP
+        self._admin(db, actor_id)
+        if type(instituicao_id) is not int or instituicao_id <= 0:
+            raise InstitucionalErro('EXPLICIT_INSTITUTION_REQUIRED')
+        if type(reference_date) is not date or (ocupacao_id is not None and
+                (type(ocupacao_id) is not int or ocupacao_id <= 0)):
+            raise InstitucionalErro('INVALID_CAPACITY_FILTER')
+        rows = db.execute(text('''
+            WITH eligible AS (
+                SELECT v.id AS vinculo_id, v.instituicao_id, v.profissional_id,
+                       p.nome AS profissional_nome, v.ocupacao_id,
+                       v.data_inicio AS vinculo_data_inicio, v.data_fim AS vinculo_data_fim
+                FROM profissional_instituicoes v
+                JOIN profissionais p ON p.id=v.profissional_id AND p.ativo IS TRUE
+                WHERE v.instituicao_id=:institution AND v.ativo IS TRUE
+                  AND v.data_inicio<=:reference AND (v.data_fim IS NULL OR v.data_fim>=:reference)
+                  AND (CAST(:occupation AS integer) IS NULL OR v.ocupacao_id=:occupation)
+            )
+            SELECT i.ativo AS instituicao_ativa, e.*, o.nome AS ocupacao_nome,
+                   o.ativo AS ocupacao_ativa, c.id AS capacidade_id,
+                   c.data_inicio AS capacidade_data_inicio, c.data_fim AS capacidade_data_fim,
+                   c.minutos_semanais
+            FROM instituicoes i
+            LEFT JOIN eligible e ON e.instituicao_id=i.id
+            LEFT JOIN ocupacoes_profissionais o ON o.id=e.ocupacao_id
+            LEFT JOIN capacidades_profissionais c ON c.profissional_instituicao_id=e.vinculo_id
+                AND c.ativo IS TRUE AND c.data_inicio<=:reference
+                AND (c.data_fim IS NULL OR c.data_fim>=:reference)
+            WHERE i.id=:institution
+            ORDER BY e.ocupacao_id, e.vinculo_id, c.id
+        '''), dict(institution=instituicao_id, reference=reference_date, occupation=ocupacao_id)).mappings().all()
+        if not rows:
+            raise InstitucionalErro('CAPACITY_INSTITUTION_NOT_FOUND')
+        if not rows[0]['instituicao_ativa']:
+            raise InstitucionalErro('CAPACITY_INSTITUTION_INACTIVE')
+        details, seen = [], set()
+        for row in rows:
+            if row['vinculo_id'] is None:
+                continue
+            if row['vinculo_id'] in seen:
+                raise InstitucionalErro('CAPACITY_INTEGRITY_CONFLICT')
+            seen.add(row['vinculo_id'])
+            if row['ocupacao_id'] is None or row['ocupacao_nome'] is None or (
+                    row['capacidade_id'] is not None and (row['minutos_semanais'] is None or row['minutos_semanais'] <= 0)):
+                raise InstitucionalErro('CAPACITY_INTEGRITY_CONFLICT')
+            details.append({key: row[key] for key in (
+                'vinculo_id', 'profissional_id', 'profissional_nome', 'ocupacao_id', 'ocupacao_nome',
+                'ocupacao_ativa', 'vinculo_data_inicio', 'vinculo_data_fim', 'capacidade_id',
+                'capacidade_data_inicio', 'capacidade_data_fim', 'minutos_semanais')})
+            details[-1]['ocupacao_ativa'] = row['ocupacao_ativa'] is True
+            details[-1]['situacao'] = 'INFORMADA' if row['capacidade_id'] is not None else 'NAO_INFORMADA'
+
+        def totals(items):
+            minutes = sum(item['minutos_semanais'] for item in items if item['capacidade_id'] is not None)
+            informed = sum(item['capacidade_id'] is not None for item in items)
+            return dict(minutos_semanais=minutes,
+                horas_semanais=str((Decimal(minutes)/Decimal(60)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                profissionais_distintos=len({item['profissional_id'] for item in items}),
+                vinculos_com_capacidade=informed, vinculos_sem_capacidade=len(items)-informed,
+                informacao_completa=informed == len(items))
+
+        groups = {}
+        for item in details:
+            groups.setdefault(item['ocupacao_id'], []).append(item)
+        occupations = [dict(ocupacao_id=identity, ocupacao_nome=items[0]['ocupacao_nome'],
+                            ocupacao_ativa=items[0]['ocupacao_ativa'], **totals(items))
+                       for identity, items in groups.items()]
+        return dict(instituicao_id=instituicao_id, data_referencia=reference_date, ocupacao_id=ocupacao_id,
+                    totais=totals(details), ocupacoes=occupations, vinculos=details)

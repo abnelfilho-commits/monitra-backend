@@ -2,7 +2,7 @@
 from typing import Optional
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
-from app.schemas.institucional import CapacidadeProfissionalRequest, CapacidadeProfissionalResponse
+from app.schemas.institucional import CapacidadeProfissionalRequest, CapacidadeProfissionalResponse, CapacidadeConsolidacao
 from fastapi import APIRouter, Depends, HTTPException, Query, Path
 from fastapi.exceptions import RequestValidationError
 from fastapi.routing import APIRoute
@@ -36,6 +36,8 @@ router = APIRouter(prefix='/admin/vinculos-institucionais',
                    tags=['Vínculos institucionais administrativos'], route_class=InstitutionalRoute)
 service = InstitucionalService()
 ERROR_STATUS = {
+    'CAPACITY_INSTITUTION_NOT_FOUND': 404, 'CAPACITY_INSTITUTION_INACTIVE': 409,
+    'CAPACITY_INTEGRITY_CONFLICT': 409, 'INVALID_CAPACITY_FILTER': 422,
     'ADMIN_REQUIRED': 403, 'LINK_NOT_FOUND': 404,
     'PERIOD_CONFLICT': 409, 'CLOSE_CONFLICT': 409, 'LINK_INVALIDATED': 409,
     'DEPENDENT_LINK_CONFLICT': 409, 'LEGACY_CONTEXT_UNRESOLVED': 409,
@@ -193,3 +195,11 @@ def invalidate_capacity(payload: MotivoInstitucional, vinculo_id: int = Path(...
     return respond(db, lambda: service.manage_capacity(db, instituicao_id=instituicao_id, vinculo_id=vinculo_id,
         actor_id=admin.id, motivo=payload.motivo, operation='INVALIDATE_CAPACITY', identity=identity,
         reference_date=reference_date), CapacidadeProfissionalResponse, write=True)
+
+
+@router.get('/capacidades/consolidacao', response_model=CapacidadeConsolidacao)
+def consolidate_capacity(instituicao_id: int = Query(..., gt=0), data_referencia: date = Query(...),
+                         ocupacao_id: Optional[int] = Query(None, gt=0),
+                         db: Session = Depends(get_db), admin=Depends(exigir_admin)):
+    return respond(db, lambda: service.consolidate_capacity(db, instituicao_id=instituicao_id,
+        reference_date=data_referencia, ocupacao_id=ocupacao_id, actor_id=admin.id), CapacidadeConsolidacao)
