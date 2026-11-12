@@ -44,6 +44,7 @@ from app.routers import financeiro_institucional
 
 from app.routers.identidades import router as identidades_router
 from app.routers.vinculos_institucionais import router as vinculos_institucionais_router
+from app.routers.consolidacao_gerencial import router as consolidacao_gerencial_router
 
 from app.routers.autorizacoes_institucionais import router as autorizacoes_institucionais_router
 
@@ -60,6 +61,7 @@ app.include_router(instituicoes_router)
 app.include_router(autorizacoes_institucionais_router)
 app.include_router(identidades_router)
 app.include_router(vinculos_institucionais_router)
+app.include_router(consolidacao_gerencial_router)
 
 origins = [
     "https://care.meyio.com.br",
