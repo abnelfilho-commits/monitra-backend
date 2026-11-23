@@ -12,7 +12,9 @@ import math
 from collections import defaultdict
 from datetime import date, timedelta
 
-from sqlalchemy import text
+from sqlalchemy import text, bindparam
+
+from app.services.care_lines.registry import NEURO
 
 logger = logging.getLogger(__name__)
 
@@ -84,8 +86,8 @@ class DemandaMensalService:
 
     Invalid agendas contribute no partial numbers. Valid subtotals remain visible
     but are marked partial whenever the requested slice cannot be concluded.
-    Unassignable legacy plans produce a separate technical log, never an
-    institutional completeness warning or an inferred institutional assignment.
+    Legacy Neuro is resolved only through unique, fully covering active links.
+    Ambiguous target links block totals; unrelated legacy data stays unassigned.
     """
 
     def calculate(self, db, *, instituicao_id, mes_referencia, ocupacao_id=None):
@@ -95,9 +97,130 @@ class DemandaMensalService:
                                      dict(id=instituicao_id)).first()
             if institution is None or not institution[0]:
                 raise ValueError('Instituição inexistente ou inativa.')
-            rows = db.execute(SOURCE, dict(institution=instituicao_id,
-                                           occupation=ocupacao_id)).mappings().all()
+            rows = self.population(db, instituicao_id, ocupacao_id)
         return self._calculate(rows, instituicao_id, ocupacao_id, start, end)
+
+    @staticmethod
+    def occupation_candidates(db, institution):
+        """Only discover candidate slices; population/calculation still validate
+        eligibility and quality. EXISTS avoids multiplying links or sessions.
+        """
+        query = text("""
+            SELECT DISTINCT a.ocupacao_id
+            FROM agenda_cuidados a
+            JOIN pts p ON p.id=a.pts_id
+            JOIN pts_objetivos o ON o.id=a.objetivo_id
+            LEFT JOIN contextos_assistenciais c ON c.id=p.contexto_assistencial_id
+            LEFT JOIN paciente_instituicoes v ON v.id=c.paciente_instituicao_id
+            WHERE p.status='ATIVO' AND o.status='ABERTO' AND a.status='PLANEJADO'
+              AND a.ocupacao_id > 0
+              AND ((c.id IS NOT NULL AND
+                    (c.instituicao_id=:institution OR v.instituicao_id=:institution))
+                   OR (p.contexto_assistencial_id IS NULL AND p.modulo_id=:neuro
+                       AND EXISTS (SELECT 1 FROM paciente_instituicoes lv
+                                   WHERE lv.paciente_id=p.paciente_id
+                                     AND lv.instituicao_id=:institution AND lv.ativo IS TRUE)))
+        """)
+        return set(db.execute(query, {'institution': institution,
+                                      'neuro': NEURO.module_id}).scalars())
+
+    @staticmethod
+    def _legacy_end(a, records):
+        """Bound an open plan without truncating incomplete schedules.
+
+        This bound is only for link selection. All existing ancestry, session,
+        duration, state, duplication and interval checks still gate the total.
+        """
+        sessions = [r for r in records if r['sessao_id'] is not None]
+        quantity = a['quantidade_sessoes']
+        if sessions:
+            numbers = [r['numero_sessao'] for r in sessions]
+            dates = [_date(r['data_agendada']) for r in sessions]
+            if (not _positive(quantity) or len(sessions) != quantity or
+                    len({r['sessao_id'] for r in sessions}) != quantity or
+                    not all(_positive(n) for n in numbers) or
+                    sorted(numbers) != list(range(1, quantity + 1)) or
+                    any(d is None for d in dates)):
+                return None, 'LEGADO_TERMINO_NAO_COMPROVADO'
+            ordered = [_date(r['data_agendada']) for r in sorted(sessions, key=lambda r: r['numero_sessao'])]
+            if ordered != sorted(ordered):
+                return None, 'LEGADO_TERMINO_NAO_COMPROVADO'
+            return max(dates), None
+        if not all(_positive(a[k]) for k in ('quantidade_sessoes', 'frequencia_semanal', 'duracao_minutos')):
+            return None, 'LEGADO_TERMINO_NAO_COMPROVADO'
+        intervals = []
+        for prefix in ('agenda', 'pts'):
+            begin, finish = _date(a[prefix + '_inicio']), _date(a[prefix + '_fim'])
+            if begin is None or (finish is not None and finish < begin):
+                return None, 'LEGADO_TERMINO_NAO_COMPROVADO'
+            intervals.append((begin, finish))
+        last, error = DemandaMensalService._estimate(a, intervals, date.min, date.max, bounds_only=True)
+        return (None, error) if error else (last, None)
+
+    @staticmethod
+    def population(db, institution, occupation=None):
+        """Resolve legacy attribution in memory; never create a context or write.
+
+        Fetch all links for candidate patients, including foreign institutions,
+        so an overlapping foreign link cannot silently legitimize attribution.
+        """
+        rows = [dict(r) for r in db.execute(SOURCE, dict(
+            institution=institution, occupation=occupation)).mappings()]
+        patients = {r['paciente_id'] for r in rows
+                    if r['contexto_id'] is None and r['modulo_id'] == NEURO.module_id}
+        if not patients:
+            return rows
+        query = text('SELECT id, paciente_id, instituicao_id, ativo, data_inicio, data_fim '
+                     'FROM paciente_instituicoes WHERE paciente_id IN :patients').bindparams(
+                         bindparam('patients', expanding=True))
+        links = defaultdict(list)
+        for link in db.execute(query, {'patients': sorted(patients)}).mappings():
+            links[link['paciente_id']].append(dict(link))
+        agendas = defaultdict(list)
+        for row in rows:
+            if row['contexto_id'] is None and row['modulo_id'] == NEURO.module_id:
+                agendas[row['agenda_id']].append(row)
+        for records in agendas.values():
+            a = records[0]
+            start, end = _date(a['agenda_inicio']), _date(a['agenda_fim'])
+            bound_error = None
+            if a['agenda_fim'] is None:
+                end, bound_error = DemandaMensalService._legacy_end(a, records)
+            dates = [_date(r['data_agendada']) for r in records if r['sessao_id'] is not None]
+            valid_dates = [d for d in dates if d is not None]
+            left = min([start] + valid_dates) if start is not None else None
+            right = max([end] + valid_dates) if end is not None else None
+            candidates = []
+            for link in links[a['paciente_id']]:
+                if not link['ativo']:
+                    continue
+                begin, finish = _date(link['data_inicio']), _date(link['data_fim'])
+                invalid = begin is None or (finish is not None and finish < begin)
+                if (invalid or left is None or
+                        ((right is None or begin <= right) and (finish is None or finish >= left))):
+                    candidates.append(link)
+            # No target association: no cross-institution identifiers or warnings.
+            if not any(v['instituicao_id'] == institution for v in candidates):
+                continue
+            error = bound_error
+            link = candidates[0]
+            if error:
+                pass  # Never infer a finite interval from an invalid schedule.
+            elif len(candidates) != 1:
+                error = 'LEGADO_VINCULO_AMBIGUO'
+            else:
+                begin, finish = _date(link['data_inicio']), _date(link['data_fim'])
+                if (left is None or begin is None or begin > left or
+                        (finish is not None and (right is None or finish < right))):
+                    error = 'LEGADO_COBERTURA_INCOMPLETA'
+            for row in records:
+                row.update(legado=True, legado_erro=error, instituicao_id=institution,
+                           contexto_paciente_id=a['paciente_id'], contexto_ativo=True,
+                           contexto_inicio=link['data_inicio'], contexto_fim=link['data_fim'],
+                           vinculo_id=link['id'], vinculo_paciente_id=link['paciente_id'],
+                           vinculo_instituicao_id=link['instituicao_id'], vinculo_ativo=link['ativo'],
+                           vinculo_inicio=link['data_inicio'], vinculo_fim=link['data_fim'])
+        return rows
 
     @staticmethod
     def _period(institution, month, occupation):
@@ -137,6 +260,7 @@ class DemandaMensalService:
         persisted = estimated = estimated_count = 0
         depends_on_estimate = False
         accepted, signatures = [], defaultdict(list)
+        cross_path = defaultdict(list)
         for agenda, records in groups.items():
             a = records[0]
             dates = [_date(a[key]) for key in ('agenda_inicio', 'agenda_fim')]
@@ -145,8 +269,11 @@ class DemandaMensalService:
             if not overlaps and not any(d is None or start <= d <= end for d in session_dates):
                 continue
             before = len(pending)
+            if a.get('legado_erro'):
+                issue(a['legado_erro'], agenda, incomplete=True)
+                continue
             if (a['instituicao_id'] != institution or a['vinculo_instituicao_id'] != institution
-                    or a['contexto_id'] is None or a['vinculo_id'] is None
+                    or (a['contexto_id'] is None and not a.get('legado')) or a['vinculo_id'] is None
                     or not _positive(a['modulo_id'])
                     or a['objetivo_pts_id'] != a['pts_id']
                     or a['paciente_id'] != a['contexto_paciente_id']
@@ -243,6 +370,7 @@ class DemandaMensalService:
                                _clock(s['hora_fim']) if s else None))
             for d, begin, finish in slots:
                 signatures[signature + (d,)].append((agenda, begin, finish))
+                cross_path[signature[1:] + (d,)].append((agenda, begin, finish, bool(a.get('legado'))))
             accepted.append((agenda, a['duracao_minutos'], monthly, estimate_counts))
 
         duplicates = set()
@@ -251,6 +379,14 @@ class DemandaMensalService:
                 for other, other_begin, other_finish in plans[index + 1:]:
                     if agenda != other and (begin is None or other_begin is None
                                             or (begin < other_finish and other_begin < finish)):
+                        duplicates.update((agenda, other))
+        # Preserve contextual duplicate rules while also blocking copies shared
+        # by legacy and contextual paths. No silent deduplication or double count.
+        for plans in cross_path.values():
+            for index, (agenda, begin, finish, legacy) in enumerate(plans):
+                for other, ob, of, other_legacy in plans[index + 1:]:
+                    if (legacy != other_legacy and agenda != other and
+                            (begin is None or ob is None or (begin < of and ob < finish))):
                         duplicates.update((agenda, other))
         for agenda in sorted(duplicates):
             issue('POSSIVEL_DUPLICIDADE_SEMANTICA', agenda)
@@ -278,13 +414,14 @@ class DemandaMensalService:
                     base_historica='ESTADO_ATUAL_SEM_RECONSTRUCAO_HISTORICA')
 
     @staticmethod
-    def _estimate(a, intervals, start, end):
+    def _estimate(a, intervals, start, end, *, bounds_only=False):
         """Stream the existing engine's float recurrence, without allocating N
         sessions. Store at most 31 daily counts. Validate the entire proposal
         before publishing any count. Runtime is linear in the declared quantity;
         elapsed time never changes the result or imposes a quantity ceiling.
         """
         counts = defaultdict(int)
+        last = None
         try:
             step = 7 / a['frequencia_semanal']
             if not math.isfinite(step) or step <= 0:
@@ -307,8 +444,9 @@ class DemandaMensalService:
                 day = beginning + timedelta(days=offset)
                 if not all(left <= day and (right is None or day <= right) for left, right in intervals):
                     return {}, 'OCORRENCIA_FORA_DA_VIGENCIA'
-                if start <= day <= end:
+                last = day
+                if not bounds_only and start <= day <= end:
                     counts[day] += 1
         except (OverflowError, ValueError, ZeroDivisionError):
             return {}, 'ESTIMATIVA_DADOS_NAO_REPRESENTAVEIS'
-        return dict(counts), None
+        return (last if bounds_only else dict(counts)), None

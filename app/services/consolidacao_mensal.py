@@ -13,7 +13,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from app.services.capacidade_mensal import CapacidadeMensalService
-from app.services.demanda_mensal import DemandaMensalService, SOURCE as DEMAND_SOURCE
+from app.services.demanda_mensal import DemandaMensalService
 
 
 @contextmanager
@@ -92,13 +92,10 @@ class ConsolidacaoMensalService:
             if ocupacao_id is not None:
                 occupations = [ocupacao_id]
             else:
-                # Reuse M1's source population, not a second eligibility algorithm.
-                # Unassignable legacy records never define institutional occupations.
-                query = text('SELECT DISTINCT ocupacao_id FROM (' + str(DEMAND_SOURCE) +
-                             ') AS demand_population WHERE instituicao_id IS NOT NULL AND ocupacao_id > 0')
-                occupations = sorted(set(reader.execute(query, {'institution': instituicao_id,
-                    'occupation': None}).scalars()) | {o['ocupacao_id'] for o in capacity['ocupacoes']
-                                                       if o['ocupacao_id'] is not None})
+                # Discover only distinct candidate occupations; calculation
+                # remains the sole eligibility/quality authority for each slice.
+                occupations = sorted(demand_engine.occupation_candidates(reader, instituicao_id)
+                    | {o['ocupacao_id'] for o in capacity['ocupacoes'] if o['ocupacao_id'] is not None})
             groups = []
             for occupation in occupations:
                 if ocupacao_id is not None:
