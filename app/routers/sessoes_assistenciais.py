@@ -111,15 +111,54 @@ def tratar_erro_transicao(erro: ValueError) -> None:
 
 @router.get("/minhas")
 def listar_minhas_sessoes(
+    care_line: Optional[str] = None,
     usuario=Depends(get_usuario_atual),
     db: Session = Depends(get_db),
 ):
-    contextual = SessoesMentaisService().personal_sessions(db, usuario)
     from app.models.usuario import Usuario
     native_person = db.query(Usuario.pessoa_id).filter(Usuario.id == usuario.id).scalar()
     legacy_ready = (getattr(usuario, 'perfil', None) == 'PROFISSIONAL' and getattr(usuario, 'profissional_id', None)
                     and getattr(usuario, 'clinica_id', None))
-    sessoes = SessionService().personal_sessions(db, usuario) if legacy_ready or native_person is None else []
+    legacy_enabled = bool(legacy_ready or native_person is None)
+    contextual_enabled = True
+    line = None
+    if care_line is not None:
+        from app.models import ModuloClinico
+        from app.models.autorizacao_institucional import UsuarioInstituicaoAcesso
+        from app.models.contexto_assistencial import ContextoAssistencialLinha
+        from app.services.care_lines.registry import care_line_registry
+        from app.services.care_lines.access import authorized_line
+        from app.services.autorizacao_contextual import AutorizacaoContextualService
+        line = care_line_registry.get(care_line)
+        if line is None:
+            raise HTTPException(422, 'CARE_LINE_NOT_FOUND')
+        if not line.active or not db.query(ModuloClinico.id).filter_by(id=line.module_id, ativo=True).first():
+            raise HTTPException(400, 'CARE_LINE_INACTIVE')
+        contextual_enabled = False
+        if line.module_id == 3:
+            institutions = db.query(UsuarioInstituicaoAcesso.instituicao_id).filter_by(
+                usuario_id=usuario.id, ativo=True).all()
+            for (institution,) in institutions:
+                allowed = AutorizacaoContextualService().authorized_context_query(
+                    actor_id=usuario.id, capability='ASSISTENCIAL_LER', instituicao_id=institution)
+                if db.query(ContextoAssistencialLinha.id).filter(
+                    ContextoAssistencialLinha.contexto_assistencial_id.in_(allowed),
+                    ContextoAssistencialLinha.modulo_id == line.module_id,
+                    ContextoAssistencialLinha.ativo.is_(True)).first():
+                    contextual_enabled = True
+                    break
+        # A contextual identity must not acquire legacy access (or vice versa).
+        legacy_enabled = False
+        if legacy_ready or not contextual_enabled:
+            try:
+                authorized_line(db, usuario, line.code)
+                legacy_enabled = True
+            except HTTPException as exc:
+                if exc.status_code != 403 or not contextual_enabled:
+                    raise
+    contextual = SessoesMentaisService().personal_sessions(db, usuario) if contextual_enabled else []
+    sessoes = (SessionService().personal_sessions(db, usuario, care_line=line.code if line else None)
+               if legacy_enabled else [])
 
     return sorted([
         {

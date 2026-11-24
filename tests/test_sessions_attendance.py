@@ -295,8 +295,9 @@ class HttpTests(SessionFixture):
         # Current HTTP dispatcher inspects both persisted ancestry families.
         # Legacy fixtures have no contextual memberships; keep all ACL assertions.
         from app.models.autorizacao_institucional import UsuarioInstituicaoAcesso
-        from app.models.contexto_assistencial import ContextoAssistencial
-        for model in (UsuarioInstituicaoAcesso, ContextoAssistencial):
+        from app.models.contexto_assistencial import ContextoAssistencial, ContextoAssistencialLinha
+        from app.models.pessoa import Pessoa
+        for model in (Pessoa, UsuarioInstituicaoAcesso, ContextoAssistencial, ContextoAssistencialLinha):
             model.__table__.create(self.engine, checkfirst=True)
 
     def request(self, method, path, payload=None, authenticated=True):

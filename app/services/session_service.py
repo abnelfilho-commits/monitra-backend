@@ -57,7 +57,7 @@ class SessionService:
             self.context(db, row.id, user)
         return rows
 
-    def personal_sessions(self, db, user):
+    def personal_sessions(self, db, user, care_line=None):
         if user.perfil != 'PROFISSIONAL':
             raise HTTPException(403, 'A Agenda Assistencial é exclusiva do profissional.')
         if not user.profissional_id:
@@ -74,9 +74,15 @@ class SessionService:
             PTS, PTS.id == PTSObjetivo.pts_id).join(Paciente, Paciente.id == PTS.paciente_id).filter(
                 AgendaCuidado.id == SessaoAssistencial.agenda_cuidado_id,
                 or_(Paciente.clinica_id.is_(None), Paciente.clinica_id != user.clinica_id)).exists()
-        rows = db.query(SessaoAssistencial).filter(legacy_session()).filter(
+        query = db.query(SessaoAssistencial).filter(legacy_session()).filter(
             SessaoAssistencial.profissional_id == user.profissional_id,
-            ~foreign_patient, ~foreign_ancestry).order_by(
+            ~foreign_patient, ~foreign_ancestry)
+        if care_line is not None:
+            from app.services.care_lines.access import authorized_line
+            line = authorized_line(db, user, care_line)
+            query = query.join(AgendaCuidado, AgendaCuidado.id == SessaoAssistencial.agenda_cuidado_id).join(
+                PTS, PTS.id == AgendaCuidado.pts_id).filter(PTS.modulo_id == line.module_id)
+        rows = query.order_by(
             SessaoAssistencial.data_agendada, SessaoAssistencial.hora_inicio).all()
         for row in rows:
             self.context(db, row.id, user)
