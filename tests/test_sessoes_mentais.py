@@ -169,16 +169,54 @@ class AttendanceCatalogueTests(unittest.TestCase):
         from alembic import command
         from test_m0_baseline import config
         with self.engine.begin() as c:
-            command.upgrade(config(c),'head')
+            command.upgrade(config(c),'w3_atendimento_mental_v1')
             form=c.exec_driver_sql("SELECT id FROM formularios_modulo WHERE modulo_id=3 AND codigo='ATENDIMENTO_SESSAO' AND ativo AND tipo='LONGITUDINAL'").scalar_one()
             self.assertEqual(c.execute(text('SELECT nome_campo,obrigatorio FROM campos_formulario WHERE formulario_id=:f ORDER BY ordem'),dict(f=form)).all(),[('narrativa_atendimento',True),('proximos_passos',False)])
             command.downgrade(config(c),'w3_atividade_linhas_v1')
-            command.upgrade(config(c),'head')
+            command.upgrade(config(c),'w3_atendimento_mental_v1')
             form=c.exec_driver_sql("SELECT id FROM formularios_modulo WHERE modulo_id=3 AND codigo='ATENDIMENTO_SESSAO'").scalar_one()
             patient=c.exec_driver_sql("INSERT INTO pacientes(nome) VALUES ('Synthetic') RETURNING id").scalar_one()
             c.execute(text("INSERT INTO registros_longitudinais(paciente_id,modulo_id,formulario_id,origem,data_registro) VALUES(:p,3,:f,'PROFISSIONAL',CURRENT_DATE)"),dict(p=patient,f=form))
+        with self.engine.connect() as c:
+            before = self.snapshot(c)
+        self.assertTrue(before['registros_longitudinais'])
         with self.assertRaisesRegex(RuntimeError,'MENTAL_ATTENDANCE_RECORDS_PRESENT'):
             with self.engine.begin() as c:command.downgrade(config(c),'w3_atividade_linhas_v1')
+
+        with self.engine.connect() as c:
+            self.assertEqual(self.snapshot(c), before)
+
+    @staticmethod
+    def snapshot(c, audit=False):
+        tables = ['alembic_version', 'formularios_modulo', 'campos_formulario',
+                  'registros_longitudinais', 'respostas_registro']
+        if audit:
+            tables += ['whatsapp_executor_habilitacoes', 'whatsapp_confirmacoes_operacionais']
+        return {table: c.execute(text(
+            f'SELECT to_jsonb(t) FROM {table} t ORDER BY to_jsonb(t)::text'
+        )).scalars().all() for table in tables}
+
+    def test_catalogue_history_preserved_by_forward_recovery(self):
+        from alembic import command
+        from test_m0_baseline import config
+        with self.engine.begin() as c:
+            command.upgrade(config(c), 'head')
+            form = c.exec_driver_sql("SELECT id FROM formularios_modulo WHERE modulo_id=3 AND codigo='ATENDIMENTO_SESSAO'").scalar_one()
+            patient = c.exec_driver_sql("INSERT INTO pacientes(nome) VALUES ('Synthetic') RETURNING id").scalar_one()
+            c.execute(text("INSERT INTO registros_longitudinais(paciente_id,modulo_id,formulario_id,origem,data_registro) VALUES(:p,3,:f,'PROFISSIONAL',CURRENT_DATE)"), dict(p=patient,f=form))
+            institution = c.exec_driver_sql("INSERT INTO instituicoes(razao_social,tipo_instituicao) VALUES ('Synthetic','OUTRO') RETURNING id").scalar_one()
+            actor = c.exec_driver_sql("INSERT INTO usuarios(nome,email,senha_hash) VALUES ('Synthetic','recovery@example.invalid','test') RETURNING id").scalar_one()
+            c.execute(text("SELECT set_config('integra.whatsapp_protocol','e14b_close_v1',true)"))
+            c.execute(text("INSERT INTO whatsapp_executor_habilitacoes(instituicao_id,usuario_id,motivo) VALUES (:i,:u,'Synthetic recovery test')"), dict(i=institution,u=actor))
+        with self.engine.connect() as c:
+            before = self.snapshot(c, audit=True)
+        self.assertTrue(before['whatsapp_executor_habilitacoes'])
+        self.assertTrue(before['registros_longitudinais'])
+        with self.assertRaisesRegex(RuntimeError, 'Forward recovery required; preserve executor grant audit'):
+            with self.engine.begin() as c:
+                command.downgrade(config(c), 'w3_atividade_linhas_v1')
+        with self.engine.connect() as c:
+            self.assertEqual(self.snapshot(c, audit=True), before)
 
 
 @unittest.skipUnless(os.getenv('M0_TEST_POSTGRES_URL'), 'Disposable PostgreSQL required')
