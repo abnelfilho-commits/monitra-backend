@@ -214,8 +214,26 @@ class IsolationTests(unittest.TestCase):
         for record in (self.legacy['registros_longitudinais'],self.contextual['registros_longitudinais'],2147483647):
             ids.append(self.db.execute(text("INSERT INTO avaliacoes_clinicas(paciente_id,modulo_id,registro_id,instrumento) VALUES (:p,:m,:r,'MCHAT') RETURNING id"),dict(p=self.patient,m=self.modules[0],r=record)).scalar())
         self.db.commit()
-        self.assertEqual({r['id'] for r in listar_assessments_paciente(self.patient,self.db)},{ids[0],ids[2]})
-        for fn,args in ((obter_assessment,(ids[1],)),(obter_assessment_por_registro,(self.contextual['registros_longitudinais'],))): self.absent(fn,*args,db=self.db)
+        # The HTTP boundary now requires positive ancestry and authenticated ACL.
+        # Keep the synthetic module IDs used by this physical isolation fixture.
+        from dataclasses import replace
+        from app.services.care_lines.registry import NEURO
+        from app.services.care_lines.resolver import CareLineResolver
+        from app.services.care_lines.access import authorized_patient
+        from app.services.clinical_engine import assessment_access as access
+        registry = CareLineRegistry([replace(NEURO, module_id=self.modules[0])])
+        resolver = CareLineResolver(registry)
+        self.db.execute(text('INSERT INTO paciente_modulos(paciente_id,modulo_id,ativo) VALUES (:p,:m,true)'), dict(p=self.patient,m=self.modules[0]))
+        self.db.execute(text('UPDATE avaliacoes_clinicas SET formulario_id=:f WHERE id=:id'), dict(f=self.form,id=ids[0]))
+        self.db.execute(text("UPDATE formularios_modulo SET tipo='ASSESSMENT',codigo='MCHAT' WHERE id=:f"), dict(f=self.form))
+        self.db.commit()
+        def scoped(db, user, patient, module, **kwargs):
+            return authorized_patient(db, user, patient, module, resolver=resolver, **kwargs)
+        with patch.object(access, 'care_line_registry', registry), patch.object(access, 'authorized_patient', side_effect=scoped):
+            self.assertEqual({r['id'] for r in listar_assessments_paciente(self.patient,self.db,self.user)}, {ids[0]})
+            for fn,args in ((obter_assessment,(ids[1],)), (obter_assessment,(ids[2],)),
+                            (obter_assessment_por_registro,(self.contextual['registros_longitudinais'],))):
+                self.absent(fn,*args,db=self.db,usuario=self.user)
         self.absent(MChatAdapter().build_response,self.db,ids[1])
         self.assertEqual({e.source_id for e in sources.assessments(self.db,self.patient,CareLineRegistry())},{ids[0],ids[2]})
         self.db.execute(text('UPDATE avaliacoes_clinicas SET paciente_id=:p WHERE id=:id'),dict(p=self.other,id=ids[1]));self.db.commit()

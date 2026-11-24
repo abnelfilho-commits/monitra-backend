@@ -96,17 +96,93 @@ class GAD7Tests(unittest.TestCase):
         self.assertEqual(self.db.execute(text('SELECT count(*) FROM registros_longitudinais WHERE contexto_assistencial_id=:c'),dict(c=self.open)).scalar(),0)
         self.assertEqual(self.db.execute(text("SELECT count(*) FROM avaliacoes_clinicas WHERE instrumento='GAD7'")).scalar(),before)
 
-    def test_catalog_and_history_protected(self):
+    def test_catalog_and_history_preserved_by_forward_recovery(self):
         from alembic import command
         from test_m0_baseline import config
         form=self.client.get(self.path()).json()['gad7']['formulario']
         self.assertEqual(len(form['campos']),7)
         self.assertEqual(self.post().status_code,201)
         self.db.rollback()
-        with self.assertRaisesRegex(RuntimeError,'GAD7_HISTORY_PRESENT'):
+        # A real audit entry makes preservation non-vacuous. Local fixture only.
+        with self.engine.begin() as c:
+            c.execute(text("SELECT set_config('integra.whatsapp_protocol','e14b_close_v1',true)"))
+            c.execute(text("INSERT INTO whatsapp_executor_habilitacoes(instituicao_id,usuario_id,motivo) VALUES (:i,:u,'Synthetic recovery test')"),
+                      dict(i=self.institution,u=self.actor))
+        tables = ('alembic_version', 'whatsapp_executor_habilitacoes',
+                  'whatsapp_confirmacoes_operacionais', 'formularios_modulo',
+                  'campos_formulario', 'registros_longitudinais',
+                  'respostas_registro', 'avaliacoes_clinicas', 'registro_proveniencias')
+        def snapshot(c):
+            return {table: c.execute(text(
+                f'SELECT to_jsonb(t) FROM {table} t ORDER BY to_jsonb(t)::text'
+            )).scalars().all() for table in tables}
+        with self.engine.connect() as c:
+            before = snapshot(c)
+        self.assertTrue(before['whatsapp_executor_habilitacoes'])
+        with self.assertRaisesRegex(RuntimeError,'Forward recovery required; preserve executor grant audit'):
             with self.engine.begin() as c:
                 command.downgrade(config(c),'w3_phq9_v1')
         self.assertEqual(len(self.client.get(self.path()).json()['gad7']['itens']),1)
+
+        with self.engine.connect() as c:
+            self.assertEqual(snapshot(c), before)
+
+    def _assert_specific_history_guard(self, source):
+        from alembic import command
+        from sqlalchemy import create_engine
+        from uuid import uuid4
+        from test_m0_baseline import config
+        name = 'gad7_history_' + uuid4().hex
+        with self.admin.connect() as c:
+            c.exec_driver_sql('CREATE DATABASE ' + name)
+        engine = create_engine(self.engine.url.set(database=name))
+        tables = ('alembic_version', 'pacientes', 'formularios_modulo',
+                  'campos_formulario', 'registros_longitudinais',
+                  'respostas_registro', 'avaliacoes_clinicas')
+        def snapshot(c):
+            return {table: c.execute(text(
+                f'SELECT to_jsonb(t) FROM {table} t ORDER BY to_jsonb(t)::text'
+            )).scalars().all() for table in tables}
+        try:
+            with engine.begin() as c:
+                command.upgrade(config(c), 'w3_gad7_v1')
+                form = c.execute(text("SELECT id FROM formularios_modulo WHERE codigo='GAD7'")).scalar_one()
+                other = c.execute(text("SELECT id FROM formularios_modulo WHERE codigo='BEM_ESTAR_V1'")).scalar_one()
+                patient = c.execute(text("INSERT INTO pacientes(nome) VALUES ('Synthetic history guard') RETURNING id")).scalar_one()
+                # Isolate each OR branch: evaluation/answer refer to a record of
+                # another form, so the instrument-record guard cannot mask them.
+                record = c.execute(text("INSERT INTO registros_longitudinais(paciente_id,modulo_id,formulario_id,data_registro,origem) VALUES (:p,3,:f,'2026-01-01','PROFISSIONAL') RETURNING id"),
+                                   dict(p=patient,f=form if source=='record' else other)).scalar_one()
+                if source == 'evaluation':
+                    c.execute(text("INSERT INTO avaliacoes_clinicas(registro_id,paciente_id,modulo_id,formulario_id,instrumento,status,executado_em,created_at) VALUES (:r,:p,3,:f,'GAD7','CONCLUIDA',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"),dict(r=record,p=patient,f=form))
+                elif source == 'answer':
+                    field = c.execute(text('SELECT min(id) FROM campos_formulario WHERE formulario_id=:f'),dict(f=form)).scalar_one()
+                    c.execute(text("INSERT INTO respostas_registro(registro_id,campo_id,valor_texto) VALUES (:r,:f,'0')"),dict(r=record,f=field))
+                counts = (
+                    c.execute(text("SELECT count(*) FROM avaliacoes_clinicas WHERE instrumento='GAD7'")).scalar_one(),
+                    c.execute(text('SELECT count(*) FROM registros_longitudinais WHERE formulario_id=:f'),dict(f=form)).scalar_one(),
+                    c.execute(text('SELECT count(*) FROM respostas_registro WHERE campo_id IN (SELECT id FROM campos_formulario WHERE formulario_id=:f)'),dict(f=form)).scalar_one())
+                self.assertEqual(counts, {'evaluation':(1,0,0),'record':(0,1,0),'answer':(0,0,1)}[source])
+                before = snapshot(c)
+                self.assertEqual(before['alembic_version'], [{'version_num':'w3_gad7_v1'}])
+            with self.assertRaisesRegex(RuntimeError, '^GAD7_HISTORY_PRESENT$'):
+                with engine.begin() as c:
+                    command.downgrade(config(c), 'w3_phq9_v1')
+            with engine.connect() as c:
+                self.assertEqual(snapshot(c), before)
+        finally:
+            engine.dispose()
+            with self.admin.connect() as c:
+                c.exec_driver_sql('DROP DATABASE ' + name)
+
+    def test_specific_history_guard_evaluation(self):
+        self._assert_specific_history_guard('evaluation')
+
+    def test_specific_history_guard_record(self):
+        self._assert_specific_history_guard('record')
+
+    def test_specific_history_guard_answer(self):
+        self._assert_specific_history_guard('answer')
 
     def test_get_never_commits(self):
         self.assertEqual(self.post().status_code,201)
