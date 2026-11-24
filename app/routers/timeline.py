@@ -3,7 +3,7 @@ from app.services.care_lines.access import authorized_patient
 from app.services.timeline_service import TimelineService
 from datetime import datetime, time, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Path
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -54,11 +54,13 @@ listar_timeline_paciente = obter_timeline_paciente
 @router.get("/eventos/{tipo}/{evento_id}")
 def visualizar_evento(
     tipo: str,
-    evento_id: int,
-    db: Session = Depends(get_db)
+    evento_id: int = Path(gt=0, le=2147483647),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
     return longitudinal_service.visualizar(
         db,
         tipo,
-        evento_id
+        evento_id,
+        usuario,
     )

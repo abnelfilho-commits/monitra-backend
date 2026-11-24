@@ -1,6 +1,6 @@
 """Authorization boundary for legacy assessment HTTP resources only."""
 from fastapi import HTTPException
-from sqlalchemy import select, func
+from sqlalchemy import select, func, case
 from app.models.avaliacao_clinica import AvaliacaoClinica as Assessment
 from app.models.modular import RegistroLongitudinal as Record, FormularioModulo
 from app.services.care_lines.access import authorized_patient
@@ -45,29 +45,34 @@ def execution_access(db, user, record_id, instrument):
     return row
 
 
-def valid_assessments():
+def valid_assessments(*, denver_aliases=False):
+    instrument = func.upper(Assessment.instrumento)
+    form_code = func.upper(func.coalesce(func.nullif(FormularioModulo.codigo, ''),
+        func.replace(func.replace(func.upper(FormularioModulo.nome), '-', ''), ' ', '_')))
+    if denver_aliases:
+        aliases = ('DENVER', 'DENVERII', 'DENVER_II')
+        instrument = case((instrument.in_(aliases), 'DENVER'), else_=instrument)
+        form_code = case((form_code.in_(aliases), 'DENVER'), else_=form_code)
     # Positive ancestry: orphans and cross-patient/module rows never qualify.
     return select(Assessment).join(Record, Record.id == Assessment.registro_id).join(
         FormularioModulo, FormularioModulo.id == Record.formulario_id).where(
         FormularioModulo.modulo_id == Record.modulo_id,
         FormularioModulo.tipo == 'ASSESSMENT',
-        func.upper(Assessment.instrumento) == func.upper(func.coalesce(
-            func.nullif(FormularioModulo.codigo, ''),
-            func.replace(func.replace(func.upper(FormularioModulo.nome), '-', ''), ' ', '_'))),
+        instrument == form_code,
         Record.contexto_assistencial_id.is_(None),
         Assessment.paciente_id == Record.paciente_id,
         Assessment.modulo_id == Record.modulo_id,
         Assessment.formulario_id.is_not_distinct_from(Record.formulario_id))
 
 
-def assessment_access(db, user, identity):
+def assessment_access(db, user, identity, *, denver_aliases=False):
     # Load only identity metadata until the resource has been authorized.
-    row = db.execute(valid_assessments().with_only_columns(
+    row = db.execute(valid_assessments(denver_aliases=denver_aliases).with_only_columns(
         Assessment.paciente_id, Assessment.modulo_id).where(Assessment.id == identity)).first()
     if row is None:
         raise unavailable()
     authorize(db, user, row.paciente_id, row.modulo_id)
-    return db.scalars(valid_assessments().where(Assessment.id == identity)).first()
+    return db.scalars(valid_assessments(denver_aliases=denver_aliases).where(Assessment.id == identity)).first()
 
 
 def permitted_modules(db, user, patient_id):
