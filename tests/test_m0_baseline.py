@@ -219,7 +219,20 @@ class BaselinePostgresTests(unittest.TestCase):
                 session.add(patient)
                 session.flush()
                 self.assertEqual(patient.profissional_id, professional.id)
-                record = criar_registro(RegistroDiarioCreate(paciente_id=patient.id, data=date(2026, 1, 1), alimentacao="M0 synthetic"), session)
+                from app.models import Usuario, PacienteModulo
+                from app.models.modular import ModuloClinico
+                module = session.get(ModuloClinico, 1)
+                if module is None:
+                    session.add(ModuloClinico(id=1, nome="Synthetic Neuro", slug="neurodesenvolvimento", ativo=True))
+                else:
+                    module.ativo = True
+                actor = Usuario(nome="Synthetic admin", email=uuid4().hex+"@example.invalid",
+                                senha_hash="unused", perfil="ADMIN", ativo=True)
+                patient.ativo = True
+                session.add(actor)
+                session.add(PacienteModulo(paciente_id=patient.id, modulo_id=1, ativo=True))
+                session.flush()
+                record = criar_registro(RegistroDiarioCreate(paciente_id=patient.id, data=date(2026, 1, 1), alimentacao="M0 synthetic"), session, actor)
                 session.expire_all()
                 self.assertEqual(session.get(RegistroDiario, record.id).alimentacao, "M0 synthetic")
                 self.assertIsNone(record.origem)

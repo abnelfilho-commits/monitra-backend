@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.deps import get_usuario_atual
 from app.database import get_db
 from app.models.registro import RegistroDiario
-from app.models.paciente import Paciente
+from app.services.care_lines.access import authorized_patient
 from app.schemas.registro import RegistroDiarioCreate, RegistroDiarioOut
 
 router = APIRouter(
@@ -15,14 +15,38 @@ router = APIRouter(
 )
 
 
+def _unavailable():
+    return HTTPException(status_code=404, detail="Registro não disponível.")
+
+
+def _authorize(db, usuario, paciente_id, *, write=False):
+    # Queries must not flush pending state while deciding access.
+    with db.no_autoflush:
+        try:
+            authorized_patient(db, usuario, paciente_id, "NEURO", write=write)
+        except HTTPException as exc:
+            if exc.status_code in (400, 403, 404):
+                raise _unavailable() from None
+            raise
+
+
+def _record(db, usuario, registro_id, *, write=False):
+    with db.no_autoflush:
+        identity = db.query(RegistroDiario.id, RegistroDiario.paciente_id).filter(
+            RegistroDiario.id == registro_id).first()
+        if identity is None:
+            raise _unavailable()
+        _authorize(db, usuario, identity.paciente_id, write=write)
+        return db.query(RegistroDiario).filter(RegistroDiario.id == identity.id).first()
+
+
 @router.post("/", response_model=RegistroDiarioOut, status_code=status.HTTP_201_CREATED)
 def criar_registro(
     registro: RegistroDiarioCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
-    paciente = db.query(Paciente).filter(Paciente.id == registro.paciente_id).first()
-    if not paciente:
-        raise HTTPException(status_code=404, detail="Paciente não encontrado.")
+    _authorize(db, usuario, registro.paciente_id, write=True)
 
     novo = RegistroDiario(
         paciente_id=registro.paciente_id,
@@ -53,11 +77,10 @@ def criar_registro(
 @router.get("/paciente/{paciente_id}", response_model=list[RegistroDiarioOut])
 def listar_registros(
     paciente_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
-    paciente = db.query(Paciente).filter(Paciente.id == paciente_id).first()
-    if not paciente:
-        raise HTTPException(status_code=404, detail="Paciente não encontrado.")
+    _authorize(db, usuario, paciente_id)
 
     registros = (
         db.query(RegistroDiario)
@@ -72,20 +95,12 @@ def atualizar_registro(
     registro_id: int,
     registro: RegistroDiarioCreate,
     db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
-    existente = (
-        db.query(RegistroDiario)
-        .filter(RegistroDiario.id == registro_id)
-        .first()
-    )
-    if not existente:
-        raise HTTPException(status_code=404, detail="Registro não encontrado.")
+    existente = _record(db, usuario, registro_id, write=True)
+    if registro.paciente_id != existente.paciente_id:
+        raise _unavailable()
 
-    paciente = db.query(Paciente).filter(Paciente.id == registro.paciente_id).first()
-    if not paciente:
-        raise HTTPException(status_code=404, detail="Paciente não encontrado.")
-
-    existente.paciente_id = registro.paciente_id
     existente.data = registro.data
     existente.sono_qualidade = registro.sono_qualidade
     existente.evacuacao = registro.evacuacao
@@ -110,26 +125,18 @@ def atualizar_registro(
 @router.get("/{registro_id}", response_model=RegistroDiarioOut)
 def obter_registro(
     registro_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
-    registro = (
-        db.query(RegistroDiario)
-        .filter(RegistroDiario.id == registro_id)
-        .first()
-    )
-    if not registro:
-        raise HTTPException(status_code=404, detail="Registro não encontrado.")
-
-    return registro
+    return _record(db, usuario, registro_id)
 
 @router.delete("/{registro_id}")
 def excluir_registro(
     registro_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario=Depends(get_usuario_atual),
 ):
-    registro = db.query(RegistroDiario).filter(RegistroDiario.id == registro_id).first()
-    if not registro:
-        raise HTTPException(status_code=404, detail="Registro não encontrado.")
+    registro = _record(db, usuario, registro_id, write=True)
 
     db.delete(registro)
     db.commit()
